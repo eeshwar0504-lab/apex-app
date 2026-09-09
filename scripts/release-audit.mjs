@@ -72,8 +72,14 @@ if (!nativeNotif.includes('APEX_NOTIFICATION_MIN') || !nativeNotif.includes('APE
 }
 
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/android-apk.yml'), 'utf8');
-for (const token of ['npm install', 'npm run build', 'npx cap add android', 'npx cap sync android', 'assembleDebug', 'upload-artifact']) {
+if (!fs.existsSync(path.join(root, 'android'))) {
+  errors.push('Android project missing: android/');
+}
+for (const token of ['npm install', 'npm run build', 'npx cap sync android', './gradlew assembleDebug --no-daemon', 'android/app/build/outputs/apk/debug/app-debug.apk', 'upload-artifact']) {
   if (!workflow.includes(token)) errors.push(`Android CI missing: ${token}`);
+}
+if (workflow.includes('npx cap add android')) {
+  errors.push('Android CI must use the committed android project instead of adding the platform.');
 }
 
 const aiLocal = fs.readFileSync(path.join(root, 'src/aiProviders/localOllama.ts'), 'utf8');
