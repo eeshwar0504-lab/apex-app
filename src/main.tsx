@@ -1,5 +1,7 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import {App as CapacitorApp} from '@capacitor/app';
+import {Capacitor} from '@capacitor/core';
 import './styles.css';
 import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,PlanDay,Measurement} from './core/types';
 import {EXERCISES,findExercises} from './knowledge/exercises';
@@ -19,25 +21,48 @@ const today=()=>new Date().toISOString().slice(0,10);
 const fmt=(n:number)=>`${String(Math.floor(Math.max(0,n)/60)).padStart(2,'0')}:${String(Math.max(0,n)%60).padStart(2,'0')}`;
 const SET_TYPES:SetType[]=['warmup','working','drop','failure','amrap','rest_pause','myo_reps','tempo','cluster','timed','bodyweight','assisted','unilateral'];
 
+class AppBoundary extends React.Component<{children:React.ReactNode},{failed:boolean}>{
+ state={failed:false};
+ static getDerivedStateFromError(){return{failed:true};}
+ componentDidCatch(error:Error){console.error('[APEX] recovered a UI rendering error',error);}
+ render(){return this.state.failed?<div className="app"><main className="main"><Empty title="This view is unavailable" text="APEX kept your local training data intact. Return home and try again; if this continues, restore the missing exercise through Plan Studio."/></main></div>:this.props.children;}
+}
+
 function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-1.8.9"/></>};return <svg {...c}>{p[name]||p.bolt}</svg>}
 
 function App(){
  const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false);
+ const routeHistory=useRef<string[]>([]);
  const update=(fn:(x:AppState)=>AppState)=>setS(x=>fn(structuredClone(x)));
- const nav=(r:string)=>{setRoute(r);setSheet(null);window.scrollTo({top:0,behavior:'smooth'})};
+ const nav=(r:string)=>{setRoute(current=>{if(current!==r)routeHistory.current.push(current);return r});setSheet(null);window.scrollTo({top:0,behavior:'smooth'})};
  useEffect(()=>{let live=true;repository.loadAsync().then(next=>{if(live){setS(next);setRoute(next.activeRoute||'home');setHydrated(true)}}).catch(()=>setHydrated(true));return()=>{live=false}},[]);
  useEffect(()=>{const t=setTimeout(()=>setSplash(false),900);return()=>clearTimeout(t)},[]);
  useEffect(()=>{if(s.onboardingComplete){const m=markMissedWorkouts(s.workouts,today());if(JSON.stringify(m)!==JSON.stringify(s.workouts))setS(x=>({...x,workouts:m}));}},[]);
  useEffect(()=>{if(hydrated)void repository.saveAsync({...s,activeRoute:route})},[s,route,hydrated]);
  useEffect(()=>{if(hydrated)void syncLocalNotifications({...s,activeRoute:route})},[s.preferences.notifications,s.workouts,hydrated,route]);
  useEffect(()=>{let dispose:(()=>Promise<void>)|undefined; if(hydrated)void listenForNotificationActions(r=>nav(r)).then(fn=>{dispose=fn}); return()=>{if(dispose)void dispose()};},[hydrated]);
+ useEffect(()=>{
+  if(!Capacitor.isNativePlatform())return;
+  let listener:{remove:()=>Promise<void>}|undefined;
+  void CapacitorApp.addListener('backButton',()=>{
+   if(sheet){setSheet(null);return;}
+   const overlayBack=new Event('apex-back',{cancelable:true});
+   window.dispatchEvent(overlayBack);
+   if(overlayBack.defaultPrevented)return;
+   const previous=routeHistory.current.pop();
+   if(previous){setRoute(previous);window.scrollTo({top:0,behavior:'smooth'});return;}
+   if(route!=='home'){setRoute('home');return;}
+   void CapacitorApp.exitApp();
+  }).then(next=>{listener=next});
+  return()=>{if(listener)void listener.remove();};
+ },[route,sheet]);
  const start=(w:Workout)=>{update(x=>({...x,activeWorkoutId:w.id,workouts:x.workouts.map(q=>q.id===w.id?{...q,...w,status:'in_progress',startedAt:q.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}:q)}));nav('brief:'+w.id)};
  const active=s.workouts.find(w=>w.id===s.activeWorkoutId&&w.status==='in_progress');
  if(!hydrated)return <div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b><small>Restoring local training data…</small></div>;
  if(!s.onboardingComplete)return <Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/>;
  return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b></div>}
- <header className="topbar"><button className="brand" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="top-actions"><button className="icon-btn" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button><button className="icon-btn" aria-label="You" onClick={()=>nav('you')}><Icon name="user"/></button></div></header>
- <main className="main">
+ <header className="topbar"><button className="brand" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="top-actions"><button className="icon-btn" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
+ <main className="main"><div className="page-transition" key={route}>
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
  {route==='train'&&<Train s={s} onStart={start} onNav={nav} update={update}/>}
  {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} onStart={(w)=>{update(x=>({...x,activeWorkoutId:w.id,workouts:x.workouts.map(q=>q.id===w.id?{...q,...w,status:'in_progress',startedAt:q.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}:q)}));nav('workout')}} onBack={()=>nav('train')}/>} 
@@ -53,7 +78,7 @@ function App(){
  {route==='coach'&&<Coach s={s}/>}
  {route==='learn'&&<Learn/>}
  {route==='templates'&&<Templates s={s} update={update} onStart={start}/>}
- </main>
+ </div></main>
  <nav className="bottom"><NavItem active={route==='home'} icon="home" label="Home" click={()=>nav('home')}/><NavItem active={route==='train'||route==='workout'} icon="train" label="Train" click={()=>nav(active?'workout':'train')}/><NavItem active={['progress','history','goals'].includes(route)||route.startsWith('session:')} icon="chart" label="Progress" click={()=>nav('progress')}/><NavItem active={route==='you'} icon="user" label="You" click={()=>nav('you')}/></nav>
  {sheet==='command'&&<Command nav={nav} setQuery={setQuery} close={()=>setSheet(null)}/>}
  {sheet?.startsWith('exercise:')&&(()=>{const ex=s.exercises.find(e=>e.id===sheet.slice(9));return ex?<ExerciseSheet ex={ex} s={s} close={()=>setSheet(null)} onAlternative={id=>setSheet('exercise:'+id)} onUse={()=>{setSheet(null);nav('train')}}/>:<Modal title="Exercise unavailable" close={()=>setSheet(null)}><p className="modal-copy">This exercise is no longer available in the current local knowledge set.</p></Modal>})()}
@@ -529,14 +554,7 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
           <button
             type="button"
             className="button primary"
-            disabled={
-              building||
-              !exp||
-              !goal||
-              !days||
-              !mins||
-              equipment.length===0
-            }
+            disabled={!exp||!goal||!days||!mins||!equipment.length}
             onClick={buildMyPlan}
           >
             {building
@@ -724,5 +742,5 @@ function ListRow({title,sub,icon,click}:{title:string;sub:string;icon:string;cli
 function NavItem({active,icon,label,click}:{active:boolean;icon:string;label:string;click:()=>void}){return <button className={`nav-item ${active?'active':''}`} onClick={click}><Icon name={icon}/><span>{label}</span></button>}
 function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <div className="page-title"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{sub}</p></div>}
 function Empty({title,text}:{title:string;text:string}){return <div className="empty"><Icon name="bolt"/><strong>{title}</strong><p>{text}</p></div>}
-function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
-createRoot(document.getElementById('root')!).render(<App/>);
+function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){useEffect(()=>{const onBack=(event:Event)=>{event.preventDefault();close()};window.addEventListener('apex-back',onBack);return()=>window.removeEventListener('apex-back',onBack)},[close]);return <div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
+createRoot(document.getElementById('root')!).render(<AppBoundary><App/></AppBoundary>);

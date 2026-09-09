@@ -46,7 +46,9 @@ export function buildPlan(profile:UserProfile,exercises:Exercise[],goals:any[]=[
  return{name:`APEX ${profile.primaryGoal.replace('_',' ')} program`,days,exerciseSets:{upper:upper.map(e=>e.id),lower:lower.map(e=>e.id),full:full.map(e=>e.id)}};
 }
 export function createWorkout(name:string,date:string,ids:string[],exercises:Exercise[],planId:string,source:'scheduled'|'custom'|'extra'='scheduled',version=1,history?:SetLog[][]):Workout{
- const items:WorkoutExercise[]=ids.map((id,i)=>{const ex=exercises.find(x=>x.id===id)!;const count=i<4?3:2;const prev=history?.[i]||[],p=progression(ex,prev);const sets=Array.from({length:count},()=>makeSet('working',ex,p.weight));return{exerciseId:id,sets,prescribedSets:count,repRange:ex.repRange,recommendedWeight:p.weight,restSec:ex.restSec,order:i};});
+ // Local state can outlive changes to the canonical exercise library. Omit invalid
+ // IDs here rather than creating a workout that will crash when it is rendered.
+ const items:WorkoutExercise[]=ids.flatMap((id,i)=>{const ex=exercises.find(x=>x.id===id);if(!ex)return[];const count=i<4?3:2;const prev=history?.[i]||[],p=progression(ex,prev);const sets=Array.from({length:count},()=>makeSet('working',ex,p.weight));return[{exerciseId:id,sets,prescribedSets:count,repRange:ex.repRange,recommendedWeight:p.weight,restSec:ex.restSec,order:0}];}).map((item,order)=>({...item,order}));
  return{id:uid('workout'),planId,name,scheduledDate:date,status:'planned',exercises:items,source,version,updatedAt:new Date().toISOString()};
 }
 export function makeSet(type:SetType,ex:Exercise,weight?:number):SetLog{const timed=type==='timed'||ex.loadSemantics==='time',assist=type==='assisted'||ex.loadSemantics==='assistance';return{id:uid('set'),type,weight:timed||ex.loadSemantics==='bodyweight'||ex.loadSemantics==='none'||assist?undefined:weight,reps:timed?undefined:ex.repRange[0],seconds:timed?ex.repRange[0]:undefined,completed:false,side:ex.unilateral?'both':undefined,assistance:assist?weight:undefined};}
