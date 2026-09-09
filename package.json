@@ -17,8 +17,8 @@
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.0",
     "@capacitor/android": "^7.4.3",
-    "@capacitor/core": "^7.4.3",
     "@capacitor/cli": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
     "@capacitor/local-notifications": "^7.0.0",
     "@vitejs/plugin-react": "^5.0.2",
     "react": "^19.1.1",
@@ -27,7 +27,7 @@
     "vite": "^7.1.4"
   },
   "devDependencies": {
-    "@types/react": "^19.1.10",
-    "@types/react-dom": "^19.1.7"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
   }
 }

@@ -69,3 +69,44 @@
 .app.font-large .muted,.app.font-large small{font-size:1em}
 .app.font-larger .muted,.app.font-larger small{font-size:1.04em}
 .app.reduce-motion *, .app.reduce-motion *::before, .app.reduce-motion *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+.onboarding-error{
+  margin-top:22px;
+  border-color:#5a302b;
+  background:#160d0b;
+}
+
+.onboarding-error svg{
+  color:var(--danger);
+  flex:none;
+}
+
+.onboarding-error p{
+  margin:6px 0 0;
+  color:#a99b96;
+  font-size:10px;
+  line-height:1.6;
+}
+
+.onboard-footer{
+  position:relative;
+  z-index:5;
+  padding-bottom:max(18px, env(safe-area-inset-bottom));
+}
+
+.onboard-footer .button{
+  position:relative;
+  z-index:6;
+  pointer-events:auto;
+}
+
+.onboard-footer .button.primary:not(:disabled):active{
+  transform:scale(.97);
+}
+
+@media (max-width:600px){
+  .onboarding{
+    padding-bottom:calc(
+      20px + env(safe-area-inset-bottom)
+    );
+  }
+}

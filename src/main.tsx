@@ -23,14 +23,14 @@ function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,hei
 
 function App(){
  const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false);
+ const update=(fn:(x:AppState)=>AppState)=>setS(x=>fn(structuredClone(x)));
+ const nav=(r:string)=>{setRoute(r);setSheet(null);window.scrollTo({top:0,behavior:'smooth'})};
  useEffect(()=>{let live=true;repository.loadAsync().then(next=>{if(live){setS(next);setRoute(next.activeRoute||'home');setHydrated(true)}}).catch(()=>setHydrated(true));return()=>{live=false}},[]);
  useEffect(()=>{const t=setTimeout(()=>setSplash(false),900);return()=>clearTimeout(t)},[]);
  useEffect(()=>{if(s.onboardingComplete){const m=markMissedWorkouts(s.workouts,today());if(JSON.stringify(m)!==JSON.stringify(s.workouts))setS(x=>({...x,workouts:m}));}},[]);
  useEffect(()=>{if(hydrated)void repository.saveAsync({...s,activeRoute:route})},[s,route,hydrated]);
  useEffect(()=>{if(hydrated)void syncLocalNotifications({...s,activeRoute:route})},[s.preferences.notifications,s.workouts,hydrated,route]);
  useEffect(()=>{let dispose:(()=>Promise<void>)|undefined; if(hydrated)void listenForNotificationActions(r=>nav(r)).then(fn=>{dispose=fn}); return()=>{if(dispose)void dispose()};},[hydrated]);
- const update=(fn:(x:AppState)=>AppState)=>setS(x=>fn(structuredClone(x)));
- const nav=(r:string)=>{setRoute(r);setSheet(null);window.scrollTo({top:0,behavior:'smooth'})};
  const start=(w:Workout)=>{update(x=>({...x,activeWorkoutId:w.id,workouts:x.workouts.map(q=>q.id===w.id?{...q,...w,status:'in_progress',startedAt:q.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}:q)}));nav('brief:'+w.id)};
  const active=s.workouts.find(w=>w.id===s.activeWorkoutId&&w.status==='in_progress');
  if(!hydrated)return <div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b><small>Restoring local training data…</small></div>;
@@ -56,7 +56,7 @@ function App(){
  </main>
  <nav className="bottom"><NavItem active={route==='home'} icon="home" label="Home" click={()=>nav('home')}/><NavItem active={route==='train'||route==='workout'} icon="train" label="Train" click={()=>nav(active?'workout':'train')}/><NavItem active={['progress','history','goals'].includes(route)||route.startsWith('session:')} icon="chart" label="Progress" click={()=>nav('progress')}/><NavItem active={route==='you'} icon="user" label="You" click={()=>nav('you')}/></nav>
  {sheet==='command'&&<Command nav={nav} setQuery={setQuery} close={()=>setSheet(null)}/>}
- {sheet?.startsWith('exercise:')&&<ExerciseSheet ex={s.exercises.find(e=>e.id===sheet.slice(9))!} s={s} close={()=>setSheet(null)} onAlternative={id=>setSheet('exercise:'+id)} onUse={()=>{setSheet(null);nav('train')}}/>}
+ {sheet?.startsWith('exercise:')&&(()=>{const ex=s.exercises.find(e=>e.id===sheet.slice(9));return ex?<ExerciseSheet ex={ex} s={s} close={()=>setSheet(null)} onAlternative={id=>setSheet('exercise:'+id)} onUse={()=>{setSheet(null);nav('train')}}/>:<Modal title="Exercise unavailable" close={()=>setSheet(null)}><p className="modal-copy">This exercise is no longer available in the current local knowledge set.</p></Modal>})()}
  </div>
 }
 
@@ -64,16 +64,494 @@ function makeInitialWorkouts(p:UserProfile,plan:any,exercises:Exercise[]){const 
 function todayPlus(offset:number){const d=new Date();d.setDate(d.getDate()+offset);return d.toISOString().slice(0,10)}
 
 function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
- const [step,setStep]=useState(0),[name,setName]=useState(''),[exp,setExp]=useState<'beginner'|'intermediate'|'advanced'|null>(null),[goal,setGoal]=useState<GoalKind|null>(null),[days,setDays]=useState<number|null>(null),[mins,setMins]=useState<number|null>(null),[equipment,setEquipment]=useState<string[]>([]);
- const goalText:Record<GoalKind,string>={strength:'Build strength',hypertrophy:'Build muscle',fat_loss:'Improve body composition',fitness:'Improve fitness',general:'Balanced training'};
- const togg=(x:string)=>setEquipment(a=>a.includes(x)?a.filter(q=>q!==x):[...a,x]);
- return <div className="onboarding"><div className="onboard-brand"><img src="/brand/apex-symbol-light.png"/><span>APEX</span></div><div className="progress-line"><i style={{width:`${((step+1)/5)*100}%`}}/></div>
- {step===0&&<div className="onboard-body"><span className="eyebrow">APEX / 01</span><h1>Training that adapts to what you actually do.</h1><p>No fake body stats. No fixed routine. APEX starts with your choices and becomes more informed through performance.</p><div className="feature-list"><b>01 <span>Track every useful set.</span></b><b>02 <span>Progress from evidence.</span></b><b>03 <span>Keep control of every change.</span></b></div></div>}
- {step===1&&<div className="onboard-body"><span className="eyebrow">CONTEXT / 02</span><h1>Just enough context.</h1><label>Name <input value={name} onChange={e=>setName(e.target.value)} placeholder="Optional"/></label><div className="choice-grid"><button className={exp==='beginner'?'selected':''} onClick={()=>setExp('beginner')}><strong>Beginner</strong><small>New or returning to structured training</small></button><button className={exp==='intermediate'?'selected':''} onClick={()=>setExp('intermediate')}><strong>Intermediate</strong><small>Consistent training experience</small></button><button className={exp==='advanced'?'selected':''} onClick={()=>setExp('advanced')}><strong>Advanced</strong><small>Established training history</small></button></div></div>}
- {step===2&&<div className="onboard-body"><span className="eyebrow">GOAL / 03</span><h1>What are you training for?</h1><div className="choice-grid">{(Object.keys(goalText) as GoalKind[]).map(g=><button className={goal===g?'selected':''} onClick={()=>setGoal(g)} key={g}><strong>{goalText[g]}</strong><small>{g==='strength'?'Performance first':g==='hypertrophy'?'Muscle-building focus':g==='fat_loss'?'Training alongside body-composition goals':g==='fitness'?'Capacity and consistency':'Flexible balanced training'}</small></button>)}</div></div>}
- {step===3&&<div className="onboard-body"><span className="eyebrow">SCHEDULE / 04</span><h1>Build around real availability.</h1><label>Training days</label><div className="choice-grid compact">{[2,3,4,5,6].map(v=><button className={days===v?'selected':''} key={v} onClick={()=>setDays(v)}><strong>{v}</strong><small>days / week</small></button>)}</div><label>Typical session</label><div className="choice-grid compact">{[30,45,60,75,90].map(v=><button className={mins===v?'selected':''} key={v} onClick={()=>setMins(v)}><strong>{v}</strong><small>minutes</small></button>)}</div></div>}
- {step===4&&<div className="onboard-body"><span className="eyebrow">EQUIPMENT / 05</span><h1>What can you train with?</h1><div className="choice-grid equipment">{['machine','cable','dumbbell','barbell','bench','kettlebell','bodyweight'].map(x=><button className={equipment.includes(x)?'selected':''} key={x} onClick={()=>togg(x)}><strong>{x}</strong><small>{equipment.includes(x)?'Available':'Not selected'}</small></button>)}</div></div>}
- <div className="onboard-footer"><button className="button ghost" disabled={!step} onClick={()=>setStep(x=>x-1)}>Back</button>{step<4?<button className="button primary" onClick={()=>setStep(x=>x+1)}>Continue <Icon name="chev"/></button>:<button className="button primary" disabled={!exp||!goal||!days||!mins||!equipment.length} onClick={()=>{if(!exp||!goal||!days||!mins||!equipment.length)return;const p:UserProfile={id:uid('user'),name:name.trim(),experience:exp,goals:[goal],primaryGoal:goal,trainingDays:days,sessionMinutes:mins,equipment:equipment,body:{},createdAt:new Date().toISOString()};const g:Goal={id:uid('goal'),kind:goal,title:goalText[goal],priority:1,periodId:uid('period'),status:'active'};const built=buildPlan(p,EXERCISES,[g]);const plan={id:uid('plan'),name:built.name,mode:'continuous' as const,days:built.days,version:1,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),exerciseSets:built.exerciseSets};onDone(p,g,plan)}}>Build my APEX plan <Icon name="bolt"/></button>}</div></div>
+
+  const [step,setStep]=useState(0);
+  const [name,setName]=useState('');
+  const [exp,setExp]=useState<'beginner'|'intermediate'|'advanced'|null>(null);
+  const [goal,setGoal]=useState<GoalKind|null>(null);
+  const [days,setDays]=useState<number|null>(null);
+  const [mins,setMins]=useState<number|null>(null);
+  const [equipment,setEquipment]=useState<string[]>([]);
+  const [building,setBuilding]=useState(false);
+  const [error,setError]=useState('');
+
+  const goalText:Record<GoalKind,string>={
+    strength:'Build strength',
+    hypertrophy:'Build muscle',
+    fat_loss:'Improve body composition',
+    fitness:'Improve fitness',
+    general:'Balanced training'
+  };
+
+  const togg=(x:string)=>{
+    setError('');
+    setEquipment(a=>
+      a.includes(x)
+        ? a.filter(q=>q!==x)
+        : [...a,x]
+    );
+  };
+
+  const buildMyPlan=()=>{
+    if(building)return;
+
+    setError('');
+
+    if(!exp||!goal||!days||!mins||equipment.length===0){
+      setError('Choose your training experience, goal, schedule and at least one equipment option.');
+      return;
+    }
+
+    setBuilding(true);
+
+    try{
+      const now=new Date().toISOString();
+
+      const p:UserProfile={
+        id:uid('user'),
+        name:name.trim(),
+        experience:exp,
+        goals:[goal],
+        primaryGoal:goal,
+        trainingDays:days,
+        sessionMinutes:mins,
+        equipment:[...equipment],
+        body:{},
+        createdAt:now
+      };
+
+      const g:Goal={
+        id:uid('goal'),
+        kind:goal,
+        title:goalText[goal],
+        priority:1,
+        periodId:uid('period'),
+        status:'active'
+      };
+
+      /*
+       * Build the deterministic training plan.
+       * The training engine remains the source of truth.
+       */
+      const built=buildPlan(
+        p,
+        EXERCISES,
+        [g]
+      );
+
+      if(
+        !built ||
+        !Array.isArray(built.days) ||
+        !built.exerciseSets
+      ){
+        throw new Error('APEX could not generate a valid training plan.');
+      }
+
+      const plan={
+        id:uid('plan'),
+        name:built.name,
+        mode:'continuous' as const,
+        days:built.days,
+        version:1,
+        createdAt:now,
+        updatedAt:now,
+        exerciseSets:built.exerciseSets
+      };
+
+      /*
+       * Build workouts only from exercise IDs that actually exist.
+       * This prevents a bad exercise reference from crashing onboarding.
+       */
+      const ws=makeInitialWorkouts(
+        p,
+        plan,
+        EXERCISES
+      );
+
+      if(!ws.length){
+        throw new Error(
+          'APEX could not create any workouts from the selected equipment.'
+        );
+      }
+
+      /*
+       * Link generated plan days to their actual workout IDs.
+       */
+      const linked={
+        ...plan,
+        days:plan.days.map((d:any)=>{
+          if(d.rest)return d;
+
+          const matching=ws.find(
+            (w:Workout)=>
+              w.scheduledDate===todayPlus(d.dayIndex) &&
+              w.name===d.label
+          );
+
+          return {
+            ...d,
+            workoutId:matching?.id
+          };
+        })
+      };
+
+      /*
+       * Hand the complete validated onboarding result back to App.
+       */
+      onDone(
+        p,
+        g,
+        linked
+      );
+
+      setBuilding(false);
+
+    }catch(err){
+
+      console.error(
+        '[APEX] onboarding plan generation failed',
+        err
+      );
+
+      setBuilding(false);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong while building your APEX plan. Please try again.'
+      );
+    }
+  };
+
+  return (
+    <div className="onboarding">
+
+      <div className="onboard-brand">
+        <img
+          src="/brand/apex-symbol-light.png"
+          alt="APEX"
+        />
+        <span>APEX</span>
+      </div>
+
+      <div className="progress-line">
+        <i
+          style={{
+            width:`${((step+1)/5)*100}%`
+          }}
+        />
+      </div>
+
+      {step===0&&(
+        <div className="onboard-body">
+          <span className="eyebrow">
+            APEX / 01
+          </span>
+
+          <h1>
+            Training that adapts to what you actually do.
+          </h1>
+
+          <p>
+            No fake body stats. No fixed routine.
+            APEX starts with your choices and becomes
+            more informed through performance.
+          </p>
+
+          <div className="feature-list">
+            <b>
+              01
+              <span>Track every useful set.</span>
+            </b>
+
+            <b>
+              02
+              <span>Progress from evidence.</span>
+            </b>
+
+            <b>
+              03
+              <span>Keep control of every change.</span>
+            </b>
+          </div>
+        </div>
+      )}
+
+      {step===1&&(
+        <div className="onboard-body">
+          <span className="eyebrow">
+            CONTEXT / 02
+          </span>
+
+          <h1>
+            Just enough context.
+          </h1>
+
+          <label>
+            Name
+
+            <input
+              value={name}
+              onChange={e=>setName(e.target.value)}
+              placeholder="Optional"
+            />
+          </label>
+
+          <div className="choice-grid">
+
+            <button
+              type="button"
+              className={exp==='beginner'?'selected':''}
+              onClick={()=>setExp('beginner')}
+            >
+              <strong>Beginner</strong>
+              <small>
+                New or returning to structured training
+              </small>
+            </button>
+
+            <button
+              type="button"
+              className={exp==='intermediate'?'selected':''}
+              onClick={()=>setExp('intermediate')}
+            >
+              <strong>Intermediate</strong>
+              <small>
+                Consistent training experience
+              </small>
+            </button>
+
+            <button
+              type="button"
+              className={exp==='advanced'?'selected':''}
+              onClick={()=>setExp('advanced')}
+            >
+              <strong>Advanced</strong>
+              <small>
+                Established training history
+              </small>
+            </button>
+
+          </div>
+        </div>
+      )}
+
+      {step===2&&(
+        <div className="onboard-body">
+
+          <span className="eyebrow">
+            GOAL / 03
+          </span>
+
+          <h1>
+            What are you training for?
+          </h1>
+
+          <div className="choice-grid">
+
+            {(Object.keys(goalText) as GoalKind[]).map(g=>(
+              <button
+                type="button"
+                className={goal===g?'selected':''}
+                onClick={()=>setGoal(g)}
+                key={g}
+              >
+                <strong>
+                  {goalText[g]}
+                </strong>
+
+                <small>
+                  {
+                    g==='strength'
+                      ?'Performance first'
+                      :g==='hypertrophy'
+                        ?'Muscle-building focus'
+                        :g==='fat_loss'
+                          ?'Training alongside body-composition goals'
+                          :g==='fitness'
+                            ?'Capacity and consistency'
+                            :'Flexible balanced training'
+                  }
+                </small>
+              </button>
+            ))}
+
+          </div>
+        </div>
+      )}
+
+      {step===3&&(
+        <div className="onboard-body">
+
+          <span className="eyebrow">
+            SCHEDULE / 04
+          </span>
+
+          <h1>
+            Build around real availability.
+          </h1>
+
+          <label>
+            Training days
+          </label>
+
+          <div className="choice-grid compact">
+
+            {[2,3,4,5,6].map(v=>(
+              <button
+                type="button"
+                className={days===v?'selected':''}
+                key={v}
+                onClick={()=>setDays(v)}
+              >
+                <strong>{v}</strong>
+                <small>days / week</small>
+              </button>
+            ))}
+
+          </div>
+
+          <label>
+            Typical session
+          </label>
+
+          <div className="choice-grid compact">
+
+            {[30,45,60,75,90].map(v=>(
+              <button
+                type="button"
+                className={mins===v?'selected':''}
+                key={v}
+                onClick={()=>setMins(v)}
+              >
+                <strong>{v}</strong>
+                <small>minutes</small>
+              </button>
+            ))}
+
+          </div>
+
+        </div>
+      )}
+
+      {step===4&&(
+        <div className="onboard-body">
+
+          <span className="eyebrow">
+            EQUIPMENT / 05
+          </span>
+
+          <h1>
+            What can you train with?
+          </h1>
+
+          <div className="choice-grid equipment">
+
+            {[
+              'machine',
+              'cable',
+              'dumbbell',
+              'barbell',
+              'bench',
+              'kettlebell',
+              'bodyweight'
+            ].map(x=>(
+              <button
+                type="button"
+                className={
+                  equipment.includes(x)
+                    ?'selected'
+                    :''
+                }
+                key={x}
+                onClick={()=>togg(x)}
+              >
+                <strong>{x}</strong>
+
+                <small>
+                  {
+                    equipment.includes(x)
+                      ?'Available'
+                      :'Not selected'
+                  }
+                </small>
+              </button>
+            ))}
+
+          </div>
+
+          {error&&(
+            <div
+              className="callout onboarding-error"
+              role="alert"
+            >
+              <Icon name="bolt"/>
+
+              <div>
+                <strong>
+                  Couldn't build your plan
+                </strong>
+
+                <p>
+                  {error}
+                </p>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      <div className="onboard-footer">
+
+        <button
+          type="button"
+          className="button ghost"
+          disabled={!step||building}
+          onClick={()=>setStep(x=>x-1)}
+        >
+          Back
+        </button>
+
+        {step<4?(
+          <button
+            type="button"
+            className="button primary"
+            onClick={()=>{
+              setError('');
+              setStep(x=>x+1);
+            }}
+          >
+            Continue
+            <Icon name="chev"/>
+          </button>
+        ):(
+          <button
+            type="button"
+            className="button primary"
+            disabled={
+              building||
+              !exp||
+              !goal||
+              !days||
+              !mins||
+              equipment.length===0
+            }
+            onClick={buildMyPlan}
+          >
+            {building
+              ?'Building your plan…'
+              :'Build my APEX plan'
+            }
+
+            {!building&&<Icon name="bolt"/>}
+          </button>
+        )}
+
+      </div>
+
+    </div>
+  );
 }
 
 function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Workout)=>void}){
@@ -115,6 +593,7 @@ function PreWorkout({s,id,onStart,onBack}:{s:AppState;id:string;onStart:(w:Worko
   <button className="button primary wide" onClick={begin}>Begin session <Icon name="chev"/></button>
  </div>
 }
+function safeExercise(exercises:Exercise[],id:string){return exercises.find(e=>e.id===id);}
 function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout;update:(f:(x:AppState)=>AppState)=>void;onExit:()=>void;onExercise:(id:string)=>void;onDone:(w:Workout)=>void}){
  const [focus,setFocus]=useState(true),[restEnd,setRestEnd]=useState<number|null>(null),[now,setNow]=useState(Date.now()),[replace,setReplace]=useState<string|null>(null),[rq,setRq]=useState(''),[history,setHistory]=useState<Workout[]>([]),[safety,setSafety]=useState(false);
  useEffect(()=>{const i=setInterval(()=>setNow(Date.now()),500);return()=>clearInterval(i)},[]);
@@ -123,7 +602,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  const assessment=sessionAssessment(current,s.exercises,history),adapt=adaptationsForWorkout(s,current),all=current.exercises.every(e=>e.status==='skipped'||e.sets.every(x=>x.completed));
  const mutate=(fn:(x:Workout)=>Workout)=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===current.id?fn(q):q)}));
  const togglePause=()=>update(x=>{const at=new Date().toISOString(),ww=x.workouts.find(q=>q.id===current.id);if(!ww)return x;const paused=!!ww.pausedAt;const nextPaused=paused?{...ww,pausedAt:undefined,pausedTotalSec:(ww.pausedTotalSec||0)+Math.floor((Date.now()-new Date(ww.pausedAt!).getTime())/1000),updatedAt:at}:{...ww,pausedAt:at,updatedAt:at};return {...x,workouts:x.workouts.map(q=>q.id===current.id?nextPaused:q),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:paused?'workout_resumed':'workout_paused',timestamp:at,payload:{workoutId:current.id}}]}});
- const completeSet=(eid:string,sid:string)=>{mutate(ww=>{const c=structuredClone(ww),we=c.exercises.find(x=>x.exerciseId===eid)!,set=we.sets.find(x=>x.id===sid)!;if(set.completed){set.completed=false;set.timestamp=undefined}else{if(set.type!=='warmup'&&set.reps===undefined&&set.seconds===undefined)return ww;set.completed=true;set.timestamp=new Date().toISOString();setRestEnd(Date.now()+recommendedRest(s.exercises.find(e=>e.id===eid)!,s.preferences.restPreference,s.preferences.restCustomSec,set.rir)*1000)}return c})};
+ const completeSet=(eid:string,sid:string)=>{mutate(ww=>{const c=structuredClone(ww),we=c.exercises.find(x=>x.exerciseId===eid),set=we?.sets.find(x=>x.id===sid);if(!we||!set)return ww;if(set.completed){set.completed=false;set.timestamp=undefined}else{if(set.type!=='warmup'&&set.reps===undefined&&set.seconds===undefined)return ww;set.completed=true;set.timestamp=new Date().toISOString();const ex=safeExercise(s.exercises,eid);if(!ex)return c;setRestEnd(Date.now()+recommendedRest(ex,s.preferences.restPreference,s.preferences.restCustomSec,set.rir)*1000)}return c})};
  const filtered=s.exercises.filter(e=>!rq||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(rq.toLowerCase())).sort((a,b)=>{const ae=replace?s.exercises.find(x=>x.id===replace):undefined;const fit=(x:Exercise)=>equipmentFit(x,s.profile?.equipment);const score=(x:Exercise)=>((fit(x)==='available'?0:fit(x)==='unknown'?1:2)+(ae&&x.pattern===ae.pattern?-2:0)+(ae&&x.loadSemantics===ae.loadSemantics?-1:0));return score(a)-score(b)}).slice(0,20);
  return <div className="workout-shell"><div className="workout-top"><button className="icon-btn" onClick={onExit}><Icon name="back"/></button><div><span className="eyebrow">{current.source.toUpperCase()} · {current.scheduledDate}</span><h1>{current.name}</h1></div><button className="mode-button" onClick={()=>setFocus(!focus)}>{focus?'Focus':'Overview'}</button></div>
  <div className="workout-toolbar"><span>{fmt(elapsed)} elapsed</span><span>{assessment.completedSets}/{assessment.plannedSets} sets</span><button className="mini-btn" onClick={()=>mutate(x=>({...x,notes:x.notes||''}))}>Journal</button><button className="mini-btn" onClick={()=>setSafety(true)}>Safety</button><button className="mini-btn" aria-label={current.pausedAt?'Resume workout':'Pause workout'} onClick={togglePause}>{current.pausedAt?'Resume':'Pause'}</button></div>
@@ -131,8 +610,8 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  {restEnd&&restEnd>now&&<div className="rest-panel"><div><span className="eyebrow">REST</span><strong aria-live="polite">{fmt(Math.ceil((restEnd-now)/1000))}</strong><small>Adaptive recommendation · actual elapsed time</small></div><div className="rest-actions"><button onClick={()=>setRestEnd(restEnd+15000)}>+15</button><button onClick={()=>setRestEnd(null)}>Skip</button></div></div>}
  <div className="workout-note"><textarea aria-label="Workout notes" value={current.notes||''} onChange={e=>mutate(x=>({...x,notes:e.target.value}))} placeholder="Workout note — optional context, technique, how it felt…"/></div>
  <div className="exercise-stack">{current.exercises.map((we,i)=><article className={`exercise-card ${focus&&i!==current.exercises.findIndex(x=>x.status!=='skipped'&&!x.sets.every(y=>y.completed))?'compact':''} ${we.status==='skipped'?'exercise-skipped':''}`} key={`${we.exerciseId}-${i}`}>
- <div className="exercise-title-row"><button className="exercise-title" onClick={()=>onExercise(we.exerciseId)}><span><em>{String(i+1).padStart(2,'0')}</em><strong>{s.exercises.find(e=>e.id===we.exerciseId)?.name}</strong><small>{we.repRange[0]}–{we.repRange[1]} reps · {formatLoad(s.exercises.find(e=>e.id===we.exerciseId)!,we.recommendedWeight)} · {we.restSec}s rest</small></span><Icon name="chev"/></button><div className="exercise-actions"><button className="mini-btn" onClick={()=>setReplace(we.exerciseId)}>Replace</button><button className="mini-btn" onClick={()=>mutate(x=>reorderWorkoutExercise(x,i,Math.max(0,i-1)))} disabled={i===0}>↑</button><button className="mini-btn" onClick={()=>mutate(x=>reorderWorkoutExercise(x,i,Math.min(x.exercises.length-1,i+1)))} disabled={i===current.exercises.length-1}>↓</button></div></div>
- {we.status==='skipped'?<div className="skipped-message">Skipped — no sets are counted as performed. <button className="mini-btn" onClick={()=>mutate(x=>markWorkoutExerciseSkipped(x,we.exerciseId))}>Restore</button></div>:<>{!focus||i===current.exercises.findIndex(x=>x.status!=='skipped'&&!x.sets.every(y=>y.completed))?<div className="prescription"><span>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</span><b>{we.recommendedWeight!==undefined?`Start ${formatLoad(s.exercises.find(e=>e.id===we.exerciseId)!,we.recommendedWeight)}`:'Calibrate first'}</b></div>:null}<div>{we.sets.map((set,j)=><SetEditor key={set.id} set={set} ex={s.exercises.find(e=>e.id===we.exerciseId)!} index={j} onChange={p=>mutate(x=>{const c=structuredClone(x),e=c.exercises.find(z=>z.exerciseId===we.exerciseId)!,ss=e.sets.find(z=>z.id===set.id)!;Object.assign(ss,p);return c})} onType={t=>mutate(x=>{const c=structuredClone(x),e=c.exercises.find(z=>z.exerciseId===we.exerciseId)!,ss=e.sets.find(z=>z.id===set.id)!;Object.assign(ss,updateSetType(ss,t,s.exercises.find(a=>a.id===we.exerciseId)!));return c})} onComplete={()=>{if(!current.pausedAt)completeSet(we.exerciseId,set.id)}} onAdd={()=>mutate(x=>addWorkoutSet(x,we.exerciseId,s.exercises,set))} onRemove={()=>mutate(x=>removeWorkoutSet(x,we.exerciseId,set.id))}/>)}</div><div className="set-add"><button className="mini-btn" onClick={()=>mutate(x=>addWorkoutSet(x,we.exerciseId,s.exercises))}>+ Add set</button><button className="mini-btn" onClick={()=>mutate(x=>markWorkoutExerciseSkipped(x,we.exerciseId))}>Skip exercise</button></div></>}
+ <div className="exercise-title-row"><button className="exercise-title" onClick={()=>onExercise(we.exerciseId)}><span><em>{String(i+1).padStart(2,'0')}</em><strong>{s.exercises.find(e=>e.id===we.exerciseId)?.name}</strong><small>{we.repRange[0]}–{we.repRange[1]} reps · {formatLoad(safeExercise(s.exercises,we.exerciseId) || {loadSemantics:'total'} as Exercise,we.recommendedWeight)} · {we.restSec}s rest</small></span><Icon name="chev"/></button><div className="exercise-actions"><button className="mini-btn" onClick={()=>setReplace(we.exerciseId)}>Replace</button><button className="mini-btn" onClick={()=>mutate(x=>reorderWorkoutExercise(x,i,Math.max(0,i-1)))} disabled={i===0}>↑</button><button className="mini-btn" onClick={()=>mutate(x=>reorderWorkoutExercise(x,i,Math.min(x.exercises.length-1,i+1)))} disabled={i===current.exercises.length-1}>↓</button></div></div>
+ {we.status==='skipped'?<div className="skipped-message">Skipped — no sets are counted as performed. <button className="mini-btn" onClick={()=>mutate(x=>markWorkoutExerciseSkipped(x,we.exerciseId))}>Restore</button></div>:<>{!focus||i===current.exercises.findIndex(x=>x.status!=='skipped'&&!x.sets.every(y=>y.completed))?<div className="prescription"><span>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</span><b>{we.recommendedWeight!==undefined?`Start ${formatLoad(safeExercise(s.exercises,we.exerciseId) || {loadSemantics:'total'} as Exercise,we.recommendedWeight)}`:'Calibrate first'}</b></div>:null}<div>{(()=>{const ex=safeExercise(s.exercises,we.exerciseId);if(!ex)return <div className="skipped-message">Exercise data unavailable. This workout entry is preserved, but its controls are disabled until the exercise is restored.</div>;return we.sets.map((set,j)=><SetEditor key={set.id} set={set} ex={ex} index={j} onChange={p=>mutate(x=>{const c=structuredClone(x),e=c.exercises.find(z=>z.exerciseId===we.exerciseId),ss=e?.sets.find(z=>z.id===set.id);if(!e||!ss)return x;Object.assign(ss,p);return c})} onType={t=>mutate(x=>{const c=structuredClone(x),e=c.exercises.find(z=>z.exerciseId===we.exerciseId),ss=e?.sets.find(z=>z.id===set.id);if(!e||!ss)return x;Object.assign(ss,updateSetType(ss,t,ex));return c})} onComplete={()=>{if(!current.pausedAt)completeSet(we.exerciseId,set.id)}} onAdd={()=>mutate(x=>addWorkoutSet(x,we.exerciseId,s.exercises,set))} onRemove={()=>mutate(x=>removeWorkoutSet(x,we.exerciseId,set.id))}/>)})()}</div><div className="set-add"><button className="mini-btn" onClick={()=>mutate(x=>addWorkoutSet(x,we.exerciseId,s.exercises))}>+ Add set</button><button className="mini-btn" onClick={()=>mutate(x=>markWorkoutExerciseSkipped(x,we.exerciseId))}>Skip exercise</button></div></>}
  </article>)}</div>
  <div className="workout-footer"><button className="button primary wide" disabled={!all} onClick={()=>onDone(current)}>{all?'Finish session':`Complete remaining sets · ${assessment.plannedSets-assessment.completedSets} left`}</button></div>
  {adapt.length>0&&<div className="callout"><Icon name="bolt"/><div><strong>Next-session evidence</strong>{adapt.slice(0,2).map((a,i)=><p key={i}>{a.title}: {a.detail}</p>)}</div></div>}
