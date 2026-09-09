@@ -1,0 +1,9 @@
+{
+  "name":"APEX — Intelligent Training",
+  "short_name":"APEX",
+  "start_url":"/",
+  "display":"standalone",
+  "background_color":"#070707",
+  "theme_color":"#070707",
+  "icons":[{"src":"/brand/apex-symbol-light.png","sizes":"1254x1254","type":"image/png","purpose":"any maskable"}]
+}
