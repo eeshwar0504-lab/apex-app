@@ -41,6 +41,8 @@ export interface Workout {
   startedAt?:string; completedAt?:string; exercises:WorkoutExercise[]; notes?:string;
   originalPlanVersion?:number; currentPlanVersion?:number; source:'scheduled'|'custom'|'extra';
   pausedAt?:string; pausedTotalSec?:number;
+  /** Persisted, session-only guidance. It never changes the underlying program. */
+  guidedSession?:{phase:'prep'|'equipment'|'ready'|'set_ready'|'set_active'|'feedback'|'rest'|'exercise_complete'|'complete';exerciseIndex:number;setIndex:number;substitutions?:Record<string,string>;workingLoads?:Record<string,number>;updatedAt:string};
   version:number; updatedAt:string;
 }
 export interface WorkoutTemplate {

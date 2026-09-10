@@ -1,4 +1,4 @@
-# APEX v2.0 build status
+# APEX 2.1.0 build status
 
 ## Current continuation pass — training continuity + plan integrity
 
