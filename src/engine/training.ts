@@ -37,6 +37,16 @@ export function safetyCheck(ex:Exercise,current:number|undefined,proposed:number
  return hard?{allowed:false,severity:'block',reasons:['Load jump is too large for an automatic change.',...reasons]}:{allowed:true,severity:reasons.length?'caution':'none',reasons};
 }
 export function recommendedRest(ex:Exercise,p:'adaptive'|'short'|'standard'|'long'|'custom',custom?:number,effort?:number){if(p==='short')return Math.max(45,ex.restSec-30);if(p==='standard')return ex.restSec;if(p==='long')return ex.restSec+30;if(p==='custom')return custom||ex.restSec;return Math.round((ex.restSec+(effort!=null&&effort<=1?15:0))/15)*15;}
+/** A conservative, equipment-aware adjustment for immediate set feedback. */
+export function feedbackLoad(ex:Exercise,current:number|undefined,feedback:'heavy'|'right'|'easy'){
+ if(current===undefined||ex.loadSemantics==='bodyweight'||ex.loadSemantics==='time'||ex.loadSemantics==='none')return current;
+ if(feedback==='right')return current;
+ const step=Math.max(.5,ex.incrementKg||.5);
+ // Assistance is inverted: less assistance is a harder progression.
+ const direction=feedback==='easy'?1:-1;
+ const adjusted=ex.loadSemantics==='assistance'?current-direction*step:current+direction*step;
+ return Math.max(0,roundTo(adjusted,step));
+}
 function chooseByPattern(es:Exercise[],pattern:string,equipment:string[]){return es.find(e=>e.pattern===pattern&&e.equipment.some(q=>equipment.includes(q)))||es.find(e=>e.pattern===pattern)||es.find(e=>e.pattern.includes(pattern));}
 export function buildPlan(profile:UserProfile,exercises:Exercise[],goals:any[]=[]){
  const available=exercises.filter(e=>e.equipment.some(x=>profile.equipment.includes(x))||e.equipment.includes('bodyweight')), upper=['horizontal_push','vertical_pull','horizontal_pull','vertical_push','arm_flexion','arm_extension','shoulder_abduction'].map(p=>chooseByPattern(available,p,profile.equipment)).filter(Boolean) as Exercise[], lower=['squat','hinge','knee_flexion','knee_extension','calf','core'].map(p=>chooseByPattern(available,p,profile.equipment)).filter(Boolean) as Exercise[];
