@@ -1,13 +1,11 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {App as CapacitorApp} from '@capacitor/app';
-import {Capacitor} from '@capacitor/core';
 import './styles.css';
 import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,PlanDay,Measurement} from './core/types';
 import {EXERCISES,findExercises} from './knowledge/exercises';
 import {repository} from './data/repository';
 import {encryptBackup,decryptBackup,recoveryKey} from './data/backupCrypto';
-import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad,makeSet,progression,recommendedRest,feedbackLoad,markMissedWorkouts,createRescheduled,volumeForWorkout,updateSetType,safetyCheck,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,sessionAssessment,applyWorkoutAdaptation,planWithDays,summarizeSets,rescheduleWorkout,equipmentFit,smartAlternatives} from './engine/training';
+import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad,makeSet,progression,recommendedRest,markMissedWorkouts,createRescheduled,volumeForWorkout,updateSetType,safetyCheck,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,applyWorkoutAdaptation,planWithDays,summarizeSets,rescheduleWorkout,equipmentFit,smartAlternatives,personalizedLoad,feedbackLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
 import {homeInsights,readiness,buildObservations,adaptationsForWorkout,goalProgress,goalMilestones,trainingLoadSummary} from './engine/intelligence';
 import {notificationIntents} from './engine/notifications';
 import {syncLocalNotifications,listenForNotificationActions} from './native/localNotifications';
@@ -16,61 +14,596 @@ import {inspectState} from './data/integrity';
 import {groundedCoachAnswer} from './engine/coachGateway';
 import {consistencySummary,volumeTrend,plateauCandidates,goalMomentum,trainingBalance} from './engine/analytics';
 import {accessibilityClass,fontScaleValue} from './data/accessibility';
+import {App as CapacitorApp} from '@capacitor/app';
 
 const today=()=>new Date().toISOString().slice(0,10);
 const fmt=(n:number)=>`${String(Math.floor(Math.max(0,n)/60)).padStart(2,'0')}:${String(Math.max(0,n)%60).padStart(2,'0')}`;
 const SET_TYPES:SetType[]=['warmup','working','drop','failure','amrap','rest_pause','myo_reps','tempo','cluster','timed','bodyweight','assisted','unilateral'];
 
-class AppBoundary extends React.Component<{children:React.ReactNode},{failed:boolean}>{
- state={failed:false};
- static getDerivedStateFromError(){return{failed:true};}
- componentDidCatch(error:Error){console.error('[APEX] recovered a UI rendering error',error);}
- render(){return this.state.failed?<div className="app"><main className="main"><Empty title="This view is unavailable" text="APEX kept your local training data intact. Return home and try again; if this continues, restore the missing exercise through Plan Studio."/></main></div>:this.props.children;}
+function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-1.8.9"/></>};return <svg {...c}>{p[name]||p.bolt}</svg>}
+
+
+function recommendationFor(ex:Exercise,s:AppState){
+  return personalizedLoad(ex,s.workouts,s.profile,s.exercises);
 }
 
-function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-1.8.9"/></>};return <svg {...c}>{p[name]||p.bolt}</svg>}
+function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
+  const next=structuredClone(w);
+  const now=new Date().toISOString();
+  const existing=next.guidedSession;
+
+  next.guidedSession={
+    ...(existing||{}),
+    phase:existing?.phase||'prep',
+    exerciseIndex:existing?.exerciseIndex||0,
+    setIndex:existing?.setIndex||0,
+    completedSetIds:existing?.completedSetIds||[],
+    skippedSetIds:existing?.skippedSetIds||[],
+    skippedExerciseIds:existing?.skippedExerciseIds||[],
+    substitutions:existing?.substitutions||{},
+    workingLoads:existing?.workingLoads||{},
+    recommendations:existing?.recommendations||{},
+    sessionEquipment:existing?.sessionEquipment||{},
+    setFeedback:existing?.setFeedback||{},
+    calibration:existing?.calibration||{},
+    pausedTotalSec:existing?.pausedTotalSec||0,
+    updatedAt:now,
+    version:existing?.version||1
+  };
+
+  next.exercises=next.exercises.map(we=>{
+    const ex=s.exercises.find(e=>e.id===we.exerciseId);
+    if(!ex)return we;
+
+    const rec=recommendationFor(ex,s);
+    const isExternal=!["bodyweight","none","time","assistance"].includes(ex.loadSemantics);
+    const availability=loadAvailability(ex,s.profile);
+    const safeRec=isExternal
+      ?snapToAvailableLoad(ex,rec.weight,s.profile)
+      :rec.weight;
+
+    const invalidLoaded=isExternal&&(
+      we.recommendedWeight===0 ||
+      (we.recommendedWeight!==undefined&&!Number.isFinite(we.recommendedWeight))
+    );
+
+    const recommendationWeight=safeRec!==undefined?safeRec:rec.weight;
+    const nextWeight=isExternal
+      ?(recommendationWeight!==undefined
+          ?recommendationWeight
+          :we.recommendedWeight)
+      :we.recommendedWeight;
+
+    const nextSets=we.sets.map(set=>{
+      if(!isExternal||set.completed)return set;
+      if(set.weight!==undefined&&set.weight>0)return set;
+      if(nextWeight!==undefined)return {...set,weight:nextWeight};
+      return set;
+    });
+
+    const calibrationState=rec.kind==='calibration'
+      ?'calibrating'
+      :'established';
+
+    next.guidedSession={
+      ...completeGuidedSession(next.guidedSession),
+      recommendations:{
+        ...(next.guidedSession?.recommendations||{}),
+        [ex.id]:({
+          weight:recommendationWeight,
+          confidence:rec.confidence,
+          kind:rec.kind,
+          reason:rec.reason,
+          evidence:(rec as any).evidence,
+          targetRir:rec.targetRir,
+          loadSemantics:ex.loadSemantics,
+          incrementKg:availability.incrementKg,
+          generatedAt:now
+        } as any)
+      },
+      calibration:{
+        ...(next.guidedSession?.calibration||{}),
+        [ex.id]:next.guidedSession?.calibration?.[ex.id]||calibrationState
+      }
+    };
+
+    return {
+      ...we,
+      sets:nextSets,
+      recommendedWeight:
+        isExternal
+          ?(nextWeight!==undefined?nextWeight:(invalidLoaded?undefined:we.recommendedWeight))
+          :we.recommendedWeight,
+      note:
+        isExternal
+          ?`${rec.kind==='calibration'?'Initial calibration':'Evidence-based recommendation'} · ${rec.reason}`
+          :we.note
+    };
+  });
+
+  return next;
+}
+
+function ensureGuidedSession(w:Workout):Workout{
+  if(w.guidedSession)return w;
+  return {
+    ...w,
+    guidedSession:{
+      phase:'prep',
+      exerciseIndex:0,
+      setIndex:0,
+      completedSetIds:[],
+      skippedSetIds:[],
+      skippedExerciseIds:[],
+      substitutions:{},
+      workingLoads:{},
+      recommendations:{},
+      sessionEquipment:{},
+      setFeedback:{},
+      calibration:{},
+      pausedTotalSec:0,
+      updatedAt:new Date().toISOString(),
+      version:1
+    }
+  };
+}
+
+
+function defaultGuidedSession(): NonNullable<Workout['guidedSession']>{
+  return {
+    phase:'prep',
+    exerciseIndex:0,
+    setIndex:0,
+    completedSetIds:[],
+    skippedSetIds:[],
+    skippedExerciseIds:[],
+    substitutions:{},
+    workingLoads:{},
+    sessionEquipment:{},
+    recommendations:{},
+    setFeedback:{},
+    calibration:{},
+    pausedTotalSec:0,
+    updatedAt:new Date().toISOString(),
+    version:1
+  };
+}
+
+function completeGuidedSession(value?:Workout['guidedSession']):NonNullable<Workout['guidedSession']>{
+  return {
+    ...defaultGuidedSession(),
+    ...(value||{})
+  } as NonNullable<Workout['guidedSession']>;
+}
 
 function App(){
  const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false);
  const routeHistory=useRef<string[]>([]);
- const update=(fn:(x:AppState)=>AppState)=>setS(x=>fn(structuredClone(x)));
- const nav=(r:string)=>{setRoute(current=>{if(current!==r)routeHistory.current.push(current);return r});setSheet(null);window.scrollTo({top:0,behavior:'smooth'})};
+ const routeRef=useRef(route);
+ const sheetRef=useRef<string|null>(sheet);
+ const stateRef=useRef(s);
+ const lifecycleBusy=useRef(false);
+ const backgroundPausedWorkoutId=useRef<string|undefined>(undefined);
+
+ useEffect(()=>{stateRef.current=s},[s]);
+
+ const persistState=async(next:AppState)=>{
+   stateRef.current=next;
+   await repository.saveAsync({...next,activeRoute:routeRef.current});
+ };
+
+ const update=(fn:(x:AppState)=>AppState)=>{
+   setS(x=>{
+     const next=fn(structuredClone(x));
+     stateRef.current=next;
+     return next;
+   });
+ };
+
+ useEffect(()=>{routeRef.current=route},[route]);
+ useEffect(()=>{sheetRef.current=sheet},[sheet]);
+
+ /*
+  * Keyboard-safe form behavior.
+  * Android's IME can resize the WebView without automatically keeping the
+  * focused control above a sticky workout action area. Keep the active
+  * editable control visible after focus and while the visual viewport changes.
+  */
+ useEffect(()=>{
+   const isEditable=(element:Element|null)=>{
+     if(!element)return false;
+     const tag=element.tagName.toLowerCase();
+     if(tag==='textarea'||tag==='select')return true;
+     if(tag!=='input')return false;
+     const type=(element as HTMLInputElement).type;
+     return !['button','checkbox','radio','range','submit','reset','file','hidden'].includes(type);
+   };
+
+   let scrollTimer:number|undefined;
+   const keepFocusedVisible=()=>{
+     const active=document.activeElement;
+     if(!isEditable(active))return;
+
+     window.clearTimeout(scrollTimer);
+     scrollTimer=window.setTimeout(()=>{
+       try{
+         (active as HTMLElement).scrollIntoView({
+           block:'center',
+           inline:'nearest',
+           behavior:s.preferences.reducedMotion?'auto':'smooth'
+         });
+       }catch{
+         (active as HTMLElement).scrollIntoView();
+       }
+     },120);
+   };
+
+   const onFocusIn=(event:FocusEvent)=>{
+     if(isEditable(event.target as Element|null))keepFocusedVisible();
+   };
+
+   document.addEventListener('focusin',onFocusIn);
+   const viewport=window.visualViewport;
+   viewport?.addEventListener('resize',keepFocusedVisible);
+   viewport?.addEventListener('scroll',keepFocusedVisible);
+
+   return()=>{
+     document.removeEventListener('focusin',onFocusIn);
+     viewport?.removeEventListener('resize',keepFocusedVisible);
+     viewport?.removeEventListener('scroll',keepFocusedVisible);
+     window.clearTimeout(scrollTimer);
+   };
+ },[s.preferences.reducedMotion]);
+
+ const nav=(r:string)=>{
+   const current=routeRef.current;
+
+   if(r===current){
+     setSheet(null);
+     window.scrollTo({top:0,behavior:'smooth'});
+     return;
+   }
+
+   routeHistory.current=[
+     ...routeHistory.current,
+     current
+   ].filter((value,index,array)=>
+     index===0||value!==array[index-1]
+   ).slice(-30);
+
+   setRoute(r);
+   setSheet(null);
+   window.scrollTo({top:0,behavior:'smooth'});
+ };
+
+ const goBack=()=>{
+   if(sheetRef.current){
+     setSheet(null);
+     return;
+   }
+
+   const previous=routeHistory.current.pop();
+
+   if(previous){
+     setRoute(previous);
+     window.scrollTo({top:0,behavior:'smooth'});
+     return;
+   }
+
+   if(routeRef.current!=='home'){
+     setRoute('home');
+     window.scrollTo({top:0,behavior:'smooth'});
+     return;
+   }
+
+   void CapacitorApp.exitApp();
+ };
  useEffect(()=>{let live=true;repository.loadAsync().then(next=>{if(live){setS(next);setRoute(next.activeRoute||'home');setHydrated(true)}}).catch(()=>setHydrated(true));return()=>{live=false}},[]);
+ useEffect(()=>{
+   let listener:{remove:()=>Promise<void>}|undefined;
+
+   void CapacitorApp.addListener(
+     'backButton',
+     ()=>{
+       goBack();
+     }
+   ).then(handle=>{listener=handle});
+
+   return()=>{
+     if(listener)void listener.remove();
+   };
+ },[]);
+
+ /*
+  * Session resilience:
+  * - The active workout is persisted continuously through the normal state effect.
+  * - Android backgrounding pauses the active session and freezes timestamp-based
+  *   work/rest timers so returning to APEX restores the exact point of interruption.
+  * - Foreground recovery never advances the exercise or set automatically.
+  * - A process kill may prevent the background callback from running, so the
+  *   continuously persisted checkpoint remains the final source of truth.
+  */
+ useEffect(()=>{
+   if(!hydrated)return;
+
+   let appListener:{remove:()=>Promise<void>}|undefined;
+
+   const pauseForBackground=async()=>{
+     if(lifecycleBusy.current)return;
+     lifecycleBusy.current=true;
+
+     try{
+       const currentState=stateRef.current;
+       const activeWorkout=currentState.workouts.find(
+         x=>x.id===currentState.activeWorkoutId&&x.status==='in_progress'
+       );
+
+       if(!activeWorkout||activeWorkout.pausedAt)return;
+
+       const at=new Date().toISOString();
+       const guidedAny=activeWorkout.guidedSession as any;
+       const nowMs=Date.now();
+
+       const restStartedAt=guidedAny?.restStartedAt as string|undefined;
+       const restTargetSec=Number(guidedAny?.restTargetSec)||0;
+       const restRemaining=restStartedAt&&restTargetSec>0
+         ?Math.max(0,restTargetSec-Math.floor((nowMs-new Date(restStartedAt).getTime())/1000))
+         :undefined;
+
+       const workStartedAt=guidedAny?.workStartedAt as string|undefined;
+       const workTargetSec=Number(guidedAny?.workTargetSec)||0;
+       const workRemaining=workStartedAt&&workTargetSec>0
+         ?Math.max(0,workTargetSec-Math.floor((nowMs-new Date(workStartedAt).getTime())/1000))
+         :undefined;
+
+       const paused=pauseWorkoutSession(
+         activeWorkout,
+         'background',
+         at
+       );
+
+       const nextWorkout={
+         ...paused,
+         guidedSession:paused.guidedSession
+           ?{
+              ...paused.guidedSession,
+              updatedAt:at,
+              lastCheckpointAt:at,
+              ...(restRemaining!==undefined?{pausedRestRemainingSec:restRemaining}:{}),
+              ...(workRemaining!==undefined?{pausedWorkRemainingSec:workRemaining}:{}),
+              ...(restStartedAt?{pausedRestTargetSec:restTargetSec}:{}),
+              ...(workStartedAt?{pausedWorkTargetSec:workTargetSec}:{}),
+              ...(restStartedAt?{restStartedAt:undefined,restTargetSec:undefined}:{}),
+              ...(workStartedAt?{workStartedAt:undefined,workTargetSec:undefined}:{})
+            } as any
+           :paused.guidedSession
+       };
+
+       const nextState={
+         ...currentState,
+         activeRoute:'workout',
+         activeWorkoutId:activeWorkout.id,
+         workouts:currentState.workouts.map(
+           x=>x.id===activeWorkout.id?nextWorkout:x
+         ),
+         eventLog:[
+           ...(currentState.eventLog||[]),
+           {
+             id:uid('evt'),
+             type:'workout_backgrounded',
+             timestamp:at,
+             payload:{
+               workoutId:activeWorkout.id,
+               phase:activeWorkout.guidedSession?.phase,
+               exerciseIndex:activeWorkout.guidedSession?.exerciseIndex,
+               setIndex:activeWorkout.guidedSession?.setIndex
+             }
+           }
+         ]
+       };
+
+       backgroundPausedWorkoutId.current=activeWorkout.id;
+       await persistState(nextState);
+       setS(nextState);
+     }finally{
+       lifecycleBusy.current=false;
+     }
+   };
+
+   const recoverFromBackground=async()=>{
+     if(lifecycleBusy.current)return;
+     lifecycleBusy.current=true;
+
+     try{
+       const currentState=stateRef.current;
+       const persistedBackgroundWorkout=currentState.workouts.find(
+         x=>x.status==='in_progress'&&
+           x.pausedAt&&
+           x.pauseReason==='background'
+       );
+       const id=backgroundPausedWorkoutId.current||persistedBackgroundWorkout?.id;
+       if(!id)return;
+
+       const activeWorkout=currentState.workouts.find(
+         x=>x.id===id&&x.status==='in_progress'
+       );
+       if(!activeWorkout||!activeWorkout.pausedAt)return;
+
+       const at=new Date().toISOString();
+       const guidedAny=activeWorkout.guidedSession as any;
+       const resumed=resumeWorkoutSession(activeWorkout,at);
+       const resumedGuided=resumed.guidedSession
+         ?{...resumed.guidedSession} as any
+         :undefined;
+
+       if(resumedGuided){
+         const pausedRestRemaining=Number(guidedAny?.pausedRestRemainingSec);
+         const pausedRestTarget=Number(guidedAny?.pausedRestTargetSec);
+         const pausedWorkRemaining=Number(guidedAny?.pausedWorkRemainingSec);
+         const pausedWorkTarget=Number(guidedAny?.pausedWorkTargetSec);
+
+         if(
+           Number.isFinite(pausedRestRemaining)&&
+           Number.isFinite(pausedRestTarget)&&
+           pausedRestTarget>0
+         ){
+           resumedGuided.restStartedAt=new Date(
+             Date.now()-(pausedRestTarget-pausedRestRemaining)*1000
+           ).toISOString();
+           resumedGuided.restTargetSec=pausedRestTarget;
+         }
+
+         if(
+           Number.isFinite(pausedWorkRemaining)&&
+           Number.isFinite(pausedWorkTarget)&&
+           pausedWorkTarget>0
+         ){
+           resumedGuided.workStartedAt=new Date(
+             Date.now()-(pausedWorkTarget-pausedWorkRemaining)*1000
+           ).toISOString();
+           resumedGuided.workTargetSec=pausedWorkTarget;
+         }
+
+         delete resumedGuided.pausedRestRemainingSec;
+         delete resumedGuided.pausedRestTargetSec;
+         delete resumedGuided.pausedWorkRemainingSec;
+         delete resumedGuided.pausedWorkTargetSec;
+         resumedGuided.lastCheckpointAt=at;
+         resumedGuided.updatedAt=at;
+       }
+
+       const recovered=recoverWorkoutSession({
+         ...resumed,
+         guidedSession:resumedGuided,
+         updatedAt:at
+       });
+
+       const nextState={
+         ...currentState,
+         activeRoute:'workout',
+         activeWorkoutId:id,
+         workouts:currentState.workouts.map(
+           x=>x.id===id?recovered:x
+         ),
+         eventLog:[
+           ...(currentState.eventLog||[]),
+           {
+             id:uid('evt'),
+             type:'workout_recovered',
+             timestamp:at,
+             payload:{
+               workoutId:id,
+               phase:recovered.guidedSession?.phase,
+               exerciseIndex:recovered.guidedSession?.exerciseIndex,
+               setIndex:recovered.guidedSession?.setIndex
+             }
+           }
+         ]
+       };
+
+       await persistState(nextState);
+       setS(nextState);
+       setRoute('workout');
+       routeRef.current='workout';
+       backgroundPausedWorkoutId.current=undefined;
+     }finally{
+       lifecycleBusy.current=false;
+     }
+   };
+
+   void CapacitorApp.addListener(
+     'appStateChange',
+     ({isActive})=>{
+       if(isActive)void recoverFromBackground();
+       else void pauseForBackground();
+     }
+   ).then(handle=>{appListener=handle});
+
+   /*
+    * If Android reclaimed the WebView while APEX was in the background,
+    * there is no in-memory ref left. Recover from the persisted background
+    * pause marker on the first hydrated render.
+    */
+   const persistedBackgroundWorkout=stateRef.current.workouts.find(
+     x=>x.status==='in_progress'&&
+       x.pausedAt&&
+       x.pauseReason==='background'
+   );
+   if(persistedBackgroundWorkout){
+     backgroundPausedWorkoutId.current=persistedBackgroundWorkout.id;
+     void recoverFromBackground();
+   }
+
+   const visibility=()=>{
+     if(document.visibilityState==='hidden')void pauseForBackground();
+     else if(document.visibilityState==='visible')void recoverFromBackground();
+   };
+
+   document.addEventListener('visibilitychange',visibility);
+
+   return()=>{
+     document.removeEventListener('visibilitychange',visibility);
+     if(appListener)void appListener.remove();
+   };
+ },[hydrated]);
+
  useEffect(()=>{const t=setTimeout(()=>setSplash(false),900);return()=>clearTimeout(t)},[]);
  useEffect(()=>{if(s.onboardingComplete){const m=markMissedWorkouts(s.workouts,today());if(JSON.stringify(m)!==JSON.stringify(s.workouts))setS(x=>({...x,workouts:m}));}},[]);
  useEffect(()=>{if(hydrated)void repository.saveAsync({...s,activeRoute:route})},[s,route,hydrated]);
  useEffect(()=>{if(hydrated)void syncLocalNotifications({...s,activeRoute:route})},[s.preferences.notifications,s.workouts,hydrated,route]);
  useEffect(()=>{let dispose:(()=>Promise<void>)|undefined; if(hydrated)void listenForNotificationActions(r=>nav(r)).then(fn=>{dispose=fn}); return()=>{if(dispose)void dispose()};},[hydrated]);
- useEffect(()=>{
-  if(!Capacitor.isNativePlatform())return;
-  let listener:{remove:()=>Promise<void>}|undefined;
-  void CapacitorApp.addListener('backButton',()=>{
-   if(sheet){setSheet(null);return;}
-   const overlayBack=new Event('apex-back',{cancelable:true});
-   window.dispatchEvent(overlayBack);
-   if(overlayBack.defaultPrevented)return;
-   const previous=routeHistory.current.pop();
-   if(previous){setRoute(previous);window.scrollTo({top:0,behavior:'smooth'});return;}
-   if(route!=='home'){setRoute('home');return;}
-   void CapacitorApp.exitApp();
-  }).then(next=>{listener=next});
-  return()=>{if(listener)void listener.remove();};
- },[route,sheet]);
- const start=(w:Workout)=>{update(x=>({...x,activeWorkoutId:w.id,workouts:x.workouts.map(q=>q.id===w.id?{...q,...w,status:'in_progress',startedAt:q.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}:q)}));nav('brief:'+w.id)};
+ const start=(w:Workout)=>{
+  if(w.status==='in_progress'){
+    update(x=>{
+      const now=new Date().toISOString();
+      const prepared=hydrateWorkoutRecommendations(ensureGuidedSession({...w,updatedAt:now}),x);
+      return {
+        ...x,
+        activeWorkoutId:w.id,
+        activeRoute:'workout',
+        workouts:x.workouts.map(q=>q.id===w.id?{...q,...prepared}:q)
+      };
+    });
+    nav('workout');
+    return;
+  }
+
+  update(x=>{
+    const now=new Date().toISOString();
+    const prepared=hydrateWorkoutRecommendations(
+      ensureGuidedSession({...w,updatedAt:now}),
+      x
+    );
+    return {
+      ...x,
+      workouts:x.workouts.map(q=>q.id===w.id?{
+        ...q,
+        ...prepared,
+        status:w.status,
+        startedAt:undefined,
+        updatedAt:now
+      }:q)
+    };
+  });
+
+  nav('brief:'+w.id);
+};
+
  const active=s.workouts.find(w=>w.id===s.activeWorkoutId&&w.status==='in_progress');
  if(!hydrated)return <div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b><small>Restoring local training data…</small></div>;
  if(!s.onboardingComplete)return <Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/>;
  return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b></div>}
- <header className="topbar"><button className="brand" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="top-actions"><button className="icon-btn" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
- <main className="main"><div className="page-transition" key={route}>
+ <header className="topbar" data-apex-header><button className="brand" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="top-actions"><button className="icon-btn" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
+ <main className="main">
+ <div className="page-transition" key={route}>
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
  {route==='train'&&<Train s={s} onStart={start} onNav={nav} update={update}/>}
- {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} onStart={(w)=>{update(x=>({...x,activeWorkoutId:w.id,workouts:x.workouts.map(q=>q.id===w.id?{...q,...w,status:'in_progress',startedAt:q.startedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}:q)}));nav('workout')}} onBack={()=>nav('train')}/>} 
- {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onDone={w=>{const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,w]):undefined;return{...x,workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
+ {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} update={update} onStart={(w)=>{update(x=>{const now=new Date().toISOString();const prepared=hydrateWorkoutRecommendations(ensureGuidedSession({...w,status:'in_progress',startedAt:w.startedAt||now,updatedAt:now}),x);return {...x,activeWorkoutId:w.id,activeRoute:'workout',workouts:x.workouts.map(q=>q.id===w.id?{...q,...prepared}:q)}});nav('workout')}} onBack={()=>nav('train')}/>}
+ {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onDone={w=>{const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,w]):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
  {route.startsWith('session:')&&<SessionReview s={s} id={route.slice(8)} onNav={nav} update={update}/>}
  {route==='progress'&&<Progress s={s} onNav={nav}/>}
  {route==='history'&&<History s={s} onNav={nav}/>}
- {route==='goals'&&<Goals s={s} update={update}/>} 
+ {route==='goals'&&<Goals s={s} update={update}/>}
  {route==='measurements'&&<Measurements s={s} update={update}/>}
  {route==='plan'&&<PlanStudio s={s} update={update} onStart={start}/>}
  {route==='library'&&<Library s={s} query={query} setQuery={setQuery} onExercise={id=>setSheet('exercise:'+id)}/>}
@@ -78,7 +611,8 @@ function App(){
  {route==='coach'&&<Coach s={s}/>}
  {route==='learn'&&<Learn/>}
  {route==='templates'&&<Templates s={s} update={update} onStart={start}/>}
- </div></main>
+ </div>
+ </main>
  <nav className="bottom"><NavItem active={route==='home'} icon="home" label="Home" click={()=>nav('home')}/><NavItem active={route==='train'||route==='workout'} icon="train" label="Train" click={()=>nav(active?'workout':'train')}/><NavItem active={['progress','history','goals'].includes(route)||route.startsWith('session:')} icon="chart" label="Progress" click={()=>nav('progress')}/><NavItem active={route==='you'} icon="user" label="You" click={()=>nav('you')}/></nav>
  {sheet==='command'&&<Command nav={nav} setQuery={setQuery} close={()=>setSheet(null)}/>}
  {sheet?.startsWith('exercise:')&&(()=>{const ex=s.exercises.find(e=>e.id===sheet.slice(9));return ex?<ExerciseSheet ex={ex} s={s} close={()=>setSheet(null)} onAlternative={id=>setSheet('exercise:'+id)} onUse={()=>{setSheet(null);nav('train')}}/>:<Modal title="Exercise unavailable" close={()=>setSheet(null)}><p className="modal-copy">This exercise is no longer available in the current local knowledge set.</p></Modal>})()}
@@ -554,7 +1088,7 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
           <button
             type="button"
             className="button primary"
-            disabled={!exp||!goal||!days||!mins||!equipment.length}
+           disabled={building||!exp||!goal||!days||!mins||!equipment.length}
             onClick={buildMyPlan}
           >
             {building
@@ -584,7 +1118,7 @@ function Train({s,onStart,onNav,update}:{s:AppState;onStart:(w:Workout)=>void;on
  const extra=s.workouts.filter(w=>w.source==='extra');
  const [reschedule,setReschedule]=useState<Workout|null>(null),[date,setDate]=useState(today());
  const createExtra=()=>{const ids=s.exercises.slice(0,5).map(e=>e.id);const w=createCustomWorkout('Extra Session',today(),ids,s.exercises);w.source='extra';w.status='planned';update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'extra_workout_created',timestamp:new Date().toISOString(),payload:{workoutId:w.id}}]}));onStart(w)};
- const commitReschedule=()=>{if(!reschedule||!date)return;const pair=rescheduleWorkout(reschedule,date);update(x=>({...x,workouts:x.workouts.map(w=>w.id===pair.original.id?pair.original:w).concat(pair.replacement),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_rescheduled',timestamp:new Date().toISOString(),payload:{from:pair.original.id,to:pair.replacement.id,date}}]}));setReschedule(null);};
+ const commitReschedule=()=>{if(!reschedule||!date)return;const pair=rescheduleWorkoutWithEvent(reschedule,date);update(x=>({...x,workouts:x.workouts.map(w=>w.id===pair.original.id?pair.original:w).concat(pair.replacement),eventLog:[...(x.eventLog||[]),pair.event]}));setReschedule(null);};
  return <><PageTitle eyebrow="TRAIN" title="Your training floor." sub="Scheduled work, flexible sessions and quick access to the movement library."/>
  <div className="command-row"><button className="button primary" onClick={createExtra}><Icon name="plus"/> Quick extra workout</button><button className="button secondary" onClick={()=>onNav('templates')}>Templates</button><button className="button secondary" onClick={()=>onNav('plan')}>Plan Studio</button></div>
  <section className="section"><div className="section-head"><div><span className="eyebrow">UP NEXT</span><h2>Scheduled sessions.</h2></div></div><div className="timeline">{upcoming.slice(0,6).map(w=><div className="timeline-row" key={w.id}><span className="timeline-dot">{w.scheduledDate===today()?'NOW':w.scheduledDate.slice(5)}</span><button className="timeline-main" onClick={()=>onStart(w)}><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.source} · v{w.version}</small></button><button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button><button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button></div>)}{!upcoming.length&&<Empty title="No scheduled session" text="Use Plan Studio or create a custom workout."/>}</div></section>
@@ -593,97 +1127,2654 @@ function Train({s,onStart,onNav,update}:{s:AppState;onStart:(w:Workout)=>void;on
  {reschedule&&<Modal title="Reschedule session" close={()=>setReschedule(null)}><p className="modal-copy">The original session stays in history as rescheduled. The new date becomes a separate scheduled event.</p><label>New date<input type="date" value={date} min={today()} onChange={e=>setDate(e.target.value)}/></label><button className="button primary wide" onClick={commitReschedule}>Confirm new date</button></Modal>}
  </>}
 
-function PreWorkout({s,id,onStart,onBack}:{s:AppState;id:string;onStart:(w:Workout)=>void;onBack:()=>void}){
- const w=s.workouts.find(x=>x.id===id);
+function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(w:Workout)=>void;onBack:()=>void;update:(f:(x:AppState)=>AppState)=>void}){
+ const source=s.workouts.find(x=>x.id===id);
  const read=readiness(s);
  const [energy,setEnergy]=useState<number|null>(null);
  const [note,setNote]=useState('');
- const [draft,setDraft]=useState<Workout|null>(null);
- if(!w)return <Empty title="Session unavailable" text="This training event is no longer available."/> as any;
- const session=draft||w;
- const first=session.exercises[0], firstEx=first?s.exercises.find(e=>e.id===first.exerciseId):undefined;
+ const [replace,setReplace]=useState<string|null>(null);
+ const [rq,setRq]=useState('');
+
+ if(!source)return <Empty title="Session unavailable" text="This training event is no longer available."/>;
+
+ const w=source;
+ const validEntries=w.exercises.map((we,index)=>({
+   we,
+   index,
+   ex:s.exercises.find(e=>e.id===we.exerciseId)
+ })).filter(x=>!!x.ex) as Array<{we:Workout['exercises'][number];index:number;ex:Exercise}>;
+
+ const required=Array.from(new Set(
+   validEntries.flatMap(({ex})=>ex.equipment||[])
+     .filter(x=>x&&x!=='none'&&x!=='bodyweight')
+ ));
+
+ const equipmentLabels:Record<string,string>={
+   machine:'Machines',
+   cable:'Cable Station',
+   dumbbell:'Dumbbells',
+   barbell:'Barbell',
+   bench:'Bench',
+   kettlebell:'Kettlebell',
+   resistance_band:'Resistance Band',
+   band:'Resistance Band',
+   pullup_bar:'Pull-up Bar',
+   dip_station:'Dip Station',
+   smith_machine:'Smith Machine',
+   ez_bar:'EZ Bar',
+   trap_bar:'Trap Bar',
+   plate:'Weight Plates'
+ };
+
+ const label=(x:string)=>equipmentLabels[x]||x.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+
+ const statusFor=(item:string):'confirmed'|'profile_available'|'unavailable'|undefined=>
+   w.guidedSession?.sessionEquipment?.[item];
+
+ const resolved=required.every(item=>{
+   const status=statusFor(item);
+   return status==='confirmed'||status==='unavailable';
+ });
+
+ const unavailable=required.filter(item=>statusFor(item)==='unavailable');
+ const readyToStart=resolved&&unavailable.length===0;
+
+ const affectedExercises=(item:string)=>
+   validEntries.filter(({ex})=>(ex.equipment||[]).includes(item));
+
+ const replaceTarget=replace?s.exercises.find(e=>e.id===replace):undefined;
+ const sessionUnavailable=useMemo(
+   ()=>new Set(
+     Object.entries(w.guidedSession?.sessionEquipment||{})
+       .filter(([,status])=>status==='unavailable')
+       .map(([equipment])=>equipment)
+   ),
+   [w.guidedSession?.sessionEquipment]
+ );
+
+ const alternativeRank=(source:Exercise,candidate:Exercise)=>{
+   const samePattern=candidate.pattern===source.pattern;
+   const sameLoad=candidate.loadSemantics===source.loadSemantics;
+   const sameFamily=candidate.family===source.family;
+   const lowerEquipment=candidate.equipment.length<source.equipment.length;
+   const unavailableCandidate=candidate.equipment.some(e=>sessionUnavailable.has(e));
+   const fit=equipmentFit(candidate,s.profile?.equipment);
+
+   if(unavailableCandidate||fit==='unavailable')return -10000;
+
+   let score=0;
+   if(fit==='available')score+=1000;
+   else if(fit==='unknown')score+=500;
+   if(samePattern)score+=120;
+   if(sameLoad)score+=80;
+   if(sameFamily)score+=50;
+   if(candidate.alternatives.includes(source.id))score+=30;
+   if(lowerEquipment)score+=10;
+   return score;
+ };
+
+ const alternativeReason=(source:Exercise,candidate:Exercise)=>{
+   const samePattern=candidate.pattern===source.pattern;
+   const sameLoad=candidate.loadSemantics===source.loadSemantics;
+   const lowerEquipment=candidate.equipment.length<source.equipment.length;
+   if(samePattern&&sameLoad)return 'Closest movement match';
+   if(samePattern)return 'Similar movement pattern';
+   if(lowerEquipment)return 'Lower equipment requirement';
+   return 'Good movement substitute';
+ };
+
+ const alternativeConsequence=(source:Exercise,candidate:Exercise)=>{
+   const comparable=
+     candidate.pattern===source.pattern &&
+     candidate.loadSemantics===source.loadSemantics &&
+     candidate.repRange[1]-candidate.repRange[0]===source.repRange[1]-source.repRange[0];
+
+   return comparable
+     ? 'Comparable movement — progression baseline can carry forward'
+     : 'New baseline — APEX will recalibrate load and progression';
+ };
+
+ const getAlternatives=(source:Exercise,limit=3)=>{
+   const candidates=source.alternatives
+     .map(id=>s.exercises.find(e=>e.id===id))
+     .filter((e):e is Exercise=>Boolean(e));
+
+   const fallback=s.exercises.filter(e=>
+     e.id!==source.id &&
+     !candidates.some(x=>x.id===e.id)
+   );
+
+   return [...candidates,...fallback]
+     .filter(e=>e.id!==source.id)
+     .filter(e=>!rq||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(rq.toLowerCase()))
+     .filter(e=>!e.equipment.some(item=>sessionUnavailable.has(item)))
+     .filter(e=>equipmentFit(e,s.profile?.equipment)!=='unavailable')
+     .sort((a,b)=>alternativeRank(source,b)-alternativeRank(source,a))
+     .slice(0,limit);
+ };
+
+ const replacementResults=replaceTarget?getAlternatives(replaceTarget,12):[];
+
+ const chooseAlternative=(oldId:string,nextEx:Exercise)=>{
+   if(!s.exercises.some(e=>e.id===oldId))return;
+   replaceExercise(oldId,nextEx);
+ };
+
+ const confirmEquipment=(item:string,status:'confirmed'|'unavailable')=>{
+   update(state=>{
+     const target=state.workouts.find(x=>x.id===w.id);
+     if(!target)return state;
+     const now=new Date().toISOString();
+     const guided=completeGuidedSession(target.guidedSession);
+     const next={
+       ...target,
+       guidedSession:{
+         ...guided,
+         sessionEquipment:{
+           ...(guided.sessionEquipment||{}),
+           [item]:status
+         },
+         updatedAt:now
+       },
+       updatedAt:now
+     };
+     return {...state,workouts:state.workouts.map(x=>x.id===w.id?next:x)};
+   });
+ };
+
+ const replaceExercise=(oldId:string,nextEx:Exercise)=>{
+   update(state=>{
+     const target=state.workouts.find(x=>x.id===w.id);
+     if(!target)return state;
+     const oldEx=state.exercises.find(e=>e.id===oldId);
+     const reason=oldEx
+       ? `${oldEx.name} unavailable today`
+       : 'Original exercise unavailable today';
+     const replaced=replaceWorkoutExercise(target,oldId,nextEx,state.exercises);
+     const now=new Date().toISOString();
+     const oldGuided=completeGuidedSession(target.guidedSession);
+     const affectedEquipment=oldEx?.equipment||[];
+     const nextEquipment:Record<string,any>={...(oldGuided.sessionEquipment||{})};
+     affectedEquipment.forEach(item=>{
+       if(!nextEquipment[item])nextEquipment[item]='profile_available';
+     });
+     const next={
+       ...replaced,
+       guidedSession:{
+         ...oldGuided,
+         sessionEquipment:nextEquipment,
+         updatedAt:now
+       },
+       updatedAt:now
+     };
+     return {
+       ...state,
+       workouts:state.workouts.map(x=>x.id===w.id?next:x),
+       eventLog:[
+         ...(state.eventLog||[]),
+         {
+           id:uid('evt'),
+           type:'exercise_replaced',
+           timestamp:now,
+           payload:{
+             workoutId:w.id,
+             plannedExerciseId:oldId,
+             performedExerciseId:nextEx.id,
+             from:oldId,
+             to:nextEx.id,
+             reason,
+             source:'session_preparation',
+             permanentPlanChanged:false
+           }
+         }
+       ]
+     };
+   });
+   setReplace(null);
+   setRq('');
+ };
+
+ const first=w.exercises[0];
+ const firstEx=first?s.exercises.find(e=>e.id===first.exerciseId):undefined;
  const adaptations=adaptationsForWorkout(s,w);
- const begin=()=>{const now=new Date().toISOString(); const updated:Workout={...session,notes:[session.notes,note.trim()].filter(Boolean).join('\n'),guidedSession:{phase:'ready',exerciseIndex:0,setIndex:0,updatedAt:now},updatedAt:now}; if(energy!==null){updated.notes=[updated.notes,`Pre-session energy: ${energy}/5`].filter(Boolean).join('\n')} onStart(updated)};
- return <div className="preworkout"><button className="icon-btn" onClick={onBack}><Icon name="back"/></button>
-  <span className="eyebrow">PRE-WORKOUT BRIEFING</span><h1>{w.name}</h1><p className="muted">{w.scheduledDate} · {w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.prescribedSets,0)} planned sets</p>
-  <section className="brief-card"><div><span className="eyebrow">RECENT EVIDENCE</span><strong>{read.label}</strong><p>{read.detail}</p></div><span className={`status-dot ${read.level}`}/></section>
-  <section className="brief-card"><span className="eyebrow">EQUIPMENT CHECK</span>{session.exercises.map(item=>{const exercise=safeExercise(s.exercises,item.exerciseId);if(!exercise)return null;const fit=equipmentFit(exercise,s.profile?.equipment);const alternative=smartAlternatives(exercise,s.exercises,s.profile?.equipment).find(a=>a.fit!=='unavailable');return <div className="brief-line" key={item.exerciseId}><strong>{fit==='unavailable'?'×':'✓'} {exercise.name}</strong><small>{fit==='unavailable'?`Unavailable · needs ${exercise.equipment.join(', ')}`:`${exercise.equipment.join(', ')} confirmed`}</small>{fit==='unavailable'&&alternative&&<button className="mini-btn" onClick={()=>setDraft(replaceWorkoutExercise(session,exercise.id,alternative.exercise,s.exercises))}>Use {alternative.exercise.name}{alternative.samePattern?'':' (partial match)'}</button>}</div>})}<p className="muted">Today’s substitutions apply only to this session; your permanent program remains unchanged.</p></section>
-  {adaptations.length>0&&<section className="brief-card"><span className="eyebrow">TODAY'S CONTEXT</span>{adaptations.slice(0,3).map((a,i)=><div className="brief-line" key={i}><strong>{a.title}</strong><small>{a.detail}</small></div>)}</section>}
-  {firstEx&&<section className="brief-card"><span className="eyebrow">FIRST MOVEMENT</span><strong>{firstEx.name}</strong><p>{firstEx.repRange[0]}–{firstEx.repRange[1]} reps · {firstEx.restSec}s rest · {first.recommendedWeight!==undefined?formatLoad(firstEx,first.recommendedWeight):'calibrate from your first useful set'}</p></section>}
-  <section className="brief-card"><span className="eyebrow">OPTIONAL CHECK-IN</span><h3>How ready do you feel?</h3><div className="energy-grid">{[1,2,3,4,5].map(v=><button key={v} className={energy===v?'selected':''} onClick={()=>setEnergy(v)}><b>{v}</b><small>{v===1?'Low':v===2?'Below usual':v===3?'Normal':v===4?'Good':'Very good'}</small></button>)}</div><label>Anything APEX should know? <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional context — sleep, schedule, technique, etc."/></label></section>
-  <button className="button primary wide" onClick={begin}>Begin session <Icon name="chev"/></button>
- </div>
+
+ const begin=()=>{
+   if(!resolved)return;
+   const now=new Date().toISOString();
+   const updated={
+     ...w,
+     status:'in_progress' as const,
+     startedAt:w.startedAt||now,
+     notes:[w.notes,note.trim()].filter(Boolean).join('\n'),
+     guidedSession:{
+       ...completeGuidedSession(w.guidedSession),
+       phase:'ready' as const,
+       updatedAt:now
+     },
+     updatedAt:now
+   };
+   if(energy!==null){
+     updated.notes=[updated.notes,`Pre-session energy: ${energy}/5`].filter(Boolean).join('\n');
+   }
+   onStart(updated);
+ };
+
+ return <div className="preworkout">
+   <button className="icon-btn" onClick={onBack} aria-label="Back"><Icon name="back"/></button>
+
+   <span className="eyebrow">TODAY</span>
+   <h1>{w.name}</h1>
+   <p className="muted">{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.prescribedSets,0)} planned sets</p>
+
+   <section className="brief-card session-plan-card">
+     <div className="section-head">
+       <div>
+         <span className="eyebrow">TODAY'S SESSION</span>
+         <h2>{w.name}</h2>
+       </div>
+     </div>
+     <div className="session-summary">
+       <div><strong>{w.exercises.length}</strong><small>exercises</small></div>
+       <div><strong>{w.exercises.reduce((a,e)=>a+e.prescribedSets,0)}</strong><small>planned sets</small></div>
+     </div>
+     <div className="session-exercise-list">
+       {validEntries.map(({we,index,ex})=>
+         <div className="session-exercise-row" key={`${we.exerciseId}-${index}`}>
+           <span className="day-no">{String(index+1).padStart(2,'0')}</span>
+           <div><strong>{ex.name}</strong><small>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]} reps</small></div>
+         </div>
+       )}
+       {validEntries.length<w.exercises.length&&
+         <div className="callout">
+           <Icon name="settings"/>
+           <div><strong>Some exercise data is unavailable.</strong><p>APEX will preserve the workout entry and prevent missing data from crashing the session.</p></div>
+         </div>
+       }
+     </div>
+   </section>
+
+   <section className="brief-card equipment-prep-card">
+     <span className="eyebrow">EQUIPMENT FOR TODAY</span>
+     <h2>Confirm your training floor.</h2>
+     <p>APEX will remember these choices for this session. It will not ask again when an exercise uses the same equipment category.</p>
+
+     {required.length===0
+       ?<div className="callout"><Icon name="check"/><div><strong>No dedicated equipment required.</strong><p>This session can be started without equipment verification.</p></div></div>
+       :<div className="equipment-check-list">
+         {required.map(item=>{
+           const status=statusFor(item);
+           const affected=affectedExercises(item);
+           const confirmed=status==='confirmed';
+           const unavailableNow=status==='unavailable';
+           return <div className={`equipment-check-block equipment-confirm-motion ${confirmed?'confirmed':''} ${unavailableNow?'unavailable':''}`} key={item} data-equipment-state={status||'unconfirmed'}>
+             <div className="equipment-check-main">
+               <div>
+                 <span className="eyebrow">{label(item)}</span>
+                 <strong>{confirmed?'✓ CONFIRMED FOR TODAY':unavailableNow?'NOT AVAILABLE':'○ NOT CONFIRMED'}</strong>
+                 <small>{affected.length} {affected.length===1?'exercise':'exercises'} use this equipment: {affected.map(x=>x.ex.name).join(' · ')}</small>
+               </div>
+               <div className="equipment-check-actions">
+                 {!confirmed&&<button className="button primary" onClick={()=>confirmEquipment(item,'confirmed')}>Confirm available</button>}
+                 {!unavailableNow&&<button className="button ghost" onClick={()=>confirmEquipment(item,'unavailable')}>Not available</button>}
+                 {confirmed&&<button className="mini-btn" onClick={()=>confirmEquipment(item,'unavailable')}>Change</button>}
+                 {unavailableNow&&<button className="mini-btn" onClick={()=>confirmEquipment(item,'confirmed')}>Mark available</button>}
+               </div>
+             </div>
+
+             {unavailableNow&&
+               <div className="equipment-unavailable">
+                 <strong>Equipment unavailable — APEX found alternatives.</strong>
+                 {affected.map(({we,ex})=>{
+                   const options=getAlternatives(ex,3);
+                   return <div className="replacement-group" key={we.exerciseId}>
+                     <div className="replacement-source">
+                       <span className="eyebrow">PLANNED</span>
+                       <strong>{ex.name}</strong>
+                       <small>Unavailable today · your permanent program stays unchanged</small>
+                     </div>
+
+                     <div className="replacement-options">
+                       {options.map((candidate,index)=>{
+                         const consequence=alternativeConsequence(ex,candidate);
+                         return <button
+                           className="replacement-option"
+                           key={candidate.id}
+                           onClick={()=>chooseAlternative(ex.id,candidate)}
+                         >
+                           <span className="replacement-rank">{String(index+1).padStart(2,'0')}</span>
+                           <span className="replacement-copy">
+                             <strong>{candidate.name}</strong>
+                             <small>{alternativeReason(ex,candidate)}</small>
+                             <em>{consequence}</em>
+                           </span>
+                           <Icon name="chev"/>
+                         </button>;
+                       })}
+                     </div>
+
+                     {!options.length&&
+                       <div className="callout">
+                         <Icon name="settings"/>
+                         <div>
+                           <strong>No safe alternative is available from today's confirmed setup.</strong>
+                           <p>Mark another equipment category available or choose from the full movement library.</p>
+                         </div>
+                       </div>
+                     }
+
+                     <button className="mini-btn" onClick={()=>setReplace(ex.id)}>
+                       View more alternatives
+                     </button>
+                   </div>;
+                 })}
+               </div>
+             }
+           </div>;
+         })}
+       </div>}
+   </section>
+
+   {unavailable.length>0&&
+     <section className="brief-card">
+       <span className="eyebrow">SESSION NOT READY</span>
+       <strong>Resolve unavailable equipment first.</strong>
+       <p>Replace affected exercises or mark the equipment available before starting today's session.</p>
+     </section>}
+
+   {adaptations.length>0&&
+     <section className="brief-card">
+       <span className="eyebrow">TODAY'S CONTEXT</span>
+       {adaptations.slice(0,3).map((a,i)=><div className="brief-line" key={i}><strong>{a.title}</strong><small>{a.detail}</small></div>)}
+     </section>}
+
+   {firstEx&&
+     <section className="brief-card">
+       <span className="eyebrow">FIRST MOVEMENT</span>
+       <strong>{firstEx.name}</strong>
+       <p>{firstEx.repRange[0]}–{firstEx.repRange[1]} reps · {firstEx.restSec}s rest · {(() => {
+         const rec=recommendationFor(firstEx,s);
+         return rec.weight!==undefined ? formatLoad(firstEx,rec.weight) : 'Calibration set required';
+       })()}</p>
+     </section>}
+
+   <section className="brief-card recommendation-card">
+     <span className="eyebrow">LOAD GUIDANCE</span>
+     {firstEx&&(() => {
+       const rec=recommendationFor(firstEx,s);
+       return <>
+         <strong>{rec.weight!==undefined?`Suggested start · ${formatLoad(firstEx,rec.weight)}`:'Start with a controlled calibration set'}</strong>
+         <small>{rec.reason}</small>
+         <small>{((rec as any).evidence||[]).join(' · ')} · Target RIR {rec.targetRir}</small>
+         {(() => {
+           const availability=loadAvailability(firstEx,s.profile);
+           return availability.options.length
+             ?<small>Available load options · {availability.options.join(' · ')} kg</small>
+             :<small>Load availability · {availability.reason}</small>;
+         })()}
+         <small>{rec.kind==='calibration'?'CONFIDENCE · INITIAL':'CONFIDENCE · '+rec.confidence.toUpperCase()}</small>
+       </>;
+     })()}
+     {!firstEx&&<small>Exercise data is unavailable, so APEX will not invent a load recommendation.</small>}
+   </section>
+
+   <section className="brief-card">
+     <span className="eyebrow">OPTIONAL CHECK-IN</span>
+     <h3>How ready do you feel?</h3>
+     <div className="energy-grid">
+       {[1,2,3,4,5].map(v=><button key={v} className={energy===v?'selected':''} onClick={()=>setEnergy(v)}><b>{v}</b><small>{v===1?'Low':v===2?'Below usual':v===3?'Normal':v===4?'Good':'Very good'}</small></button>)}
+     </div>
+     <label>Anything APEX should know? <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional context — sleep, schedule, technique, etc."/></label>
+   </section>
+
+   <button className="button primary wide" disabled={!readyToStart} onClick={begin}>
+     {readyToStart?'Session ready · Start training':unavailable.length?'Replace unavailable equipment to continue':'Confirm equipment to continue'}
+     <Icon name="chev"/>
+   </button>
+
+   {replace&&
+     <Modal title={`Replace ${replaceTarget?.name||'exercise'}`} close={()=>{setReplace(null);setRq('')}}>
+       <p className="modal-copy">
+         Choose a movement for today. This is a <strong>session-only substitution</strong>:
+         the permanent program remains unchanged. APEX records Planned → Performed → Reason
+         and only carries the progression baseline forward when the movement is demonstrably comparable.
+       </p>
+       <div className="search"><Icon name="search"/><input autoFocus value={rq} onChange={e=>setRq(e.target.value)} placeholder="Search movement or alias…"/></div>
+       <div className="picker-list">
+         {replacementResults.map(e=>{
+           const fit=equipmentFit(e,s.profile?.equipment);
+           const comparable=!!replaceTarget&&
+             replaceTarget.pattern===e.pattern&&
+             replaceTarget.loadSemantics===e.loadSemantics&&
+             e.repRange[1]-e.repRange[0]===replaceTarget.repRange[1]-replaceTarget.repRange[0];
+           return <button className="picker-row" key={e.id} onClick={()=>replaceExercise(replace!,e)}>
+             <span>
+               <strong>{e.name}</strong>
+               <small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in setup'} · {replaceTarget?alternativeReason(replaceTarget,e):'Alternative'} · {e.equipment.join(', ')}</small>
+               <em>{replaceTarget?alternativeConsequence(replaceTarget,e):''}</em>
+             </span>
+             <Icon name="chev"/>
+           </button>;
+         })}
+         {!replacementResults.length&&<Empty title="No suitable alternative found" text="Try another search or keep the original movement and change the equipment choice."/>}
+       </div>
+     </Modal>
+   }
+ </div>;
 }
+
 function safeExercise(exercises:Exercise[],id:string){return exercises.find(e=>e.id===id);}
+function phase6LoadDisplay(ex:Exercise,set?:SetLog,fallback?:number,profile?:UserProfile):{primary:string;secondary?:string}{
+ if(ex.loadSemantics==='bodyweight')return {primary:'BODYWEIGHT'};
+ if(ex.loadSemantics==='none')return {primary:'NO EXTERNAL LOAD'};
+ if(ex.loadSemantics==='time'){const seconds=set?.seconds??ex.repRange[0];return {primary:formatTimedDuration(seconds),secondary:`Target ${ex.repRange[0]}–${ex.repRange[1]} sec`};}
+ const value=set?.weight??fallback;
+ if(value===undefined)return {primary:'CALIBRATION'};
+ const detail=loadDetailForSet(ex,value,set?.loadDetail);
+ if(ex.loadSemantics==='per_hand'){const total=dumbbellTotalLoad(ex,value);return {primary:`${value} kg / hand`,secondary:total===undefined?undefined:`${total} kg total · ${ex.unilateral?'unilateral':'both hands'}`};}
+ if(ex.loadSemantics==='stack')return {primary:`${value} kg stack`,secondary:ex.equipment.includes('cable')&&!ex.equipment.includes('machine')?'Cable stack':'Machine stack'};
+ if(ex.equipment.includes('barbell')){const barWeight=profile?.barbellBarKg??detail.barWeightKg;const breakdown=barbellLoadBreakdown(value,barWeight);return {primary:`${value} kg total`,secondary:breakdown.plateLoadKg!==undefined?`${breakdown.barWeightKg} kg bar + ${breakdown.plateLoadKg} kg plates`:'Total load · bar weight not configured'};}
+ return {primary:formatLoadDetail(ex,value,detail),secondary:ex.loadDescription};
+}
+
 function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout;update:(f:(x:AppState)=>AppState)=>void;onExit:()=>void;onExercise:(id:string)=>void;onDone:(w:Workout)=>void}){
- const [now,setNow]=useState(Date.now()),[overview,setOverview]=useState(false),[why,setWhy]=useState(false);
- useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),500);return()=>clearInterval(timer)},[]);
+ const [now,setNow]=useState(Date.now());
+ const [replace,setReplace]=useState<string|null>(null);
+ const [rq,setRq]=useState('');
+ const [history,setHistory]=useState<Workout[]>([]);
+ const [safety,setSafety]=useState(false);
+ const [overview,setOverview]=useState(false);
+ const [motionKey,setMotionKey]=useState(0);
+ const previousExerciseRef=useRef<string|undefined>(undefined);
+ const previousSetRef=useRef<string|undefined>(undefined);
+ const previousPhaseRef=useRef<string|undefined>(undefined);
+ const hapticKey=useRef('');
+
+ useEffect(()=>{
+   const i=setInterval(()=>setNow(Date.now()),500);
+   return()=>clearInterval(i);
+ },[]);
+
+ useEffect(()=>{
+   setHistory(s.workouts.filter(x=>x.status==='completed'&&x.id!==w.id));
+ },[s.workouts,w.id]);
+
  const current=s.workouts.find(x=>x.id===w.id)||w;
- const unfinished=current.exercises.findIndex(e=>e.status!=='skipped'&&!e.sets.every(set=>set.completed));
- const guide=current.guidedSession||{phase:'set_ready' as const,exerciseIndex:Math.max(0,unfinished),setIndex:0,workingLoads:{},updatedAt:new Date().toISOString()};
- const entry=current.exercises[guide.exerciseIndex]||current.exercises[Math.max(0,unfinished)];
- const ex=entry&&safeExercise(s.exercises,entry.exerciseId);
- const set=entry?.sets[guide.setIndex]||entry?.sets.find(x=>!x.completed);
- const completed=current.exercises.reduce((n,e)=>n+e.sets.filter(x=>x.completed).length,0), planned=current.exercises.reduce((n,e)=>n+e.sets.length,0);
- const restEndsAt=guide.phase==='rest'?new Date(guide.updatedAt).getTime()+(entry?.restSec||0)*1000:0;
- const restLeft=Math.max(0,Math.ceil((restEndsAt-now)/1000));
- useEffect(()=>{if(guide.phase==='rest'&&restLeft===0)update(x=>({...x,workouts:x.workouts.map(q=>q.id===current.id?{...q,guidedSession:{...guide,phase:'set_ready',updatedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}:q)}))},[restLeft,guide.phase]);
- const mutate=(fn:(workout:Workout)=>Workout)=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===current.id?fn(q):q)}));
- const setGuide=(phase:NonNullable<Workout['guidedSession']>['phase'], patch:Partial<NonNullable<Workout['guidedSession']>>={})=>mutate(x=>({...x,guidedSession:{...guide,...patch,phase,updatedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}));
- const changeSet=(patch:Partial<SetLog>)=>mutate(x=>{const next=structuredClone(x),target=next.exercises[guide.exerciseIndex]?.sets[guide.setIndex];if(target)Object.assign(target,patch);return next});
- const recommended=guide.workingLoads?.[entry?.exerciseId||'']??entry?.recommendedWeight??set?.weight;
- const finishSet=()=>{if(!set||!entry||!ex)return;mutate(x=>{const next=structuredClone(x),target=next.exercises[guide.exerciseIndex]?.sets[guide.setIndex];if(!target)return x;target.completed=true;target.timestamp=new Date().toISOString();return {...next,guidedSession:{...guide,phase:'feedback',updatedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}})};
- const feedback=(feel:'heavy'|'right'|'easy')=>{if(!entry||!ex)return;const nextLoad=feedbackLoad(ex,recommended,feel);const nextSet=entry.sets.findIndex((x,i)=>i>guide.setIndex&&!x.completed);mutate(x=>{const next=structuredClone(x);const loads={...(guide.workingLoads||{}),[entry.exerciseId]:nextLoad??recommended??0};if(nextSet>=0){const pending=next.exercises[guide.exerciseIndex].sets[nextSet];if(nextLoad!==undefined)pending.weight=nextLoad;return {...next,guidedSession:{...guide,workingLoads:loads,phase:'rest',setIndex:nextSet,updatedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}}const nextExercise=next.exercises.findIndex((e,i)=>i>guide.exerciseIndex&&e.status!=='skipped'&&!e.sets.every(z=>z.completed));return {...next,guidedSession:{...guide,workingLoads:loads,phase:nextExercise>=0?'exercise_complete':'complete',exerciseIndex:nextExercise>=0?nextExercise:guide.exerciseIndex,setIndex:0,updatedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}})};
- if(!entry||!ex)return <Empty title="Session complete" text="No remaining exercise is available in this session."/>;
- if(guide.phase==='complete')return <div className="guided-session completion"><span className="completion-mark"><Icon name="check" size={34}/></span><span className="eyebrow">SESSION COMPLETE</span><h1>{current.name}</h1><p>{completed} working sets are now part of your local performance record.</p><button className="button primary wide" onClick={()=>onDone(current)}>Review session</button></div>;
- if(guide.phase==='exercise_complete')return <div className="guided-session transition-card"><span className="eyebrow">UP NEXT · EXERCISE {String(guide.exerciseIndex+1).padStart(2,'0')}</span><h1>{ex.name}</h1><p>{entry.sets.length} sets · {entry.repRange[0]}–{entry.repRange[1]} reps · {recommended===undefined?'initial calibration':formatLoad(ex,recommended)}.</p><button className="button primary wide" onClick={()=>setGuide('set_ready')}>Continue</button></div>;
- return <div className="guided-session">
-  <header className="guided-head"><button className="icon-btn" aria-label="Exit workout" onClick={onExit}><Icon name="back"/></button><div><span className="eyebrow">{current.name} · {completed}/{planned} SETS</span><i className="guided-progress"><b style={{width:`${planned?completed/planned*100:0}%`}}/></i></div><button className="mode-button" onClick={()=>setOverview(true)}>Today</button></header>
-  <section className="guided-focus"><span className="eyebrow">EXERCISE {String(guide.exerciseIndex+1).padStart(2,'0')} · SET {guide.setIndex+1}/{entry.sets.length}</span><h1>{ex.name}</h1><div className="target-line"><span>{entry.repRange[0]}–{entry.repRange[1]} reps</span><span>RIR {set?.rir??2}</span><span>{entry.restSec}s rest</span></div><div className="load-readout"><span className="eyebrow">{recommended===undefined?'INITIAL CALIBRATION':'RECOMMENDED LOAD'}</span><strong>{recommended===undefined?'Find a controlled first attempt':formatLoad(ex,recommended)}</strong><button className="why-button" onClick={()=>setWhy(!why)}>Why this load?</button>{why&&<p>{recommended===undefined?'APEX has no reliable comparable history yet. Start conservatively and use this set to establish your personal baseline.':`Based on your exercise-specific record, target range, intended effort and ${ex.incrementKg} kg equipment step.`}</p>}</div></section>
-  {guide.phase==='rest'?<section className="recover-card"><span className="eyebrow">RECOVER · NEXT SET {guide.setIndex+1}</span><strong aria-live="polite">{fmt(restLeft)}</strong><p>{recommended===undefined?'Calibrate deliberately.':`${formatLoad(ex,recommended)} · ${entry.repRange[0]}–${entry.repRange[1]} reps`}</p><div><button className="button secondary" onClick={()=>setGuide('set_ready')}>Skip rest</button><button className="button secondary" onClick={()=>mutate(x=>({...x,guidedSession:{...guide,updatedAt:new Date(new Date(guide.updatedAt).getTime()-30000).toISOString()}}))}>+30 sec</button></div></section>:guide.phase==='feedback'?<section className="feedback-card"><span className="eyebrow">SET COMPLETE</span><h2>How did that feel?</h2><p>Fast feedback calibrates this exercise for you.</p><div className="feedback-actions"><button onClick={()=>feedback('heavy')}>Too heavy</button><button className="selected" onClick={()=>feedback('right')}>About right</button><button onClick={()=>feedback('easy')}>Too easy</button></div></section>:<section className="set-control"><label>REPS<input type="number" inputMode="numeric" value={set?.reps??''} onChange={e=>changeSet({reps:e.target.value===''?undefined:+e.target.value})}/></label><label>RIR<input type="number" min="0" max="5" inputMode="numeric" value={set?.rir??''} onChange={e=>changeSet({rir:e.target.value===''?undefined:+e.target.value})}/></label>{recommended!==undefined&&<label>LOAD<input type="number" step={ex.incrementKg} inputMode="decimal" value={set?.weight??recommended} onChange={e=>changeSet({weight:e.target.value===''?undefined:+e.target.value})}/></label>}</section>}
-  {guide.phase!=='rest'&&guide.phase!=='feedback'&&<button className="button primary wide guided-cta" onClick={()=>guide.phase==='set_active'?finishSet():setGuide('set_active')}>{guide.phase==='set_active'?'Complete set':'Start set'}</button>}
-  {overview&&<Modal title="Today's session" close={()=>setOverview(false)}><div className="guided-overview">{current.exercises.map((item,i)=>{const itemEx=safeExercise(s.exercises,item.exerciseId);const done=item.sets.filter(x=>x.completed).length;return <button key={`${item.exerciseId}-${i}`} onClick={()=>{setGuide('set_ready',{exerciseIndex:i,setIndex:Math.max(0,item.sets.findIndex(x=>!x.completed))});setOverview(false)}}><span>{done===item.sets.length?'✓':i===guide.exerciseIndex?'→':'○'}</span><div><strong>{itemEx?.name||'Unavailable exercise'}</strong><small>{done}/{item.sets.length} sets</small></div></button>})}</div></Modal>}
- </div>
+ const assessment=sessionAssessment(current,s.exercises,history);
+ const adapt=adaptationsForWorkout(s,current);
+
+ const elapsed=current.startedAt
+   ?Math.max(
+      0,
+      Math.floor((Date.now()-new Date(current.startedAt).getTime())/1000)
+      -(current.pausedTotalSec||0)
+      -(current.pausedAt?Math.floor((Date.now()-new Date(current.pausedAt).getTime())/1000):0)
+    )
+   :0;
+
+ const mutate=(fn:(x:Workout)=>Workout)=>update(x=>({
+   ...x,
+   workouts:x.workouts.map(q=>q.id===current.id?fn(q):q)
+ }));
+
+ const normalizeGuided=(ww:Workout):Workout=>{
+   const c=structuredClone(ww);
+   const gs=completeGuidedSession(c.guidedSession);
+
+   let ei=Math.max(0,Math.min(gs.exerciseIndex,c.exercises.length-1));
+   let si=Math.max(0,gs.setIndex);
+
+   const findNext=(from:number)=>{
+     for(let i=Math.max(0,from);i<c.exercises.length;i++){
+       const e=c.exercises[i];
+       if(e.status==='skipped')continue;
+       const setIndex=e.sets.findIndex(x=>!x.completed);
+       if(setIndex>=0)return {exerciseIndex:i,setIndex};
+     }
+     return null;
+   };
+
+   const currentExercise=c.exercises[ei];
+   if(!currentExercise||currentExercise.status==='skipped'||currentExercise.sets[si]?.completed){
+     const next=findNext(ei);
+     if(next){
+       ei=next.exerciseIndex;
+       si=next.setIndex;
+     }else{
+       const first=findNext(0);
+       if(first){
+         ei=first.exerciseIndex;
+         si=first.setIndex;
+       }
+     }
+   }
+
+   c.guidedSession={
+     ...completeGuidedSession(gs),
+     exerciseIndex:ei,
+     setIndex:si,
+     updatedAt:gs.updatedAt||new Date().toISOString()
+   };
+   return c;
+ };
+
+ const guided=normalizeGuided(current);
+ const phase=guided.guidedSession?.phase||'prep';
+ const exerciseIndex=guided.guidedSession?.exerciseIndex||0;
+ const setIndex=guided.guidedSession?.setIndex||0;
+ const activeExercise=guided.exercises[exerciseIndex];
+ const activeEx=activeExercise?safeExercise(s.exercises,activeExercise.exerciseId):undefined;
+ const activeSet=activeExercise?.sets[setIndex];
+
+ /*
+  * Local visual checkpoint. Animation state never changes the persisted
+  * workout state; it only lets CSS replay a transition when focus changes.
+  */
+ useEffect(()=>{
+   const exerciseId=activeExercise?.exerciseId;
+   const setId=activeSet?.id;
+
+   if(previousExerciseRef.current!==undefined&&previousExerciseRef.current!==exerciseId){
+     setMotionKey(x=>x+1);
+   }else if(previousSetRef.current!==undefined&&previousSetRef.current!==setId){
+     setMotionKey(x=>x+1);
+   }else if(previousPhaseRef.current!==undefined&&previousPhaseRef.current!==phase){
+     setMotionKey(x=>x+1);
+   }
+
+   previousExerciseRef.current=exerciseId;
+   previousSetRef.current=setId;
+   previousPhaseRef.current=phase;
+ },[activeExercise?.exerciseId,activeSet?.id,phase]);
+
+ const all=current.exercises.every(e=>
+   e.status==='skipped'||e.sets.every(x=>x.completed)
+ );
+
+ const restSeconds=activeEx
+   ?recommendedRest(
+      activeEx,
+      s.preferences.restPreference,
+      s.preferences.restCustomSec,
+      activeSet?.rir
+    )
+   :90;
+
+ /*
+  * Rest is timestamp based. We deliberately do not use guidedSession.updatedAt
+  * as the timer origin because any state update could otherwise reset the clock.
+  * These extra fields are persisted on guidedSession without changing the
+  * canonical training types.
+  */
+ const guidedAny=guided.guidedSession as any;
+ const restStartedAt=guidedAny?.restStartedAt as string|undefined;
+ const restTargetSec=Number(guidedAny?.restTargetSec)||restSeconds;
+ const restRemaining=phase==='rest'&&restStartedAt
+   ?Math.max(
+      0,
+      restTargetSec-
+      Math.floor((now-new Date(restStartedAt).getTime())/1000)
+    )
+   :0;
+ const workStartedAt=(guided.guidedSession as any)?.workStartedAt as string|undefined;
+ const workTargetSec=Number((guided.guidedSession as any)?.workTargetSec)||(activeEx?.loadSemantics==='time'?(activeSet?.seconds??activeEx.repRange[0]??0):0);
+ const workRemaining=phase==='set_active'&&activeEx?.loadSemantics==='time'&&workStartedAt&&workTargetSec>0?Math.max(0,workTargetSec-Math.floor((now-new Date(workStartedAt).getTime())/1000)):0;
+ const timedWorkComplete=activeEx?.loadSemantics==='time'?workRemaining<=0&&!!workStartedAt:false;
+
+ const targetRir=activeEx
+   ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises).targetRir
+   :2;
+
+ const currentRecommendation=activeEx
+   ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises)
+   :undefined;
+
+ const setGuided=(patch:Partial<NonNullable<Workout['guidedSession']>>,extra?:Record<string,unknown>)=>{
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     c.guidedSession={
+        ...completeGuidedSession(c.guidedSession),
+        ...patch,
+        updatedAt:new Date().toISOString()
+      };
+     if(extra){
+       Object.assign(c.guidedSession as any,extra);
+     }
+     return c;
+   });
+ };
+
+ const vibrate=(pattern:number|number[]=[18])=>{
+   if(s.preferences.haptics&&typeof navigator!=='undefined'&&'vibrate' in navigator){
+     try{navigator.vibrate(pattern);}catch{}
+   }
+ };
+
+ /*
+  * When the timestamp reaches the target, transition exactly once.
+  * A short haptic is emitted only when the rest interval actually completes.
+  */
+ useEffect(()=>{
+   if(phase!=='rest'||restRemaining>0)return;
+   const key=`${current.id}:${exerciseIndex}:${setIndex}:${restStartedAt||''}`;
+   if(hapticKey.current===key)return;
+   hapticKey.current=key;
+   vibrate([18,45,18]);
+
+   const nextSet=activeExercise?.sets.findIndex((x,i)=>i>setIndex&&!x.completed);
+   const nextExercise=current.exercises.findIndex((e,i)=>
+     i>exerciseIndex &&
+     e.status!=='skipped' &&
+     e.sets.some(x=>!x.completed)
+   );
+
+   if(nextSet!==undefined&&nextSet>=0){
+     setGuided(
+       {phase:'set_ready',exerciseIndex,setIndex:nextSet},
+       {restStartedAt:undefined,restTargetSec:undefined}
+     );
+     return;
+   }
+
+   if(nextExercise>=0){
+     setGuided(
+       {phase:'exercise_complete',exerciseIndex,setIndex},
+       {
+         restStartedAt:undefined,
+         restTargetSec:undefined,
+         nextExerciseIndex:nextExercise
+       }
+     );
+     return;
+   }
+
+   setGuided(
+     {phase:'complete'},
+     {restStartedAt:undefined,restTargetSec:undefined}
+   );
+ },[phase,restRemaining,current.id,exerciseIndex,setIndex,restStartedAt,activeExercise]);
+
+ const togglePause=()=>{
+   update(state=>{
+     const ww=state.workouts.find(q=>q.id===current.id);
+     if(!ww)return state;
+     const at=new Date().toISOString();
+     const paused=!!ww.pausedAt;
+     let nextWorkout:Workout;
+
+     if(paused){
+       const guidedAny=ww.guidedSession as any;
+       const resumed=resumeWorkoutSession(ww,at);
+       const guidedResumed=resumed.guidedSession?{...resumed.guidedSession} as any:undefined;
+       if(guidedResumed){
+         const pr=Number(guidedAny?.pausedRestRemainingSec),pt=Number(guidedAny?.pausedRestTargetSec);
+         const pw=Number(guidedAny?.pausedWorkRemainingSec),pwt=Number(guidedAny?.pausedWorkTargetSec);
+         if(Number.isFinite(pr)&&Number.isFinite(pt)&&pt>0){guidedResumed.restStartedAt=new Date(Date.now()-(pt-pr)*1000).toISOString();guidedResumed.restTargetSec=pt;}
+         if(Number.isFinite(pw)&&Number.isFinite(pwt)&&pwt>0){guidedResumed.workStartedAt=new Date(Date.now()-(pwt-pw)*1000).toISOString();guidedResumed.workTargetSec=pwt;}
+         delete guidedResumed.pausedRestRemainingSec; delete guidedResumed.pausedRestTargetSec;
+         delete guidedResumed.pausedWorkRemainingSec; delete guidedResumed.pausedWorkTargetSec;
+         guidedResumed.lastCheckpointAt=at; guidedResumed.updatedAt=at;
+       }
+       nextWorkout=recoverWorkoutSession({...resumed,guidedSession:guidedResumed,updatedAt:at});
+     }else{
+       nextWorkout=pauseWorkoutSession(ww,'user',at);
+       const g=nextWorkout.guidedSession as any;
+       if(g){
+         const nowMs=Date.now();
+         const rs=g.restStartedAt as string|undefined, rt=Number(g.restTargetSec)||0;
+         const ws=g.workStartedAt as string|undefined, wt=Number(g.workTargetSec)||0;
+         const rr=rs&&rt>0?Math.max(0,rt-Math.floor((nowMs-new Date(rs).getTime())/1000)):undefined;
+         const wr=ws&&wt>0?Math.max(0,wt-Math.floor((nowMs-new Date(ws).getTime())/1000)):undefined;
+         nextWorkout.guidedSession={...g,
+           ...(rr!==undefined?{pausedRestRemainingSec:rr,pausedRestTargetSec:rt,restStartedAt:undefined,restTargetSec:undefined}:{}),
+           ...(wr!==undefined?{pausedWorkRemainingSec:wr,pausedWorkTargetSec:wt,workStartedAt:undefined,workTargetSec:undefined}:{}),
+           lastCheckpointAt:at,updatedAt:at
+         } as any;
+       }
+     }
+
+     return {...state,activeWorkoutId:current.id,activeRoute:'workout',
+       workouts:state.workouts.map(q=>q.id===current.id?nextWorkout:q),
+       eventLog:[...(state.eventLog||[]),{id:uid('evt'),type:paused?'workout_resumed':'workout_paused',timestamp:at,payload:{workoutId:current.id,reason:'user'}}]};
+   });
+ };
+
+ const startSet=()=>{
+   if(!activeExercise||!activeSet||current.pausedAt)return;
+
+   const recommendation=
+     activeEx
+       ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises)
+       :undefined;
+
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     const e=c.exercises.find(x=>x.exerciseId===activeExercise.exerciseId);
+     const ss=e?.sets.find(x=>x.id===activeSet.id);
+     if(!e||!ss)return ww;
+
+     if(ss.weight===undefined&&recommendation?.weight!==undefined&&!['bodyweight','none','time','assistance'].includes(activeEx?.loadSemantics||'')){
+       ss.weight=snapToAvailableLoad(activeEx!,recommendation.weight,s.profile);
+     }
+     if(ss.rir===undefined)ss.rir=recommendation?.targetRir??targetRir;
+     if(activeEx)ss.loadDetail=loadDetailForSet(activeEx,ss.weight,ss.loadDetail);
+     const at=new Date().toISOString();
+     c.guidedSession={...completeGuidedSession(c.guidedSession),phase:'set_active',exerciseIndex,setIndex,updatedAt:at,version:(c.guidedSession?.version||1)+1};
+     if(activeEx?.loadSemantics==='time'){
+       const duration=Math.max(1,Number(ss.seconds)||activeEx.repRange[0]);
+       ss.seconds=duration;
+       Object.assign(c.guidedSession as any,{workStartedAt:at,workTargetSec:duration});
+     };
+     return c;
+   });
+
+   vibrate(10);
+ };
+
+ const completeGuidedSet=()=>{
+   if(!activeExercise||!activeSet||!activeEx||current.pausedAt)return;
+
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     const e=c.exercises.find(x=>x.exerciseId===activeExercise.exerciseId);
+     const set=e?.sets.find(x=>x.id===activeSet.id);
+     if(!e||!set)return ww;
+
+     if(set.completed){
+       set.completed=false;
+       set.timestamp=undefined;
+       c.guidedSession={
+         ...completeGuidedSession(c.guidedSession),
+         phase:'set_active',
+         exerciseIndex,
+         setIndex,
+         updatedAt:new Date().toISOString(),
+         version:(c.guidedSession?.version||1)+1
+       };
+       return c;
+     }
+
+     if(set.type!=='warmup'&&set.reps===undefined&&set.seconds===undefined)return ww;
+     if(activeEx.loadSemantics==='time'){set.seconds=Math.max(1,Number(set.seconds)||activeEx.repRange[0]);set.loadDetail=loadDetailForSet(activeEx,undefined,set.loadDetail);}
+     else set.loadDetail=loadDetailForSet(activeEx,set.weight,set.loadDetail);
+     set.completed=true;
+     set.timestamp=new Date().toISOString();
+
+     const at=new Date().toISOString();
+
+     c.guidedSession={
+       ...completeGuidedSession(c.guidedSession),
+       completedSetIds:[
+         ...(c.guidedSession?.completedSetIds||[]),
+         activeSet.id
+       ].filter((id,index,array)=>array.indexOf(id)===index),
+       phase:'feedback',
+       exerciseIndex,
+       setIndex,
+       updatedAt:at,
+       version:(c.guidedSession?.version||1)+1
+     };
+
+     return c;
+   });
+
+   vibrate([12,30,12]);
+ };
+
+ const applyFeedback=(kind:'heavy'|'right'|'easy')=>{
+   if(!activeExercise||!activeSet||!activeEx)return;
+
+   const currentLoad=
+     activeExercise.recommendedWeight??activeSet.weight;
+
+   const next=feedbackLoad(
+     activeEx,
+     currentLoad,
+     kind,
+     {reps:activeSet.reps,rir:activeSet.rir},
+     activeExercise.repRange,
+     currentRecommendation?.targetRir,
+     s.profile
+   );
+
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     const target=c.exercises.find(
+       x=>x.exerciseId===activeExercise.exerciseId
+     );
+     if(!target)return ww;
+
+     const at=new Date().toISOString();
+     const recommendationWeight=
+       next!==undefined
+         ?snapToAvailableLoad(activeEx,next,s.profile)
+         :undefined;
+
+     const feedbackRecord={
+       ...(c.guidedSession?.setFeedback||{}),
+       [activeSet.id]:{
+         rir:activeSet.rir,
+         difficulty:(kind==='heavy'?4:kind==='easy'?2:3) as 1|2|3|4|5,
+         timestamp:at
+       }
+     };
+
+     if(recommendationWeight!==undefined){
+       target.recommendedWeight=recommendationWeight;
+       target.note=
+         `Set feedback: ${kind}. ${
+           kind==='easy'
+             ?'A small evidence-based increase is proposed.'
+             :kind==='heavy'
+               ?'A conservative reduction is proposed.'
+               :'This load strengthens the personal baseline.'
+         }`;
+
+       target.sets.forEach((z,j)=>{
+         if(
+           !z.completed&&
+           j>setIndex&&
+           z.type!=='warmup'
+         ){
+           z.weight=recommendationWeight;
+         }
+       });
+     }
+
+     c.guidedSession={
+       ...completeGuidedSession(c.guidedSession),
+       workingLoads:{
+         ...(c.guidedSession?.workingLoads||{}),
+         ...(recommendationWeight!==undefined
+           ?{[activeExercise.exerciseId]:recommendationWeight}
+           :{})
+       },
+       recommendations:{
+         ...(c.guidedSession?.recommendations||{}),
+         [activeExercise.exerciseId]:({
+           ...(c.guidedSession?.recommendations?.[activeExercise.exerciseId]||{}),
+           weight:recommendationWeight,
+           confidence:kind==='right'?'high':'medium',
+           kind:'user_adjustment',
+           reason:
+             kind==='right'
+               ?'You marked the load about right; this performance strengthens the exercise-specific baseline.'
+               :kind==='heavy'
+                 ?'You reported the load as too heavy; the next recommendation is reduced conservatively.'
+                 :'You reported the load as too easy; the next recommendation is increased conservatively.',
+           evidence:[
+             `User feedback: ${kind}`,
+             activeSet.reps!==undefined
+               ?`Actual reps: ${activeSet.reps}`
+               :'Reps not recorded',
+             activeSet.rir!==undefined
+               ?`Actual RIR: ${activeSet.rir}`
+               :'RIR not recorded',
+             `Target RIR: ${currentRecommendation?.targetRir??2}`
+           ],
+           targetRir:currentRecommendation?.targetRir??2,
+           loadSemantics:activeEx.loadSemantics,
+           incrementKg:loadAvailability(activeEx,s.profile).incrementKg,
+           generatedAt:at
+         } as any),
+       },
+       setFeedback:feedbackRecord,
+       calibration:{
+         ...(c.guidedSession?.calibration||{}),
+         [activeExercise.exerciseId]:
+           kind==='right'?'established':'calibrating'
+       },
+       phase:'rest',
+       exerciseIndex,
+       setIndex,
+       updatedAt:at,
+       version:(c.guidedSession?.version||1)+1
+     };
+
+     Object.assign(c.guidedSession as any,{
+       workStartedAt:undefined,
+       workTargetSec:undefined,
+       restStartedAt:at,
+       restTargetSec:recommendedRest(
+         activeEx,
+         s.preferences.restPreference,
+         s.preferences.restCustomSec,
+         activeSet.rir
+       )
+     });
+
+     c.eventLog=[
+       ...(c.eventLog||[]),
+       {
+         id:uid('evt'),
+         type:'load_feedback',
+         timestamp:at,
+         payload:{
+           workoutId:c.id,
+           exerciseId:activeExercise.exerciseId,
+           setId:activeSet.id,
+           feedback:kind,
+           actualReps:activeSet.reps,
+           actualRir:activeSet.rir,
+           nextLoad:recommendationWeight
+         }
+       }
+     ];
+
+     return c;
+   });
+ };
+
+ const continueAfterRest=()=>{
+   if(phase!=='rest')return;
+
+   const nextSet=activeExercise?.sets.findIndex(
+     (x,i)=>i>setIndex&&!x.completed
+   );
+
+   if(nextSet!==undefined&&nextSet>=0){
+     setGuided(
+       {phase:'set_ready',exerciseIndex,setIndex:nextSet},
+       {restStartedAt:undefined,restTargetSec:undefined}
+     );
+     return;
+   }
+
+   const nextExercise=current.exercises.findIndex((e,i)=>
+     i>exerciseIndex&&
+     e.status!=='skipped'&&
+     e.sets.some(x=>!x.completed)
+   );
+
+   if(nextExercise>=0){
+     setGuided(
+       {phase:'exercise_complete',exerciseIndex,setIndex},
+       {
+         restStartedAt:undefined,
+         restTargetSec:undefined,
+         nextExerciseIndex:nextExercise
+       }
+     );
+     return;
+   }
+
+   setGuided(
+     {phase:'complete'},
+     {restStartedAt:undefined,restTargetSec:undefined}
+   );
+ };
+
+ const advanceToNextExercise=()=>{
+   const nextExercise=Number(
+     (guided.guidedSession as any)?.nextExerciseIndex
+   );
+
+   if(Number.isInteger(nextExercise)&&nextExercise>=0){
+     const nextIndex=current.exercises[nextExercise]?.sets.findIndex(
+       x=>!x.completed
+     );
+
+     if(nextIndex!==undefined&&nextIndex>=0){
+       setGuided(
+         {
+           phase:'set_ready',
+           exerciseIndex:nextExercise,
+           setIndex:nextIndex
+         },
+         {nextExerciseIndex:undefined}
+       );
+       return;
+     }
+   }
+
+   const fallback=current.exercises.findIndex((e,i)=>
+     i>exerciseIndex&&
+     e.status!=='skipped'&&
+     e.sets.some(x=>!x.completed)
+   );
+
+   if(fallback>=0){
+     const nextIndex=current.exercises[fallback].sets.findIndex(
+       x=>!x.completed
+     );
+     setGuided(
+       {phase:'set_ready',exerciseIndex:fallback,setIndex:Math.max(0,nextIndex)},
+       {nextExerciseIndex:undefined}
+     );
+   }else{
+     setGuided(
+       {phase:'complete'},
+       {nextExerciseIndex:undefined}
+     );
+   }
+ };
+
+ const skipRest=()=>{
+   if(phase!=='rest')return;
+   hapticKey.current='';
+   continueAfterRest();
+ };
+
+ const skipCurrentSet=()=>{
+   if(!activeExercise||!activeSet||current.pausedAt)return;
+
+   const nextIndex=activeExercise.sets.findIndex(
+     (x,i)=>i>setIndex&&!x.completed&&!guided.guidedSession?.skippedSetIds?.includes(x.id)
+   );
+
+   const nextExercise=current.exercises.findIndex((e,i)=>
+     i>exerciseIndex&&
+     e.status!=='skipped'&&
+     e.sets.some(x=>!x.completed)
+   );
+
+   mutate(ww=>{
+     const skipped=markWorkoutSetSkipped(
+       ww,
+       activeExercise.exerciseId,
+       activeSet.id
+     );
+
+     const at=new Date().toISOString();
+     return {
+       ...skipped,
+       guidedSession:skipped.guidedSession
+         ?{
+            ...skipped.guidedSession,
+            phase:nextIndex>=0
+              ?'set_ready'
+              :nextExercise>=0
+                ?'exercise_complete'
+                :'complete',
+            exerciseIndex,
+            setIndex:nextIndex>=0
+              ?nextIndex
+              :setIndex,
+            ...(nextExercise>=0?{nextExerciseIndex:nextExercise}:{}),
+            updatedAt:at
+          }
+         :skipped.guidedSession
+     };
+   });
+ };
+
+ const adjustActiveSet=(direction:'up'|'down')=>{
+   if(!activeExercise||!activeSet||!activeEx)return;
+
+   const isLoadable=
+     !['bodyweight','none','time','assistance'].includes(
+       activeEx.loadSemantics
+     );
+
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     const e=c.exercises.find(x=>x.exerciseId===activeExercise.exerciseId);
+     const ss=e?.sets.find(x=>x.id===activeSet.id);
+     if(!e||!ss)return ww;
+
+     if(isLoadable){
+       const currentLoad=
+         ss.weight??
+         e.recommendedWeight??
+         (c.guidedSession as any)?.workingLoads?.[activeEx.id];
+
+       const next=adjacentAvailableLoad(
+         activeEx,
+         currentLoad,
+         s.profile,
+         direction
+       );
+
+       if(next!==undefined){
+         ss.weight=next;
+         e.recommendedWeight=next;
+         c.guidedSession={
+           ...completeGuidedSession(c.guidedSession),
+           workingLoads:{
+             ...(c.guidedSession?.workingLoads||{}),
+             [activeEx.id]:next
+           },
+           updatedAt:new Date().toISOString(),
+           version:(c.guidedSession?.version||1)+1
+         };
+       }
+     }
+
+     return c;
+   });
+ };
+
+ const adjustReps=(delta:number)=>{
+   if(!activeExercise||!activeSet)return;
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     const e=c.exercises.find(x=>x.exerciseId===activeExercise.exerciseId);
+     const ss=e?.sets.find(x=>x.id===activeSet.id);
+     if(!e||!ss)return ww;
+
+     const currentReps=Number(ss.reps)||activeExercise.repRange[0];
+     ss.reps=Math.max(0,currentReps+delta);
+     return c;
+   });
+ };
+
+ const adjustRir=(delta:number)=>{
+   if(!activeExercise||!activeSet)return;
+   mutate(ww=>{
+     const c=structuredClone(ww);
+     const e=c.exercises.find(x=>x.exerciseId===activeExercise.exerciseId);
+     const ss=e?.sets.find(x=>x.id===activeSet.id);
+     if(!e||!ss)return ww;
+
+     const currentRir=
+       ss.rir===undefined
+         ?targetRir
+         :ss.rir;
+
+     ss.rir=Math.max(0,Math.min(5,currentRir+delta));
+     return c;
+   });
+ };
+
+ const finishPhase=()=>{
+   if(all){
+     setGuided({phase:'complete'});
+     return;
+   }
+
+   if(phase==='prep'){
+     setGuided({phase:'equipment'});
+     return;
+   }
+
+   if(phase==='equipment'){
+     setGuided({phase:'ready'});
+     return;
+   }
+
+   if(phase==='ready'){
+     setGuided({phase:'set_ready'});
+     return;
+   }
+
+   if(phase==='set_ready'){
+     startSet();
+     return;
+   }
+
+   if(phase==='rest'&&restRemaining<=0){
+     continueAfterRest();
+   }
+ };
+
+ const filtered=s.exercises
+   .filter(e=>
+     !rq||
+     `${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`
+       .toLowerCase()
+       .includes(rq.toLowerCase())
+   )
+   .sort((a,b)=>{
+     const ae=replace?s.exercises.find(x=>x.id===replace):undefined;
+     const fit=(x:Exercise)=>equipmentFit(x,s.profile?.equipment);
+     const score=(x:Exercise)=>(
+       (fit(x)==='available'?0:fit(x)==='unknown'?1:2)
+       +(ae&&x.pattern===ae.pattern?-2:0)
+       +(ae&&x.loadSemantics===ae.loadSemantics?-1:0)
+     );
+     return score(a)-score(b);
+   })
+   .slice(0,20);
+
+ const phaseLabel:Record<string,string>={
+   prep:'PREP',
+   equipment:'EQUIPMENT',
+   ready:'READY',
+   set_ready:'SET READY',
+   set_active:'SET ACTIVE',
+   feedback:'FEEDBACK',
+   rest:'RECOVER',
+   exercise_complete:'EXERCISE COMPLETE',
+   complete:'COMPLETE'
+ };
+
+ const completedForExercise=activeExercise
+   ?activeExercise.sets.filter(x=>x.completed).length
+   :0;
+
+ const nextExerciseIndex=Number(
+   (guided.guidedSession as any)?.nextExerciseIndex
+ );
+ const nextExercise=
+   Number.isInteger(nextExerciseIndex)&&nextExerciseIndex>=0
+     ?current.exercises[nextExerciseIndex]
+     :undefined;
+ const nextEx=nextExercise
+   ?safeExercise(s.exercises,nextExercise.exerciseId)
+   :undefined;
+
+ const restProgress=restTargetSec>0
+   ?Math.max(0,Math.min(1,restRemaining/restTargetSec))
+   :0;
+
+ const sessionProgress=assessment.plannedSets>0
+   ?Math.max(0,Math.min(1,(assessment.completedSets+assessment.skippedSets)/assessment.plannedSets))
+   :0;
+
+ return <div className="workout-shell">
+   <div className="workout-top">
+     <button className="icon-btn" onClick={onExit} aria-label="Exit workout">
+       <Icon name="back"/>
+     </button>
+
+     <div className="workout-top-copy">
+       <span className="eyebrow">
+         {phaseLabel[phase]||'WORKOUT'} · {current.scheduledDate}
+       </span>
+       <h1>{current.name}</h1>
+     </div>
+
+     <button
+       className="mode-button"
+       onClick={()=>setOverview(x=>!x)}
+     >
+       {overview?'Focus':'Overview'}
+     </button>
+   </div>
+
+   <div className="workout-toolbar">
+     <span>{fmt(elapsed)} elapsed</span>
+     <span
+       className="session-progress-inline"
+       style={{'--apex-session-progress':`${sessionProgress*100}%`} as React.CSSProperties}
+     >
+       <i aria-hidden="true"/>
+       {assessment.completedSets}/{assessment.plannedSets} sets
+     </span>
+     <button
+       className="mini-btn"
+       onClick={()=>mutate(x=>({...x,notes:x.notes||''}))}
+     >
+       Journal
+     </button>
+     <button
+       className="mini-btn"
+       onClick={()=>setSafety(true)}
+     >
+       Safety
+     </button>
+     <button
+       className="mini-btn"
+       aria-label={current.pausedAt?'Resume workout':'Pause workout'}
+       onClick={togglePause}
+     >
+       {current.pausedAt?'Resume':'Pause'}
+     </button>
+   </div>
+
+   {current.pausedAt&&
+     <div className="rest-panel paused-session">
+       <div>
+         <span className="eyebrow">SESSION PAUSED</span>
+         <strong>Take your time</strong>
+         <small>Elapsed time and workout state are preserved.</small>
+       </div>
+       <div className="rest-actions">
+         <button onClick={togglePause}>Resume</button>
+       </div>
+     </div>
+   }
+
+   {!overview&&activeExercise&&activeEx&&
+     <section
+       className="guided-card focused-training-card exercise-transition"
+       key={`${activeExercise.exerciseId}-${exerciseIndex}`}
+       data-motion-key={motionKey}
+     >
+
+       <div className="focused-exercise-header">
+         <div>
+           <span className="eyebrow">
+             EXERCISE {String(exerciseIndex+1).padStart(2,'0')} / {current.exercises.length}
+           </span>
+           <h2>{activeEx.name}</h2>
+           <p>
+             {activeEx.pattern} · {activeEx.primaryMuscles.join(' · ')}
+           </p>
+         </div>
+
+         <button
+           className="mini-btn"
+           onClick={()=>onExercise(activeEx.id)}
+         >
+           Details
+         </button>
+       </div>
+
+       {phase==='prep'&&
+         <div className="focused-stage">
+           <span className="eyebrow">SESSION PREP</span>
+           <h3>Today's training is ready.</h3>
+           <p>
+             APEX has prepared the session from your local training record.
+             Review the equipment once, then training becomes focused on one
+             movement and one set at a time.
+           </p>
+           <button
+             className="button primary wide"
+             onClick={finishPhase}
+           >
+             Review equipment <Icon name="chev"/>
+           </button>
+         </div>
+       }
+
+       {phase==='equipment'&&
+         <div className="focused-stage">
+           <span className="eyebrow">EQUIPMENT CHECK</span>
+           <h3>Confirm today's setup.</h3>
+           <p>
+             This confirmation is session-specific. APEX will not repeatedly
+             ask about the same confirmed category during this workout.
+           </p>
+
+           <div className="equipment-check-list">
+             {(activeEx.equipment||[]).length
+               ?(activeEx.equipment||[]).map(item=>{
+                 const status=
+                   current.guidedSession?.sessionEquipment?.[item]||
+                   'profile_available';
+
+                 return <button
+                   key={item}
+                   className={`equipment-check equipment-confirm-motion ${status==='confirmed'?'selected':''}`}
+                   data-equipment-state={status}
+                   onClick={()=>{
+                     mutate(ww=>{
+                       const c=structuredClone(ww);
+                       c.guidedSession={
+                         ...completeGuidedSession(c.guidedSession),
+                         sessionEquipment:{
+                           ...(c.guidedSession?.sessionEquipment||{}),
+                           [item]:
+                             status==='confirmed'
+                               ?'profile_available'
+                               :'confirmed'
+                         },
+                         updatedAt:new Date().toISOString()
+                       };
+                       return c;
+                     });
+                   }}
+                 >
+                   <span>
+                     <strong>
+                       {item.replace(/_/g,' ')}
+                     </strong>
+                     <small>
+                       {status==='confirmed'
+                         ?'Confirmed for today'
+                         :'Available from your profile · tap to confirm'}
+                     </small>
+                   </span>
+                   <Icon name={status==='confirmed'?'check':'chev'}/>
+                 </button>;
+               })
+               :<p className="muted">
+                 No dedicated equipment is required for this movement.
+               </p>}
+           </div>
+
+           <button
+             className="button primary wide"
+             onClick={finishPhase}
+           >
+             Continue <Icon name="chev"/>
+           </button>
+         </div>
+       }
+
+       {phase==='ready'&&
+         <div className="focused-stage">
+           <span className="eyebrow">EXERCISE READY</span>
+           <h3>Set your position.</h3>
+
+           <ul className="guided-list">
+             {activeEx.setup.slice(0,4).map(x=>
+               <li key={x}>{x}</li>
+             )}
+           </ul>
+
+           <div className="focus-prescription-card">
+             <span className="eyebrow">APEX RECOMMENDS</span>
+             <strong>
+               {currentRecommendation?.weight!==undefined
+                 ?formatLoad(activeEx,currentRecommendation.weight)
+                 :'CONTROLLED CALIBRATION'}
+             </strong>
+             <div className="focus-prescription-meta">
+               <span>
+                 {activeExercise.repRange[0]}–{activeExercise.repRange[1]} reps
+               </span>
+               <span>RIR {targetRir}</span>
+               <span>{fmt(restSeconds)} rest</span>
+             </div>
+             <small>
+               {currentRecommendation?.reason||
+                 'Use a controlled first set to establish a personal baseline.'}
+             </small>
+           </div>
+
+           <button
+             className="button primary wide focus-primary-action"
+             onClick={finishPhase}
+           >
+             START SET <Icon name="play"/>
+           </button>
+         </div>
+       }
+
+       {phase==='set_ready'&&activeSet&&
+         <div className="focused-stage">
+           <div className="set-context">
+             <span
+               className="eyebrow set-counter-motion"
+               key={`set-counter-${activeExercise.exerciseId}-${setIndex}`}
+               aria-live="polite"
+             >
+               SET {setIndex+1} / {activeExercise.sets.length}
+             </span>
+             <span className="set-progress-label">
+               {completedForExercise} / {activeExercise.sets.length} complete
+             </span>
+           </div>
+
+           <div className="focus-set-title">
+             <h3>{activeSet.type.replace('_',' ')} set</h3>
+             <p>
+               {activeExercise.repRange[0]}–{activeExercise.repRange[1]} REPS
+               · RIR {targetRir}
+               · {fmt(restSeconds)} REST
+             </p>
+           </div>
+
+           <div className="focus-recommendation">
+             <span className="eyebrow">APEX RECOMMENDS</span>
+             <strong>{phase6LoadDisplay(activeEx,activeSet,guided.guidedSession?.workingLoads?.[activeEx.id]??currentRecommendation?.weight,s.profile).primary}</strong>
+             <small>{phase6LoadDisplay(activeEx,activeSet,guided.guidedSession?.workingLoads?.[activeEx.id]??currentRecommendation?.weight,s.profile).secondary}</small>
+             <small>
+               {guided.guidedSession?.calibration?.[activeEx.id]==='established'
+                 ?'Personal baseline'
+                 :currentRecommendation?.kind==='calibration'
+                   ?'Initial calibration · limited history'
+                   :'Evidence-based recommendation'}
+             </small>
+           </div>
+
+           <div className="focus-set-summary">
+             <div>
+               <small>{activeEx.loadSemantics==='time'?'WORK':'REPS'}</small>
+               <strong>{activeEx.loadSemantics==='time'?formatTimedDuration(activeSet.seconds??activeEx.repRange[0]):`${activeExercise.repRange[0]}–${activeExercise.repRange[1]}`}</strong>
+             </div>
+             <div>
+               <small>RIR</small>
+               <strong>{targetRir}</strong>
+             </div>
+             <div>
+               <small>REST</small>
+               <strong>{fmt(restSeconds)}</strong>
+             </div>
+           </div>
+
+           <button
+             className="button primary wide focus-primary-action"
+             onClick={finishPhase}
+             disabled={!!current.pausedAt}
+           >
+             START SET <Icon name="play"/>
+           </button>
+         </div>
+       }
+
+       {phase==='set_active'&&activeSet&&
+         <div className="focused-stage active-set-stage">
+           <div className="set-context">
+             <span
+               className="eyebrow set-counter-motion"
+               key={`set-counter-${activeExercise.exerciseId}-${setIndex}`}
+               aria-live="polite"
+             >
+               SET {setIndex+1} / {activeExercise.sets.length}
+             </span>
+             <span className="set-progress-label">
+               {completedForExercise} / {activeExercise.sets.length} complete
+             </span>
+           </div>
+
+           <div className="active-set-hero">
+             <span className="eyebrow">SET ACTIVE</span>
+             <strong>{phase6LoadDisplay(activeEx,activeSet,currentRecommendation?.weight,s.profile).primary}</strong>
+             <small>{phase6LoadDisplay(activeEx,activeSet,currentRecommendation?.weight,s.profile).secondary??(activeEx.loadSemantics==='time'?`Work ${formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}`:`Target ${activeExercise.repRange[0]}–${activeExercise.repRange[1]} reps · RIR ${targetRir}`)}</small>
+           </div>
+
+           <SetEditor
+             set={activeSet}
+             ex={activeEx}
+             index={setIndex}
+             targetRir={targetRir}
+             focused
+             loadProfile={s.profile}
+             onChange={p=>mutate(x=>{
+               const c=structuredClone(x);
+               const e=c.exercises.find(
+                 z=>z.exerciseId===activeExercise.exerciseId
+               );
+               const ss=e?.sets.find(z=>z.id===activeSet.id);
+               if(!e||!ss)return x;
+               Object.assign(ss,p);
+               return c;
+             })}
+             onType={t=>mutate(x=>{
+               const c=structuredClone(x);
+               const e=c.exercises.find(
+                 z=>z.exerciseId===activeExercise.exerciseId
+               );
+               const ss=e?.sets.find(z=>z.id===activeSet.id);
+               if(!e||!ss)return x;
+               Object.assign(ss,updateSetType(ss,t,activeEx));
+               return c;
+             })}
+             onComplete={completeGuidedSet}
+             onAdd={()=>mutate(x=>
+               addWorkoutSet(
+                 x,
+                 activeExercise.exerciseId,
+                 s.exercises,
+                 activeSet
+               )
+             )}
+             onRemove={()=>mutate(x=>
+               removeWorkoutSet(
+                 x,
+                 activeExercise.exerciseId,
+                 activeSet.id
+               )
+             )}
+           />
+
+           {activeEx.loadSemantics==='time'&&<div className="timed-work-panel">
+             <span className="eyebrow">WORK TIMER</span>
+             <strong aria-live="polite">{workStartedAt?formatTimedDuration(workRemaining):formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}</strong>
+             <small>{timedWorkComplete?'Work interval complete. Complete the set when ready.':'Work interval is separate from your recovery timer.'}</small>
+           </div>}
+
+           <p className="muted focus-helper">
+             Actual reps, RIR and load are optional corrections.
+             APEX uses them with your feedback to decide the next set.
+           </p>
+
+           <button
+             className="mini-btn"
+             onClick={skipCurrentSet}
+             disabled={!!current.pausedAt}
+           >
+             Skip this set
+           </button>
+         </div>
+       }
+
+       {phase==='feedback'&&activeSet&&
+         <div
+           className="focused-stage feedback-stage set-completion-reveal"
+           key={`feedback-${activeExercise.exerciseId}-${activeSet.id}`}
+         >
+           <span className="eyebrow">SET {setIndex+1} COMPLETE <span className="animated-check" aria-hidden="true">✓</span></span>
+           <h3>How did that feel?</h3>
+
+           <div className="completed-performance">
+             <strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong>
+             <span>
+               {activeSet.reps!==undefined
+                 ?`${activeSet.reps} reps`
+                 :activeSet.seconds!==undefined
+                   ?`${activeSet.seconds} sec`
+                   :'Performance not recorded'}
+               {activeSet.rir!==undefined
+                 ?` · RIR ${activeSet.rir}`
+                 :''}
+             </span>
+           </div>
+
+           <p>
+             APEX combines this signal with actual performance.
+             It will adjust the next set only when the evidence supports it.
+           </p>
+
+           <div className="feedback-actions focused-feedback-actions">
+             <button onClick={()=>applyFeedback('heavy')}>
+               <strong>TOO HEAVY</strong>
+               <small>Conservative reduction</small>
+             </button>
+
+             <button onClick={()=>applyFeedback('right')}>
+               <strong>ABOUT RIGHT</strong>
+               <small>Strengthen the baseline</small>
+             </button>
+
+             <button onClick={()=>applyFeedback('easy')}>
+               <strong>TOO EASY</strong>
+               <small>Evidence-based increase</small>
+             </button>
+           </div>
+         </div>
+       }
+
+       {phase==='rest'&&
+         <div className="focused-stage rest-stage">
+           <span className="eyebrow">RECOVER</span>
+
+           <div
+             className={`rest-countdown rest-timer-visual ${restRemaining<=0?'rest-complete':''}`}
+             style={{'--apex-rest-progress':`${restProgress*100}%`} as React.CSSProperties}
+             aria-live="polite"
+             role="timer"
+           >
+             <div className="rest-timer-progress" aria-hidden="true">
+               <i/>
+             </div>
+             <strong>
+               {restRemaining>0
+                 ?fmt(restRemaining)
+                 :'READY'}
+             </strong>
+           </div>
+
+           {(() => {
+             const upcomingSet=
+               activeExercise?.sets.find(
+                 (x,i)=>i>setIndex&&!x.completed
+               );
+
+             const upcomingExercise=
+               nextExerciseIndex>=0&&nextEx
+                 ?nextEx
+                 :undefined;
+
+             return upcomingSet&&activeExercise
+               ?<>
+                 <strong>NEXT · SET {setIndex+2}</strong>
+                 <div className="next-prescription">
+                   <b>{phase6LoadDisplay(activeEx,upcomingSet,guided.guidedSession?.workingLoads?.[activeEx.id],s.profile).primary}</b>
+                   <span>
+                     {activeExercise.repRange[0]}–{activeExercise.repRange[1]} reps
+                   </span>
+                 </div>
+               </>
+               :upcomingExercise
+                 ?<>
+                   <strong>NEXT UP</strong>
+                   <div className="next-prescription">
+                     <b>{upcomingExercise.name}</b>
+                     <span>{upcomingExercise.loadSemantics==='time'?`${formatTimedDuration(upcomingExercise.repRange[0])} work`:`${upcomingExercise.repRange[0]}–${upcomingExercise.repRange[1]} reps`} · {fmt(upcomingExercise.restSec)} rest</span>
+                   </div>
+                 </>
+                 :<strong>SESSION COMPLETE</strong>;
+           })()}
+
+           <p>
+             {restRemaining>0
+               ?'The timer uses the actual elapsed timestamp, so backgrounding the app does not pause the clock.'
+               :'Recovery interval complete.'}
+           </p>
+
+           <div className="rest-actions focused-rest-actions">
+             {restRemaining>0&&
+               <button onClick={skipRest}>
+                 SKIP REST
+               </button>
+             }
+
+             {restRemaining>0&&
+               <button
+                 onClick={()=>{
+                   const started=
+                     restStartedAt
+                       ?new Date(restStartedAt).getTime()
+                       :Date.now();
+                   const newTarget=
+                     restTargetSec+30;
+
+                   setGuided(
+                     {},
+                     {
+                       restStartedAt:
+                         new Date(started).toISOString(),
+                       restTargetSec:newTarget
+                     }
+                   );
+                 }}
+               >
+                 +30 SEC
+               </button>
+             }
+
+             {restRemaining<=0&&
+               <button
+                 className="button primary"
+                 onClick={continueAfterRest}
+               >
+                 CONTINUE <Icon name="chev"/>
+               </button>
+             }
+           </div>
+         </div>
+       }
+
+       {phase==='exercise_complete'&&
+         <div className="focused-stage exercise-complete-stage">
+           <span className="eyebrow">
+             {activeEx.name.toUpperCase()}
+           </span>
+           <div className="completion-mark animated-completion-mark" aria-hidden="true">✓</div>
+           <h3>COMPLETE</h3>
+           <strong>
+             {completedForExercise} / {activeExercise.sets.length} SETS
+           </strong>
+
+           {nextEx
+             ?<>
+               <span className="eyebrow next-up-label">NEXT UP</span>
+               <div className="next-exercise-card">
+                 <strong>{nextEx.name}</strong>
+                 <small>
+                   {nextExercise?.repRange[0]}–
+                   {nextExercise?.repRange[1]} reps
+                   · {fmt(nextEx.restSec)} rest
+                 </small>
+               </div>
+               <button
+                 className="button primary wide focus-primary-action"
+                 onClick={advanceToNextExercise}
+               >
+                 CONTINUE <Icon name="chev"/>
+               </button>
+             </>
+             :<button
+               className="button primary wide focus-primary-action"
+               onClick={()=>setGuided({phase:'complete'})}
+             >
+               REVIEW SESSION <Icon name="chev"/>
+             </button>
+           }
+         </div>
+       }
+
+       {phase==='complete'&&
+         <div className="focused-stage">
+           <span className="eyebrow">SESSION COMPLETE</span>
+           <div className="completion-mark animated-completion-mark" aria-hidden="true">✓</div>
+           <h3>Every planned movement is accounted for.</h3>
+           <p>
+             Review your session and let APEX record the evidence for future
+             training.
+           </p>
+           <button
+             className="button primary wide focus-primary-action"
+             onClick={()=>onDone(current)}
+           >
+             FINISH SESSION <Icon name="chev"/>
+           </button>
+         </div>
+       }
+     </section>
+   }
+
+   {overview&&
+     <section className="section workout-overview-section">
+       <div className="section-head">
+         <div>
+           <span className="eyebrow">OVERVIEW</span>
+           <h2>Full session.</h2>
+           <p>Use this when you need to edit, reorder, replace or inspect the whole workout.</p>
+         </div>
+       </div>
+
+       <div className="exercise-stack">
+         {current.exercises.map((we,i)=>{
+           const ex=safeExercise(s.exercises,we.exerciseId);
+
+           return <article
+             className={`exercise-card ${we.status==='skipped'?'exercise-skipped':''}`}
+             key={`${we.exerciseId}-${i}`}
+           >
+             <div className="exercise-title-row">
+               <button
+                 className="exercise-title"
+                 onClick={()=>ex&&onExercise(ex.id)}
+               >
+                 <span>
+                   <em>{String(i+1).padStart(2,'0')}</em>
+                   <strong>{ex?.name||'Exercise unavailable'}</strong>
+                   <small>
+                     {we.repRange[0]}–{we.repRange[1]} reps ·
+                     {' '}
+                     {ex
+                       ?formatLoad(ex,we.recommendedWeight)
+                       :'—'}
+                     {' · '}
+                     {we.restSec}s rest
+                   </small>
+                 </span>
+                 <Icon name="chev"/>
+               </button>
+
+               <div className="exercise-actions">
+                 <button
+                   className="mini-btn"
+                   onClick={()=>setReplace(we.exerciseId)}
+                 >
+                   Replace
+                 </button>
+
+                 <button
+                   className="mini-btn"
+                   onClick={()=>
+                     mutate(x=>
+                       reorderWorkoutExercise(
+                         x,
+                         i,
+                         Math.max(0,i-1)
+                       )
+                     )
+                   }
+                   disabled={i===0}
+                 >
+                   ↑
+                 </button>
+
+                 <button
+                   className="mini-btn"
+                   onClick={()=>
+                     mutate(x=>
+                       reorderWorkoutExercise(
+                         x,
+                         i,
+                         Math.min(
+                           x.exercises.length-1,
+                           i+1
+                         )
+                       )
+                     )
+                   }
+                   disabled={i===current.exercises.length-1}
+                 >
+                   ↓
+                 </button>
+               </div>
+             </div>
+
+             {we.status==='skipped'
+               ?<div className="skipped-message">
+                 Skipped — no sets are counted as performed.
+                 <button
+                   className="mini-btn"
+                   onClick={()=>
+                     mutate(x=>
+                       markWorkoutExerciseSkipped(
+                         x,
+                         we.exerciseId
+                       )
+                     )
+                   }
+                 >
+                   Restore
+                 </button>
+               </div>
+               :<div>
+                 {we.sets.map((set,j)=>
+                   ex
+                     ?<SetEditor
+                       key={set.id}
+                       set={set}
+                       ex={ex}
+                       index={j}
+                       targetRir={
+                         personalizedLoad(
+                           ex,
+                           s.workouts,
+                           s.profile,
+                           s.exercises
+                         ).targetRir
+                       }
+                       onChange={p=>
+                         mutate(x=>{
+                           const c=structuredClone(x);
+                           const e=c.exercises.find(
+                             z=>z.exerciseId===we.exerciseId
+                           );
+                           const ss=e?.sets.find(
+                             z=>z.id===set.id
+                           );
+                           if(!e||!ss)return x;
+                           Object.assign(ss,p);
+                           return c;
+                         })
+                       }
+                       onType={t=>
+                         mutate(x=>{
+                           const c=structuredClone(x);
+                           const e=c.exercises.find(
+                             z=>z.exerciseId===we.exerciseId
+                           );
+                           const ss=e?.sets.find(
+                             z=>z.id===set.id
+                           );
+                           if(!e||!ss)return x;
+                           Object.assign(
+                             ss,
+                             updateSetType(
+                               ss,
+                               t,
+                               ex
+                             )
+                           );
+                           return c;
+                         })
+                       }
+                       onComplete={()=>{
+                         const idx=we.sets.findIndex(
+                           x=>x.id===set.id
+                         );
+
+                         mutate(x=>{
+                           const c=structuredClone(x);
+                           const e=c.exercises.find(
+                             z=>z.exerciseId===we.exerciseId
+                           );
+                           const ss=e?.sets.find(
+                             z=>z.id===set.id
+                           );
+                           if(!e||!ss)return x;
+
+                           ss.completed=!ss.completed;
+                           ss.timestamp=
+                             ss.completed
+                               ?new Date().toISOString()
+                               :undefined;
+
+                           c.guidedSession={
+                             ...completeGuidedSession(c.guidedSession),
+                             exerciseIndex:i,
+                             setIndex:idx,
+                             phase:ss.completed
+                               ?'feedback'
+                               :'set_active',
+                             updatedAt:new Date().toISOString()
+                           };
+
+                           return c;
+                         });
+                       }}
+                       onAdd={()=>
+                         mutate(x=>
+                           addWorkoutSet(
+                             x,
+                             we.exerciseId,
+                             s.exercises,
+                             set
+                           )
+                         )
+                       }
+                       onRemove={()=>
+                         mutate(x=>
+                           removeWorkoutSet(
+                             x,
+                             we.exerciseId,
+                             set.id
+                           )
+                         )
+                       }
+                     />
+                     :<div
+                       className="skipped-message"
+                       key={set.id}
+                     >
+                       Exercise data unavailable.
+                       This workout entry is preserved.
+                     </div>
+                 )}
+
+                 <div className="set-skip-row">
+                   {we.sets.map(set=>
+                     !set.completed&&set.disposition!=='skipped'
+                       ?<button
+                           className="mini-btn"
+                           key={`skip-${set.id}`}
+                           onClick={()=>
+                             mutate(x=>
+                               markWorkoutSetSkipped(
+                                 x,
+                                 we.exerciseId,
+                                 set.id
+                               )
+                             )
+                           }
+                         >
+                           Skip set {we.sets.findIndex(z=>z.id===set.id)+1}
+                         </button>
+                       :null
+                   )}
+                 </div>
+
+                 <div className="set-add">
+                   <button
+                     className="mini-btn"
+                     onClick={()=>
+                       mutate(x=>
+                         addWorkoutSet(
+                           x,
+                           we.exerciseId,
+                           s.exercises
+                         )
+                       )
+                     }
+                   >
+                     + Add set
+                   </button>
+
+                   <button
+                     className="mini-btn"
+                     onClick={()=>
+                       mutate(x=>
+                         markWorkoutExerciseSkipped(
+                           x,
+                           we.exerciseId
+                         )
+                       )
+                     }
+                   >
+                     Skip exercise
+                   </button>
+                 </div>
+               </div>}
+           </article>;
+         })}
+       </div>
+     </section>
+   }
+
+   {phase!=='complete'&&
+     <div className="workout-note">
+       <textarea
+         aria-label="Workout notes"
+         value={current.notes||''}
+         onChange={e=>
+           mutate(x=>({
+             ...x,
+             notes:e.target.value
+           }))
+         }
+         placeholder="Workout note — optional context, technique, how it felt…"
+       />
+     </div>
+   }
+
+   <div className="workout-footer safe-action-area">
+     <button
+       className="button secondary wide"
+       onClick={()=>setOverview(x=>!x)}
+     >
+       {overview?'Return to focused training':'Open workout overview'}
+     </button>
+   </div>
+
+   {adapt.length>0&&
+     <div className="callout">
+       <Icon name="bolt"/>
+       <div>
+         <strong>Next-session evidence</strong>
+         {adapt.slice(0,2).map((a,i)=>
+           <p key={i}>{a.title}: {a.detail}</p>
+         )}
+       </div>
+     </div>
+   }
+
+   {safety&&
+     <Modal
+       title="Training safety check"
+       close={()=>setSafety(false)}
+     >
+       <p className="modal-copy">
+         If something feels unsafe or unexpectedly wrong, APEX does not try
+         to diagnose it. Record the context, stop the movement if needed,
+         and use your own judgement about whether to continue.
+       </p>
+
+       <div className="choice-grid feedback safety-grid">
+         {[
+           ['discomfort','Unusual discomfort','Record it and review the movement.'],
+           ['sharp','Sharp or worsening pain','Stop this movement and do not push through it.'],
+           ['dizzy','Dizziness / unusual breathlessness','Stop the session and recover before deciding what to do next.'],
+           ['stable','Technique feels unstable','Reduce complexity or stop the movement until control is restored.']
+         ].map(([id,label,detail])=>
+           <button
+             key={id}
+             onClick={()=>{
+               const at=new Date().toISOString();
+
+               update(x=>({
+                 ...x,
+                 journal:[
+                   ...x.journal,
+                   {
+                     id:uid('journal'),
+                     date:today(),
+                     scope:'workout',
+                     refId:current.id,
+                     text:`Safety check: ${label}.`,
+                     tags:['safety']
+                   }
+                 ],
+                 eventLog:[
+                   ...(x.eventLog||[]),
+                   {
+                     id:uid('evt'),
+                     type:'safety_check',
+                     timestamp:at,
+                     payload:{
+                       workoutId:current.id,
+                       signal:id
+                     }
+                   }
+                 ]
+               }));
+
+               setSafety(false);
+             }}
+           >
+             <strong>{label}</strong>
+             <small>{detail}</small>
+           </button>
+         )}
+       </div>
+
+       <div className="callout">
+         <Icon name="settings"/>
+         <div>
+           <strong>APEX guardrail</strong>
+           <p>
+             APEX can adapt training evidence, but it does not diagnose
+             injuries or override professional medical advice.
+           </p>
+         </div>
+       </div>
+     </Modal>
+   }
+
+   {replace&&
+     <Modal
+       title="Replace exercise"
+       close={()=>{
+         setReplace(null);
+         setRq('');
+       }}
+     >
+       <p className="modal-copy">
+         History stays attached to the original canonical exercise.
+         The replacement starts a fresh baseline unless the engine proves
+         comparable semantics.
+       </p>
+
+       <div className="search">
+         <Icon name="search"/>
+         <input
+           autoFocus
+           value={rq}
+           onChange={e=>setRq(e.target.value)}
+           placeholder="Search movement or alias…"
+         />
+       </div>
+
+       <div className="picker-list">
+         {filtered.map(e=>{
+           const fit=equipmentFit(
+             e,
+             s.profile?.equipment
+           );
+           const oldEx=s.exercises.find(
+             x=>x.id===replace
+           );
+           const comparable=
+             !!oldEx&&
+             oldEx.pattern===e.pattern&&
+             oldEx.loadSemantics===e.loadSemantics;
+
+           return <button
+             key={e.id}
+             className="picker-row"
+             onClick={()=>{
+               const reason=oldEx
+                 ?`${oldEx.name} replaced during workout`
+                 :'Exercise replaced during workout';
+
+               mutate(x=>
+                 replaceWorkoutExercise(
+                   x,
+                   replace,
+                   e,
+                   s.exercises
+                 )
+               );
+
+               setReplace(null);
+               setRq('');
+             }}
+           >
+             <span>
+               <strong>{e.name}</strong>
+               <small>
+                 {fit==='available'
+                   ?'✓ Available from your setup'
+                   :fit==='unknown'
+                     ?'? Confirm equipment'
+                     :'× Not in setup'}
+                 {' · '}
+                 {comparable
+                   ?'Comparable movement — baseline can carry forward'
+                   :'New baseline'}
+                 {' · '}
+                 {e.equipment.join(', ')}
+               </small>
+             </span>
+             <Icon name="chev"/>
+           </button>;
+         })}
+       </div>
+     </Modal>
+   }
+ </div>;
 }
-function LegacyWorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout;update:(f:(x:AppState)=>AppState)=>void;onExit:()=>void;onExercise:(id:string)=>void;onDone:(w:Workout)=>void}){
- const [focus,setFocus]=useState(true),[restEnd,setRestEnd]=useState<number|null>(null),[now,setNow]=useState(Date.now()),[replace,setReplace]=useState<string|null>(null),[rq,setRq]=useState(''),[history,setHistory]=useState<Workout[]>([]),[safety,setSafety]=useState(false);
- useEffect(()=>{const i=setInterval(()=>setNow(Date.now()),500);return()=>clearInterval(i)},[]);
- useEffect(()=>{const p=s.workouts.filter(x=>x.status==='completed'&&x.id!==w.id);setHistory(p)},[s.workouts,w.id]);
- const current=s.workouts.find(x=>x.id===w.id)||w, elapsed=current.startedAt?Math.max(0,Math.floor((Date.now()-new Date(current.startedAt).getTime())/1000)-(current.pausedTotalSec||0)-(current.pausedAt?Math.floor((Date.now()-new Date(current.pausedAt).getTime())/1000):0)):0;
- const assessment=sessionAssessment(current,s.exercises,history),adapt=adaptationsForWorkout(s,current),all=current.exercises.every(e=>e.status==='skipped'||e.sets.every(x=>x.completed));
- const mutate=(fn:(x:Workout)=>Workout)=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===current.id?fn(q):q)}));
- const togglePause=()=>update(x=>{const at=new Date().toISOString(),ww=x.workouts.find(q=>q.id===current.id);if(!ww)return x;const paused=!!ww.pausedAt;const nextPaused=paused?{...ww,pausedAt:undefined,pausedTotalSec:(ww.pausedTotalSec||0)+Math.floor((Date.now()-new Date(ww.pausedAt!).getTime())/1000),updatedAt:at}:{...ww,pausedAt:at,updatedAt:at};return {...x,workouts:x.workouts.map(q=>q.id===current.id?nextPaused:q),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:paused?'workout_resumed':'workout_paused',timestamp:at,payload:{workoutId:current.id}}]}});
- const completeSet=(eid:string,sid:string)=>{mutate(ww=>{const c=structuredClone(ww),we=c.exercises.find(x=>x.exerciseId===eid),set=we?.sets.find(x=>x.id===sid);if(!we||!set)return ww;if(set.completed){set.completed=false;set.timestamp=undefined}else{if(set.type!=='warmup'&&set.reps===undefined&&set.seconds===undefined)return ww;set.completed=true;set.timestamp=new Date().toISOString();const ex=safeExercise(s.exercises,eid);if(!ex)return c;setRestEnd(Date.now()+recommendedRest(ex,s.preferences.restPreference,s.preferences.restCustomSec,set.rir)*1000)}return c})};
- const filtered=s.exercises.filter(e=>!rq||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(rq.toLowerCase())).sort((a,b)=>{const ae=replace?s.exercises.find(x=>x.id===replace):undefined;const fit=(x:Exercise)=>equipmentFit(x,s.profile?.equipment);const score=(x:Exercise)=>((fit(x)==='available'?0:fit(x)==='unknown'?1:2)+(ae&&x.pattern===ae.pattern?-2:0)+(ae&&x.loadSemantics===ae.loadSemantics?-1:0));return score(a)-score(b)}).slice(0,20);
- return <div className="workout-shell"><div className="workout-top"><button className="icon-btn" onClick={onExit}><Icon name="back"/></button><div><span className="eyebrow">{current.source.toUpperCase()} · {current.scheduledDate}</span><h1>{current.name}</h1></div><button className="mode-button" onClick={()=>setFocus(!focus)}>{focus?'Focus':'Overview'}</button></div>
- <div className="workout-toolbar"><span>{fmt(elapsed)} elapsed</span><span>{assessment.completedSets}/{assessment.plannedSets} sets</span><button className="mini-btn" onClick={()=>mutate(x=>({...x,notes:x.notes||''}))}>Journal</button><button className="mini-btn" onClick={()=>setSafety(true)}>Safety</button><button className="mini-btn" aria-label={current.pausedAt?'Resume workout':'Pause workout'} onClick={togglePause}>{current.pausedAt?'Resume':'Pause'}</button></div>
- {current.pausedAt&&<div className="rest-panel paused-session"><div><span className="eyebrow">SESSION PAUSED</span><strong>Take your time</strong><small>Elapsed time is preserved. Resume when you are ready.</small></div><div className="rest-actions"><button onClick={togglePause}>Resume</button></div></div>}
- {restEnd&&restEnd>now&&<div className="rest-panel"><div><span className="eyebrow">REST</span><strong aria-live="polite">{fmt(Math.ceil((restEnd-now)/1000))}</strong><small>Adaptive recommendation · actual elapsed time</small></div><div className="rest-actions"><button onClick={()=>setRestEnd(restEnd+15000)}>+15</button><button onClick={()=>setRestEnd(null)}>Skip</button></div></div>}
- <div className="workout-note"><textarea aria-label="Workout notes" value={current.notes||''} onChange={e=>mutate(x=>({...x,notes:e.target.value}))} placeholder="Workout note — optional context, technique, how it felt…"/></div>
- <div className="exercise-stack">{current.exercises.map((we,i)=><article className={`exercise-card ${focus&&i!==current.exercises.findIndex(x=>x.status!=='skipped'&&!x.sets.every(y=>y.completed))?'compact':''} ${we.status==='skipped'?'exercise-skipped':''}`} key={`${we.exerciseId}-${i}`}>
- <div className="exercise-title-row"><button className="exercise-title" onClick={()=>onExercise(we.exerciseId)}><span><em>{String(i+1).padStart(2,'0')}</em><strong>{s.exercises.find(e=>e.id===we.exerciseId)?.name}</strong><small>{we.repRange[0]}–{we.repRange[1]} reps · {formatLoad(safeExercise(s.exercises,we.exerciseId) || {loadSemantics:'total'} as Exercise,we.recommendedWeight)} · {we.restSec}s rest</small></span><Icon name="chev"/></button><div className="exercise-actions"><button className="mini-btn" onClick={()=>setReplace(we.exerciseId)}>Replace</button><button className="mini-btn" onClick={()=>mutate(x=>reorderWorkoutExercise(x,i,Math.max(0,i-1)))} disabled={i===0}>↑</button><button className="mini-btn" onClick={()=>mutate(x=>reorderWorkoutExercise(x,i,Math.min(x.exercises.length-1,i+1)))} disabled={i===current.exercises.length-1}>↓</button></div></div>
- {we.status==='skipped'?<div className="skipped-message">Skipped — no sets are counted as performed. <button className="mini-btn" onClick={()=>mutate(x=>markWorkoutExerciseSkipped(x,we.exerciseId))}>Restore</button></div>:<>{!focus||i===current.exercises.findIndex(x=>x.status!=='skipped'&&!x.sets.every(y=>y.completed))?<div className="prescription"><span>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</span><b>{we.recommendedWeight!==undefined?`Start ${formatLoad(safeExercise(s.exercises,we.exerciseId) || {loadSemantics:'total'} as Exercise,we.recommendedWeight)}`:'Calibrate first'}</b></div>:null}<div>{(()=>{const ex=safeExercise(s.exercises,we.exerciseId);if(!ex)return <div className="skipped-message">Exercise data unavailable. This workout entry is preserved, but its controls are disabled until the exercise is restored.</div>;return we.sets.map((set,j)=><SetEditor key={set.id} set={set} ex={ex} index={j} onChange={p=>mutate(x=>{const c=structuredClone(x),e=c.exercises.find(z=>z.exerciseId===we.exerciseId),ss=e?.sets.find(z=>z.id===set.id);if(!e||!ss)return x;Object.assign(ss,p);return c})} onType={t=>mutate(x=>{const c=structuredClone(x),e=c.exercises.find(z=>z.exerciseId===we.exerciseId),ss=e?.sets.find(z=>z.id===set.id);if(!e||!ss)return x;Object.assign(ss,updateSetType(ss,t,ex));return c})} onComplete={()=>{if(!current.pausedAt)completeSet(we.exerciseId,set.id)}} onAdd={()=>mutate(x=>addWorkoutSet(x,we.exerciseId,s.exercises,set))} onRemove={()=>mutate(x=>removeWorkoutSet(x,we.exerciseId,set.id))}/>)})()}</div><div className="set-add"><button className="mini-btn" onClick={()=>mutate(x=>addWorkoutSet(x,we.exerciseId,s.exercises))}>+ Add set</button><button className="mini-btn" onClick={()=>mutate(x=>markWorkoutExerciseSkipped(x,we.exerciseId))}>Skip exercise</button></div></>}
- </article>)}</div>
- <div className="workout-footer"><button className="button primary wide" disabled={!all} onClick={()=>onDone(current)}>{all?'Finish session':`Complete remaining sets · ${assessment.plannedSets-assessment.completedSets} left`}</button></div>
- {adapt.length>0&&<div className="callout"><Icon name="bolt"/><div><strong>Next-session evidence</strong>{adapt.slice(0,2).map((a,i)=><p key={i}>{a.title}: {a.detail}</p>)}</div></div>}
- {safety&&<Modal title="Training safety check" close={()=>setSafety(false)}>
- <p className="modal-copy">If something feels unsafe or unexpectedly wrong, APEX does not try to diagnose it. Record the context, stop the movement if needed, and use your own judgement about whether to continue.</p>
- <div className="choice-grid feedback safety-grid">
- {[
-  ['discomfort','Unusual discomfort','Record it and review the movement.'],
-  ['sharp','Sharp or worsening pain','Stop this movement and do not push through it.'],
-  ['dizzy','Dizziness / unusual breathlessness','Stop the session and recover before deciding what to do next.'],
-  ['stable','Technique feels unstable','Reduce complexity or stop the movement until control is restored.']
- ].map(([id,label,detail])=><button key={id} onClick={()=>{const at=new Date().toISOString();update(x=>({...x,journal:[...x.journal,{id:uid('journal'),date:today(),scope:'workout',refId:current.id,text:`Safety check: ${label}.`,tags:['safety'] }],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'safety_check',timestamp:at,payload:{workoutId:current.id,signal:id}}]}));setSafety(false)}}><strong>{label}</strong><small>{detail}</small></button>)}
- </div>
- <div className="callout"><Icon name="settings"/><div><strong>APEX guardrail</strong><p>APEX can adapt training evidence, but it does not diagnose injuries or override professional medical advice.</p></div></div>
- </Modal>}
- {replace&&<Modal title="Replace exercise" close={()=>setReplace(null)}><p className="modal-copy">History stays attached to the original canonical exercise. The replacement starts a fresh baseline unless the engine proves comparable semantics.</p><div className="search"><Icon name="search"/><input autoFocus value={rq} onChange={e=>setRq(e.target.value)} placeholder="Search movement or alias…"/></div><div className="picker-list">{filtered.map(e=>{const fit=equipmentFit(e,s.profile?.equipment);const oldEx=s.exercises.find(x=>x.id===replace);const comparable=!!oldEx&&oldEx.pattern===e.pattern&&oldEx.loadSemantics===e.loadSemantics;return <button key={e.id} className="picker-row" onClick={()=>{mutate(x=>replaceWorkoutExercise(x,replace,e,s.exercises));setReplace(null);setRq('')}}><span><strong>{e.name}</strong><small>{fit==='available'?'✓ Available':fit==='unknown'?'? Equipment not confirmed':'× Not in setup'} · {comparable?'Comparable movement — baseline can carry forward':'New baseline'} · {e.equipment.join(', ')}</small></span><Icon name="chev"/></button>})}</div></Modal>}
- </div>
-}
-function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void}){
- const timed=set.type==='timed'||ex.loadSemantics==='time',assist=set.type==='assisted'||ex.loadSemantics==='assistance';
- return <div className={`set-editor ${set.completed?'done':''}`}><div className="set-meta"><span>{String(index+1).padStart(2,'0')}</span><select value={set.type} onChange={e=>onType(e.target.value as SetType)} aria-label="Set type">{SET_TYPES.map(x=><option value={x} key={x}>{x.replace('_',' ')}</option>)}</select></div><div className="set-inputs">{!timed&&!assist&&!['bodyweight','none'].includes(ex.loadSemantics)&&<label>LOAD<input type="number" step={ex.incrementKg} inputMode="decimal" value={set.weight??''} placeholder="kg" onChange={e=>onChange({weight:e.target.value===''?undefined:+e.target.value})}/></label>}{assist&&<label>ASSIST<input type="number" step={ex.incrementKg} value={set.assistance??''} placeholder="kg" onChange={e=>onChange({assistance:e.target.value===''?undefined:+e.target.value})}/></label>}{timed?<label>SECONDS<input type="number" value={set.seconds??''} onChange={e=>onChange({seconds:e.target.value===''?undefined:+e.target.value})}/></label>:<label>REPS<input type="number" value={set.reps??''} onChange={e=>onChange({reps:e.target.value===''?undefined:+e.target.value})}/></label>}<label>RIR<input type="number" min="0" max="5" value={set.rir??''} placeholder="—" onChange={e=>onChange({rir:e.target.value===''?undefined:+e.target.value})}/></label></div><div className="set-actions"><button className="complete-set" onClick={onComplete} aria-label={set.completed?'Undo set':'Complete set'}><Icon name="check"/></button><button className="mini-btn" onClick={onAdd}>+</button><button className="mini-btn" onClick={onRemove}>−</button></div></div>
+
+function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,loadProfile}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;loadProfile?:UserProfile}){
+ const timed=set.type==='timed'||ex.loadSemantics==='time';
+ const assist=set.type==='assisted'||ex.loadSemantics==='assistance';
+ const loadable=
+   !timed&&
+   !assist&&
+   !['bodyweight','none'].includes(ex.loadSemantics);
+
+ const displayLoad=
+   set.weight!==undefined
+     ?formatLoad(ex,set.weight)
+     :'—';
+
+ const stepValue=(key:'weight'|'reps'|'rir',delta:number)=>{
+   if(key==='weight'){
+     const next=adjacentAvailableLoad(ex,set.weight,loadProfile,delta>0?'up':'down');
+     if(next!==undefined)onChange({weight:next,loadDetail:loadDetailForSet(ex,next,set.loadDetail)});
+     return;
+   }
+
+   if(key==='reps'){
+     onChange({
+       reps:Math.max(0,(Number(set.reps)||0)+delta)
+     });
+     return;
+   }
+
+   onChange({
+     rir:Math.max(
+       0,
+       Math.min(
+         5,
+         (set.rir===undefined?targetRir:set.rir)+delta
+       )
+     )
+   });
+ };
+
+ if(focused){
+   return <div className={`set-editor focused-set-editor ${set.completed?'done':''}`}>
+     <div className="focused-set-fields">
+
+       {loadable&&
+         <div className="focused-control">
+           <small>LOAD</small>
+           <div className="stepper">
+             <button
+               type="button"
+               onClick={()=>stepValue('weight',-1)}
+               aria-label="Decrease load"
+             >
+               −
+             </button>
+             <strong>{displayLoad}</strong>
+             <button
+               type="button"
+               onClick={()=>stepValue('weight',1)}
+               aria-label="Increase load"
+             >
+               +
+             </button>
+           </div>
+           <input
+             className="direct-input"
+             type="number"
+             step={ex.incrementKg||1}
+             inputMode="decimal"
+             value={set.weight??''}
+             placeholder="Actual kg"
+             onChange={e=>onChange({weight:e.target.value===''?undefined:Number(e.target.value)})}
+             onBlur={e=>{if(e.target.value==='')return;const raw=Number(e.target.value);const snapped=snapToAvailableLoad(ex,raw,loadProfile);onChange({weight:snapped??raw,loadDetail:loadDetailForSet(ex,snapped??raw,set.loadDetail)});}}
+           />
+         </div>
+       }
+
+       {assist&&
+         <div className="focused-control">
+           <small>ASSISTANCE</small>
+           <input
+             className="large-direct-input"
+             type="number"
+             step={ex.incrementKg||1}
+             inputMode="decimal"
+             value={set.assistance??''}
+             placeholder="kg"
+             onChange={e=>
+               onChange({
+                 assistance:
+                   e.target.value===''
+                     ?undefined
+                     :Number(e.target.value)
+               })
+             }
+           />
+         </div>
+       }
+
+       {timed
+         ?<div className="focused-control">
+           <small>SECONDS</small>
+           <input
+             className="large-direct-input"
+             type="number"
+             min="1"
+             inputMode="numeric"
+             value={set.seconds??''}
+             placeholder={`${ex.repRange[0]} sec`}
+             onChange={e=>
+               onChange({
+                 seconds:
+                   e.target.value===''
+                     ?undefined
+                     :Number(e.target.value)
+               })
+             }
+           />
+         </div>
+         :<div className="focused-control">
+           <small>ACTUAL REPS</small>
+           <div className="stepper">
+             <button
+               type="button"
+               onClick={()=>stepValue('reps',-1)}
+               aria-label="Decrease reps"
+             >
+               −
+             </button>
+             <strong>{set.reps??'—'}</strong>
+             <button
+               type="button"
+               onClick={()=>stepValue('reps',1)}
+               aria-label="Increase reps"
+             >
+               +
+             </button>
+           </div>
+           <input
+             className="direct-input"
+             type="number"
+             inputMode="numeric"
+             value={set.reps??''}
+             placeholder="Optional"
+             onChange={e=>
+               onChange({
+                 reps:
+                   e.target.value===''
+                     ?undefined
+                     :Number(e.target.value)
+               })
+             }
+           />
+         </div>
+       }
+
+       <div className="focused-control">
+         <small>ACTUAL RIR</small>
+         <div className="stepper">
+           <button
+             type="button"
+             onClick={()=>stepValue('rir',-1)}
+             aria-label="Decrease RIR"
+           >
+             −
+           </button>
+           <strong>{set.rir??targetRir}</strong>
+           <button
+             type="button"
+             onClick={()=>stepValue('rir',1)}
+             aria-label="Increase RIR"
+           >
+             +
+           </button>
+         </div>
+         <input
+           className="direct-input"
+           type="number"
+           min="0"
+           max="5"
+           value={set.rir??''}
+           placeholder={`Target ${targetRir}`}
+           onChange={e=>
+             onChange({
+               rir:
+                 e.target.value===''
+                   ?undefined
+                   :Math.max(
+                     0,
+                     Math.min(
+                       5,
+                       Number(e.target.value)
+                     )
+                   )
+             })
+           }
+         />
+       </div>
+     </div>
+
+     <div className="focused-set-actions">
+       <button
+         className={`complete-set focused-complete-button ${set.completed?'completed':''}`}
+         onClick={onComplete}
+         aria-label={set.completed?'Undo set':'Complete set'}
+       >
+         <Icon name="check"/>
+         <span>
+           {set.completed?'SET COMPLETE ✓':'COMPLETE SET'}
+         </span>
+       </button>
+     </div>
+
+     <div className="set-secondary-actions">
+       <select
+         value={set.type}
+         onChange={e=>
+           onType(e.target.value as SetType)
+         }
+         aria-label="Set type"
+       >
+         {SET_TYPES.map(x=>
+           <option value={x} key={x}>
+             {x.replace('_',' ')}
+           </option>
+         )}
+       </select>
+
+       <button
+         className="mini-btn"
+         onClick={onAdd}
+       >
+         + Add set
+       </button>
+
+       <button
+         className="mini-btn"
+         onClick={onRemove}
+       >
+         − Remove
+       </button>
+     </div>
+   </div>;
+ }
+
+ return <div className={`set-editor ${set.completed?'done':''}`}>
+   <div className="set-meta">
+     <span>{String(index+1).padStart(2,'0')}</span>
+     <select
+       value={set.type}
+       onChange={e=>
+         onType(e.target.value as SetType)
+       }
+       aria-label="Set type"
+     >
+       {SET_TYPES.map(x=>
+         <option value={x} key={x}>
+           {x.replace('_',' ')}
+         </option>
+       )}
+     </select>
+   </div>
+
+   <div className="set-inputs">
+     {loadable&&
+       <label>
+         LOAD
+         <input
+           type="number"
+           step={ex.incrementKg}
+           inputMode="decimal"
+           value={set.weight??''}
+           placeholder="kg"
+           onChange={e=>
+             onChange({
+               weight:
+                 e.target.value===''
+                   ?undefined
+                   :+e.target.value
+             })
+           }
+         />
+       </label>
+     }
+
+     {assist&&
+       <label>
+         ASSIST
+         <input
+           type="number"
+           step={ex.incrementKg}
+           value={set.assistance??''}
+           placeholder="kg"
+           onChange={e=>
+             onChange({
+               assistance:
+                 e.target.value===''
+                   ?undefined
+                   :+e.target.value
+             })
+           }
+         />
+       </label>
+     }
+
+     {timed
+       ?<label>
+         SECONDS
+         <input
+           type="number"
+           value={set.seconds??''}
+           onChange={e=>
+             onChange({
+               seconds:
+                 e.target.value===''
+                   ?undefined
+                   :+e.target.value
+             })
+           }
+         />
+       </label>
+       :<label>
+         REPS
+         <input
+           type="number"
+           value={set.reps??''}
+           onChange={e=>
+             onChange({
+               reps:
+                 e.target.value===''
+                   ?undefined
+                   :+e.target.value
+             })
+           }
+         />
+       </label>
+     }
+
+     <label>
+       RIR
+       <input
+         type="number"
+         min="0"
+         max="5"
+         value={set.rir??''}
+         placeholder={`Target ${targetRir}`}
+         onChange={e=>
+           onChange({
+             rir:
+               e.target.value===''
+                 ?undefined
+                 :+e.target.value
+           })
+         }
+       />
+     </label>
+   </div>
+
+   <div className="set-actions">
+     <button
+       className="complete-set"
+       onClick={onComplete}
+       aria-label={set.completed?'Undo set':'Complete set'}
+     >
+       <Icon name="check"/>
+     </button>
+
+     <button
+       className="mini-btn"
+       onClick={onAdd}
+     >
+       +
+     </button>
+
+     <button
+       className="mini-btn"
+       onClick={onRemove}
+     >
+       −
+     </button>
+   </div>
+ </div>;
 }
 function SessionReview({s,id,onNav,update}:{s:AppState;id:string;onNav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const w=s.workouts.find(x=>x.id===id); const [feel,setFeel]=useState<'easy'|'right'|'hard'|'rough'|''>('');
@@ -720,7 +3811,7 @@ function Goals({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  <div className="goal-stack">{s.goals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <div className="goal-card" key={g.id}><div className="goal-ring">{gp.percent===null?g.priority:`${gp.percent}%`}</div><div><span className="eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="progress-track"><i style={{width:`${gp.percent}%`}}/></div>}{ms.length>0&&<div className="milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}{gp.status==='achieved'&&<small className="achievement-note">Target evidence reached. Review the next phase rather than silently changing the goal.</small>}</div></div>})}</div>
  {open&&<section className="plan-editor"><div className="form-grid"><label>Goal title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Improve pull-up strength"/></label><label>Type<select value={kind} onChange={e=>setKind(e.target.value as GoalKind)}>{['strength','hypertrophy','fat_loss','fitness','general'].map(x=><option key={x}>{x}</option>)}</select></label><label>Target label<input value={label} onChange={e=>setLabel(e.target.value)} placeholder="e.g. Bench press"/></label><label>Target value<input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} placeholder="Optional"/></label><label>Unit<select value={unit} onChange={e=>setUnit(e.target.value)}>{['kg','reps','sessions','minutes','cm','%'].map(x=><option key={x}>{x}</option>)}</select></label><label>Target date<input type="date" value={targetDate} onChange={e=>setTargetDate(e.target.value)}/></label></div><button className="button primary" onClick={add}>Create goal</button></section>}
  <button className="button secondary" onClick={()=>setOpen(!open)}><Icon name="plus"/> {open?'Close':'Add goal'}</button></>}
-function PlanStudio({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [selected,setSelected]=useState<string|null>(null),[q,setQ]=useState('');const plan=s.plan,day=plan?.days.find(d=>d.id===selected),workout=day?.workoutId?s.workouts.find(w=>w.id===day.workoutId):day?s.workouts.find(w=>w.planId===plan?.id&&w.name===day.label&&w.status!=='completed'&&w.status!=='missed'&&w.status!=='skipped'):undefined;const results=s.exercises.filter(e=>!q||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(q.toLowerCase())).slice(0,18);const edit=(fn:(w:Workout)=>Workout,reason:string)=>{if(!workout||!plan)return;update(x=>{const p=x.plan!;const nextW=fn(x.workouts.find(w=>w.id===workout.id)!);const nextPlan=planWithDays(p,p.days);nextW.currentPlanVersion=nextPlan.version;return{...x,workouts:x.workouts.map(w=>w.id===nextW.id?nextW:w),plan:nextPlan,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'plan_edit',timestamp:new Date().toISOString(),payload:{reason}}]}})};const add=(id:string)=>edit(w=>({...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:[...w.exercises,{exerciseId:id,sets:Array.from({length:2},()=>makeSet('working',s.exercises.find(e=>e.id===id)!)),prescribedSets:2,repRange:s.exercises.find(e=>e.id===id)!.repRange,restSec:s.exercises.find(e=>e.id===id)!.restSec,order:w.exercises.length}]}),'add exercise');const remove=(id:string)=>edit(w=>({...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:w.exercises.filter(e=>e.exerciseId!==id).map((e,i)=>({...e,order:i}))}),'remove exercise');return <><PageTitle eyebrow="PLAN STUDIO" title="Shape the structure." sub="Future structure is editable. Historical sessions remain immutable."/><div className="plan-panel"><div className="plan-header"><div><span className="eyebrow">ACTIVE PLAN</span><h2>{plan?.name||'No plan'}</h2><small className="muted">{plan?.mode==='continuous'?'Continuous training':`${plan?.weeks||'—'} week horizon`}</small></div><span className="version">v{plan?.version||1}</span></div>{plan?.days.map((d,i)=>{const w=d.workoutId?s.workouts.find(x=>x.id===d.workoutId):!d.rest?s.workouts.find(x=>x.planId===plan?.id&&x.name===d.label&&x.status!=='completed'&&x.status!=='missed'&&x.status!=='skipped'):undefined;return <button className={`day-card ${selected===d.id?'selected-day':''}`} key={d.id} onClick={()=>setSelected(selected===d.id?null:d.id)}><span className="day-no">{String(i+1).padStart(2,'0')}</span><span><strong>{d.label}</strong><small>{d.rest?'Recovery / rest':`${w?.exercises.length||0} exercises · ${w?.scheduledDate||''}`}</small></span>{w&&<span className="mini-btn" onClick={e=>{e.stopPropagation();onStart(w)}}><Icon name="play" size={15}/></span>}</button>})}</div>{day&&workout&&<section className="plan-editor"><div className="section-head"><div><span className="eyebrow">EDITING {day.label}</span><h2>{workout.name}</h2></div><button className="button ghost" onClick={()=>setSelected(null)}>Done</button></div><div className="editor-exercises">{workout.exercises.map((we,i)=>{const e=s.exercises.find(x=>x.id===we.exerciseId)!;return <div className="editor-exercise" key={`${we.exerciseId}-${i}`}><span className="day-no">{String(i+1).padStart(2,'0')}</span><div><strong>{e.name}</strong><small>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</small></div><button className="mini-btn" onClick={()=>remove(e.id)}>Remove</button></div>})}</div><div className="search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Add exercise…"/></div><div className="picker-list">{results.map(e=><button className="picker-row" key={e.id} onClick={()=>add(e.id)}><span><strong>{e.name}</strong><small>{e.pattern} · {e.primaryMuscles.join(' · ')}</small></span><Icon name="plus"/></button>)}</div></section>}<div className="callout"><Icon name="bolt"/><div><strong>Version-aware plan</strong><p>Every structural edit creates a new plan version. A completed workout never gets rewritten.</p></div></div></>}
+function PlanStudio({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [selected,setSelected]=useState<string|null>(null),[q,setQ]=useState('');const plan=s.plan,day=plan?.days.find(d=>d.id===selected),workout=day?.workoutId?s.workouts.find(w=>w.id===day.workoutId):day?s.workouts.find(w=>w.planId===plan?.id&&w.name===day.label&&w.status!=='completed'&&w.status!=='missed'&&w.status!=='skipped'):undefined;const results=s.exercises.filter(e=>!q||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(q.toLowerCase())).slice(0,18);const edit=(fn:(w:Workout)=>Workout,reason:string)=>{if(!workout||!plan)return;update(x=>{const p=x.plan!;const currentWorkout=x.workouts.find(w=>w.id===workout.id);if(!currentWorkout)return x;const nextW=fn(currentWorkout);const nextPlan=planWithDays(p,p.days);nextW.currentPlanVersion=nextPlan.version;return{...x,workouts:x.workouts.map(w=>w.id===nextW.id?nextW:w),plan:nextPlan,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'plan_edit',timestamp:new Date().toISOString(),payload:{reason}}]}})};const add=(id:string)=>edit(w=>{const ex=s.exercises.find(e=>e.id===id);if(!ex)return w;return{...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:[...w.exercises,{exerciseId:id,sets:Array.from({length:2},()=>makeSet('working',ex)),prescribedSets:2,repRange:ex.repRange,restSec:ex.restSec,order:w.exercises.length}]};},'add exercise');const remove=(id:string)=>edit(w=>({...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:w.exercises.filter(e=>e.exerciseId!==id).map((e,i)=>({...e,order:i}))}),'remove exercise');return <><PageTitle eyebrow="PLAN STUDIO" title="Shape the structure." sub="Future structure is editable. Historical sessions remain immutable."/><div className="plan-panel"><div className="plan-header"><div><span className="eyebrow">ACTIVE PLAN</span><h2>{plan?.name||'No plan'}</h2><small className="muted">{plan?.mode==='continuous'?'Continuous training':`${plan?.weeks||'—'} week horizon`}</small></div><span className="version">v{plan?.version||1}</span></div>{plan?.days.map((d,i)=>{const w=d.workoutId?s.workouts.find(x=>x.id===d.workoutId):!d.rest?s.workouts.find(x=>x.planId===plan?.id&&x.name===d.label&&x.status!=='completed'&&x.status!=='missed'&&x.status!=='skipped'):undefined;return <button className={`day-card ${selected===d.id?'selected-day':''}`} key={d.id} onClick={()=>setSelected(selected===d.id?null:d.id)}><span className="day-no">{String(i+1).padStart(2,'0')}</span><span><strong>{d.label}</strong><small>{d.rest?'Recovery / rest':`${w?.exercises.length||0} exercises · ${w?.scheduledDate||''}`}</small></span>{w&&<span className="mini-btn" onClick={e=>{e.stopPropagation();onStart(w)}}><Icon name="play" size={15}/></span>}</button>})}</div>{day&&workout&&<section className="plan-editor"><div className="section-head"><div><span className="eyebrow">EDITING {day.label}</span><h2>{workout.name}</h2></div><button className="button ghost" onClick={()=>setSelected(null)}>Done</button></div><div className="editor-exercises">{workout.exercises.map((we,i)=>{const e=s.exercises.find(x=>x.id===we.exerciseId);return <div className="editor-exercise" key={`${we.exerciseId}-${i}`}><span className="day-no">{String(i+1).padStart(2,'0')}</span><div><strong>{e?.name||'Exercise unavailable'}</strong><small>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</small></div>{e?<button className="mini-btn" onClick={()=>remove(e.id)}>Remove</button>:<span className="muted">Missing data</span>}</div>})}</div><div className="search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Add exercise…"/></div><div className="picker-list">{results.map(e=><button className="picker-row" key={e.id} onClick={()=>add(e.id)}><span><strong>{e.name}</strong><small>{e.pattern} · {e.primaryMuscles.join(' · ')}</small></span><Icon name="plus"/></button>)}</div></section>}<div className="callout"><Icon name="bolt"/><div><strong>Version-aware plan</strong><p>Every structural edit creates a new plan version. A completed workout never gets rewritten.</p></div></div></>}
 function Library({s,query,setQuery,onExercise}:{s:AppState;query:string;setQuery:(x:string)=>void;onExercise:(id:string)=>void}){
  const [equipmentOnly,setEquipmentOnly]=useState(false);
  const available=s.profile?.equipment||[];
@@ -730,14 +3821,14 @@ function Library({s,query,setQuery,onExercise}:{s:AppState;query:string;setQuery
  <div className="search"><Icon name="search"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Chest press, row, squat…"/></div>
  <div className="chip-row">{['','horizontal_push','horizontal_pull','vertical_pull','squat','hinge','core','arm_flexion'].map(x=><button className="chip" key={x||'all'} onClick={()=>setQuery(x)}>{x?x.replace('_',' '):'all'}</button>)}</div>
  <div className="library-toolbar"><span className="muted">{filtered.length} movements · {equipmentLabel}</span><span className="muted">Knowledge {report.healthy?'validated':`${report.errors} issues`}</span><label className="toggle-row compact-toggle"><span>Available equipment first</span><input type="checkbox" checked={equipmentOnly} onChange={e=>setEquipmentOnly(e.target.checked)}/></label></div>
- <div className="library-grid">{filtered.map(e=>{const fit=equipmentFit(e,available);return <button className="exercise-tile" key={e.id} onClick={()=>onExercise(e.id)}><span className="tile-tag">{e.loadSemantics.replace('_',' ')}</span><strong>{e.name}</strong><small>{e.primaryMuscles.join(' · ')}</small><span>{e.repRange[0]}–{e.repRange[1]} · {e.equipment.join(', ')}</span>{available.length>0&&<em className={`fit-${fit}`}>{fit==='available'?'Available':fit==='unknown'?'Check equipment':'Not in setup'}</em>}</button>})}</div></>
+ <div className="library-grid">{filtered.map(e=>{const fit=equipmentFit(e,available);return <button className="exercise-tile" key={e.id} onClick={()=>onExercise(e.id)}><span className="tile-tag">{e.loadSemantics.replace('_',' ')}</span><strong>{e.name}</strong><small>{e.primaryMuscles.join(' · ')}</small><span>{e.repRange[0]}–{e.repRange[1]} · {e.equipment.join(', ')}</span>{available.length>0&&<em className={`fit-${fit}`}>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm for today':'Not in setup'}</em>}</button>})}</div></>
 }
 function ExerciseSheet({ex,s,close,onUse,onAlternative}:{ex:Exercise;s:AppState;close:()=>void;onUse:()=>void;onAlternative:(id:string)=>void}){
  const alts=smartAlternatives(ex,s.exercises,s.profile?.equipment);
  return <Modal title={ex.name} close={close}><div className="detail-meta"><span>{ex.family}</span><span>{ex.primaryMuscles.join(' · ')}</span><span>{formatLoad(ex,undefined)}</span></div>
  <Detail title="EQUIPMENT"><p>{ex.equipment.length?ex.equipment.join(' · '):'No dedicated equipment required.'}</p></Detail>
  <Detail title="SETUP"><ul>{ex.setup.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="EXECUTION"><ol>{ex.steps.map(x=><li key={x}>{x}</li>)}</ol></Detail><Detail title="BREATHING & TEMPO"><p>{ex.breathing}{ex.tempo?` Tempo: ${ex.tempo}.`:''}</p></Detail><Detail title="CUES"><div className="tag-list">{ex.cues.map(x=><span key={x}>{x}</span>)}</div></Detail><Detail title="COMMON MISTAKES"><ul>{ex.mistakes.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="SAFETY"><ul>{ex.safety.map(x=><li key={x}>{x}</li>)}</ul></Detail>
- <Detail title="ALTERNATIVES"><div className="alt-list">{alts.map(({exercise,fit,samePattern,sameLoad})=><button key={exercise.id} onClick={()=>onAlternative(exercise.id)}><span><strong>{exercise.name}</strong><small>{fit==='available'?'Available equipment':fit==='unknown'?'Equipment not confirmed':'Not in current setup'}{samePattern?' · same pattern':''}{sameLoad?' · same load semantics':''}</small></span><Icon name="chev"/></button>)}</div></Detail>
+ <Detail title="ALTERNATIVES"><div className="alt-list">{alts.map(({exercise,fit,samePattern,sameLoad})=><button key={exercise.id} onClick={()=>onAlternative(exercise.id)}><span><strong>{exercise.name}</strong><small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in current setup'}{samePattern?' · same pattern':''}{sameLoad?' · same load semantics':''}</small></span><Icon name="chev"/></button>)}</div></Detail>
  <button className="button primary wide" onClick={onUse}>Use in training</button></Modal>
 }
 function Templates({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [name,setName]=useState('');const [selected,setSelected]=useState<string[]>([]);const toggle=(id:string)=>setSelected(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);const save=()=>{if(!name.trim()||!selected.length)return;const t:WorkoutTemplate={id:uid('tpl'),name:name.trim(),exerciseIds:selected,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};update(x=>({...x,workoutTemplates:[...(x.workoutTemplates||[]),t]}));setName('');setSelected([])};const useT=(t:WorkoutTemplate)=>{const w=cloneTemplateWorkout(t,today(),s.exercises);update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'template_used',timestamp:new Date().toISOString(),payload:{templateId:t.id,workoutId:w.id}}]}));onStart(w)};const remove=(id:string)=>update(x=>({...x,workoutTemplates:(x.workoutTemplates||[]).filter(t=>t.id!==id)}));return <><PageTitle eyebrow="TEMPLATES" title="Save the work you repeat." sub="Templates are reusable structures. Completed workouts remain separate historical events."/><section className="plan-editor"><label>Template name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Quick upper"/></label><div className="picker-list">{s.exercises.slice(0,35).map(e=><button className="picker-row" key={e.id} onClick={()=>toggle(e.id)}><span><strong>{e.name}</strong><small>{selected.includes(e.id)?'Included':'Tap to include'} · {e.pattern}</small></span>{selected.includes(e.id)?<Icon name="check"/>:<Icon name="plus"/>}</button>)}</div><button className="button primary wide" disabled={!name.trim()||!selected.length} onClick={save}>Save template</button></section><section className="section"><div className="list-card">{(s.workoutTemplates||[]).map(t=><div className="template-row" key={t.id}><ListRow title={t.name} sub={`${t.exerciseIds.length} exercises`} icon="train" click={()=>useT(t)}/><button className="mini-btn danger" onClick={()=>remove(t.id)}>Delete</button></div>)}</div></section></>}
@@ -756,13 +3847,20 @@ function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>
 function You({s,nav,update}:{s:AppState;nav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const notificationPreview=notificationIntents(s);
  const [editing,setEditing]=useState(false),[name,setName]=useState(s.profile?.name||''),[pass,setPass]=useState(''),[recovery,setRecovery]=useState(''),[backupBusy,setBackupBusy]=useState(false),[backupMsg,setBackupMsg]=useState('');
+ const loadEquipment:string[]=Array.from(new Set((s.profile?.equipment||[]).filter(x=>!['bodyweight','bench'].includes(x))));
+ const [loadInputs,setLoadInputs]=useState<Record<string,string>>(()=>Object.fromEntries(loadEquipment.map(item=>[item,(s.profile?.loadIncrementsKg?.[item]||[]).join(', ')])));
+ const saveLoadAvailability=(item:string)=>{
+   const values=loadInputs[item]?.split(',').map(v=>Number(v.trim())).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b)||[];
+   update(x=>({...x,profile:x.profile?{...x.profile,loadIncrementsKg:{...(x.profile.loadIncrementsKg||{}),[item]:[...new Set(values)]}}:x.profile}));
+ };
  const download=(text:string,filename:string,type='application/json')=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
  const makeBackup=async()=>{setBackupMsg('');if(!pass||pass.length<8){setBackupMsg('Enter a passphrase of at least 8 characters.');return}setBackupBusy(true);try{const key=recovery||recoveryKey();const encrypted=await encryptBackup(repository.exportJson(s),pass,key);download(encrypted,`apex-backup-${today()}.apex`);if(!recovery)setRecovery(key);setBackupMsg(recovery?'Encrypted backup created.':'Backup created. Save the recovery key shown below somewhere safe.');}catch(e){setBackupMsg(e instanceof Error?e.message:'Backup failed.')}finally{setBackupBusy(false)}};
  const importBackup=()=>{const input=document.createElement('input');input.type='file';input.accept='.apex,.json';input.onchange=()=>{const file=input.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=async()=>{setBackupMsg('');setBackupBusy(true);try{const secret=pass||recovery;if(!secret)throw new Error('Enter the backup passphrase or recovery key first.');const plain=await decryptBackup(String(reader.result),secret);const restored=repository.importJson(plain);update(()=>restored);setBackupMsg('Backup restored. APEX will now use the restored local state.');}catch(e){setBackupMsg(e instanceof Error?e.message:'Restore failed.')}finally{setBackupBusy(false)}};reader.readAsText(file)};input.click()};
  return <><PageTitle eyebrow="YOU" title={s.profile?.name||'Your training identity'} sub="Control the context APEX uses. Your data remains yours and can travel with you."/>
- <div className="profile-card"><img src="/brand/apex-symbol-light.png"/><div><strong>{s.profile?.name||'Private local profile'}</strong><small>APEX · Version 2.1.0 · {s.profile?.experience||'not set'} · {s.profile?.trainingDays||'—'} days/week</small></div></div>
+ <div className="profile-card"><img src="/brand/apex-symbol-light.png"/><div><strong>{s.profile?.name||'Private local profile'}</strong><small>{s.profile?.experience||'not set'} · {s.profile?.trainingDays||'—'} days/week · {s.profile?.sessionMinutes||'—'} min</small></div></div>
  {editing&&<section className="plan-editor"><label>Name<input value={name} onChange={e=>setName(e.target.value)}/></label><button className="button primary" onClick={()=>{update(x=>({...x,profile:x.profile?{...x.profile,name:name.trim()}:x.profile}));setEditing(false)}}>Save profile</button></section>}
  <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">DATA CONTROL</span><h2>Private by default.</h2></div></div><p className="muted">Core APEX data is stored locally. On Android, SQLite is the native persistence source with a browser fallback. Encrypted backups can be moved manually without an account.</p><label>Backup passphrase<input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="8+ characters" autoComplete="new-password"/></label><div className="button-row"><button className="button primary" onClick={makeBackup} disabled={backupBusy}>{backupBusy?'Working…':'Create encrypted backup'}</button><button className="button ghost" onClick={importBackup} disabled={backupBusy}>Restore backup</button></div>{recovery&&<div className="recovery-box"><span className="eyebrow">RECOVERY KEY — SAVE THIS</span><strong>{recovery}</strong><small>Use this key instead of the passphrase if you need to unlock this backup. APEX cannot reconstruct a lost recovery key.</small><button className="mini-btn" onClick={()=>navigator.clipboard?.writeText(recovery)}>Copy key</button></div>}{backupMsg&&<div className="callout"><Icon name="bolt"/><div><strong>Backup status</strong><p>{backupMsg}</p></div></div>}</section>
+ <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">LOAD AVAILABILITY</span><h2>Tell APEX what loads exist.</h2></div></div><p className="muted">Equipment availability answers whether you have the machine. Load availability answers which actual loads you can select. APEX will never recommend a value outside a configured list.</p>{loadEquipment.length?loadEquipment.map(item=><div key={item} className="load-config-row"><label>{item.replace(/_/g,' ')}<input value={loadInputs[item]||''} onChange={e=>setLoadInputs(x=>({...x,[item]:e.target.value}))} placeholder="5, 7.5, 10, 12.5, 15…" inputMode="decimal"/></label><button className="mini-btn" onClick={()=>saveLoadAvailability(item)}>Save loads</button></div>):<div className="callout"><Icon name="settings"/><div><strong>No external-load equipment configured.</strong><p>Add equipment in your training profile before configuring load options.</p></div></div>}</section>
  <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">NOTIFICATIONS</span><h2>Useful, never noisy.</h2></div></div><p className="muted">APEX only prepares action-oriented reminders. You can disable any category without affecting training data.</p><label className="toggle-row"><span>Notifications enabled</span><input type="checkbox" checked={s.preferences.notifications.enabled} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,enabled:e.target.checked}}}))}/></label><label className="toggle-row"><span>Workout reminders</span><input type="checkbox" checked={s.preferences.notifications.workoutReminders} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,workoutReminders:e.target.checked}}}))}/></label><label className="toggle-row"><span>Missed workout follow-up</span><input type="checkbox" checked={s.preferences.notifications.missedWorkout} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,missedWorkout:e.target.checked}}}))}/></label><label className="toggle-row"><span>Weekly review</span><input type="checkbox" checked={s.preferences.notifications.weeklyReview} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,weeklyReview:e.target.checked}}}))}/></label></section>
  <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">NOTIFICATION PLAN</span><h2>Prepared from your context.</h2></div></div><p className="muted">These are deterministic notification intents. Native scheduling and delivery stays behind the platform adapter, so training logic never depends on a notification service.</p><div className="notification-preview">{notificationPreview.map(n=><div className="history-item static" key={n.id}><div><span className="eyebrow">{n.kind}</span><strong>{n.title}</strong><small>{n.body}</small></div></div>)}{!notificationPreview.length&&<Empty title="No reminder needed" text="APEX will not create a notification unless your enabled rules and current training context call for one."/>}</div></section>
  <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">ACCESSIBILITY & FEEDBACK</span><h2>Make APEX comfortable to use.</h2></div></div><label className="toggle-row"><span>Reduce motion</span><input type="checkbox" checked={s.preferences.reducedMotion} onChange={e=>update(x=>({...x,preferences:{...x.preferences,reducedMotion:e.target.checked}}))}/></label><label className="toggle-row"><span>High contrast</span><input type="checkbox" checked={s.preferences.highContrast} onChange={e=>update(x=>({...x,preferences:{...x.preferences,highContrast:e.target.checked}}))}/></label><label className="toggle-row"><span>Text size</span><select value={s.preferences.fontScale} onChange={e=>update(x=>({...x,preferences:{...x.preferences,fontScale:e.target.value as AppState["preferences"]["fontScale"]}}))}><option value="system">System</option><option value="large">Large</option><option value="larger">Larger</option></select></label><label className="toggle-row"><span>Haptics</span><input type="checkbox" checked={s.preferences.haptics} onChange={e=>update(x=>({...x,preferences:{...x.preferences,haptics:e.target.checked}}))}/></label><label className="toggle-row"><span>Workout sounds</span><input type="checkbox" checked={s.preferences.sounds} onChange={e=>update(x=>({...x,preferences:{...x.preferences,sounds:e.target.checked}}))}/></label><p className="muted">Android system font scaling and screen-reader semantics are respected where the platform provides them.</p></section>
@@ -775,5 +3873,5 @@ function ListRow({title,sub,icon,click}:{title:string;sub:string;icon:string;cli
 function NavItem({active,icon,label,click}:{active:boolean;icon:string;label:string;click:()=>void}){return <button className={`nav-item ${active?'active':''}`} onClick={click}><Icon name={icon}/><span>{label}</span></button>}
 function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <div className="page-title"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{sub}</p></div>}
 function Empty({title,text}:{title:string;text:string}){return <div className="empty"><Icon name="bolt"/><strong>{title}</strong><p>{text}</p></div>}
-function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){useEffect(()=>{const onBack=(event:Event)=>{event.preventDefault();close()};window.addEventListener('apex-back',onBack);return()=>window.removeEventListener('apex-back',onBack)},[close]);return <div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
-createRoot(document.getElementById('root')!).render(<AppBoundary><App/></AppBoundary>);
+function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="modal-backdrop modal-transition" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
+createRoot(document.getElementById('root')!).render(<App/>);
