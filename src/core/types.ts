@@ -34,13 +34,6 @@ export type LoadSemantics =
   | 'time'
   | 'none';
 
-/**
- * Runtime representation of how an exercise's external load is measured.
- *
- * The numeric `weight` field remains the canonical progression value.
- * This optional detail makes the UI and history explicit about what
- * that number means.
- */
 export type LoadDetailKind =
   | 'dumbbell'
   | 'barbell'
@@ -80,9 +73,6 @@ export type Side =
   | 'right'
   | 'both';
 
-/**
- * High-level state of a guided workout session.
- */
 export type GuidedSessionPhase =
   | 'prep'
   | 'equipment'
@@ -94,18 +84,12 @@ export type GuidedSessionPhase =
   | 'exercise_complete'
   | 'complete';
 
-/**
- * Why a set was not performed normally.
- */
 export type SetDisposition =
   | 'completed'
   | 'skipped'
   | 'replaced'
   | 'not_started';
 
-/**
- * Session-level calibration state.
- */
 export type CalibrationState =
   | 'not_needed'
   | 'pending'
@@ -113,9 +97,6 @@ export type CalibrationState =
   | 'calibrating'
   | 'established';
 
-/**
- * Rest timer state.
- */
 export type RestState = {
   active: boolean;
   startedAt?: string;
@@ -125,9 +106,6 @@ export type RestState = {
   skipped?: boolean;
 };
 
-/**
- * Feedback captured after a set/exercise.
- */
 export interface SetFeedback {
   rir?: number;
   difficulty?: 1 | 2 | 3 | 4 | 5;
@@ -137,15 +115,6 @@ export interface SetFeedback {
   timestamp: string;
 }
 
-/**
- * Runtime load recommendation for the current exercise/set.
- *
- * `kind` describes how the recommendation was established.
- * `source` describes the evidence/source behind it.
- *
- * This is session guidance and does not automatically mutate the
- * underlying workout prescription.
- */
 export interface LoadRecommendation {
   weight?: number;
   minWeight?: number;
@@ -156,12 +125,31 @@ export interface LoadRecommendation {
     | 'medium'
     | 'high';
 
+  /**
+   * How the recommendation was established.
+   */
   kind?:
     | 'baseline'
     | 'comparable_estimate'
     | 'calibration'
     | 'user_adjustment';
 
+  /**
+   * Evidence used to produce the recommendation.
+   *
+   * This is explanatory metadata only. It must never override
+   * deterministic APEX training logic.
+   */
+  evidence?: string[];
+
+  /**
+   * Target RIR used by the recommendation engine.
+   */
+  targetRir?: number;
+
+  /**
+   * Primary source behind the recommendation.
+   */
   source:
     | 'exercise_estimate'
     | 'exercise_history'
@@ -179,83 +167,55 @@ export interface LoadRecommendation {
   generatedAt: string;
 }
 
-/**
- * Equipment verification state for today's session.
- */
 export type SessionEquipmentStatus =
   | 'profile_available'
   | 'confirmed'
   | 'unavailable';
 
-/**
- * Complete runtime state of the currently guided workout.
- *
- * These core fields remain required because active-session recovery
- * depends on them being persisted.
- */
 export interface GuidedSessionState {
   phase: GuidedSessionPhase;
 
-  /** Index of the exercise currently in focus. */
   exerciseIndex: number;
 
-  /** Index of the set currently in focus. */
   setIndex: number;
 
-  /** IDs of sets completed during this session. */
   completedSetIds: string[];
 
-  /** IDs of sets explicitly skipped during this session. */
   skippedSetIds: string[];
 
-  /** Exercise IDs explicitly skipped during this session. */
   skippedExerciseIds: string[];
 
-  /** Runtime substitutions made during this session only. */
   substitutions?: Record<string, string>;
 
-  /** Current working loads selected during this session. */
   workingLoads?: Record<string, number>;
 
-  /** Current load recommendations. */
   recommendations?: Record<string, LoadRecommendation>;
 
-  /** Equipment state for the current session. */
   sessionEquipment?: Record<
     string,
     SessionEquipmentStatus
   >;
 
-  /** Feedback captured for individual sets. */
   setFeedback?: Record<string, SetFeedback>;
 
-  /** Current rest timer state, if any. */
   rest?: RestState;
 
-  /** Whether the current exercise/load is still being calibrated. */
   calibration?: Record<string, CalibrationState>;
 
-  /** Session start timestamp. */
   startedAt?: string;
 
-  /** Timestamp when the session was last paused. */
   pausedAt?: string;
 
-  /** Total accumulated paused time in seconds. */
   pausedTotalSec: number;
 
-  /** Timestamp when the current guided state was last persisted. */
   updatedAt: string;
 
-  /** Why the current session is paused. */
   pauseReason?:
     | 'user'
     | 'background';
 
-  /** Most recent lifecycle/background checkpoint. */
   lastCheckpointAt?: string;
 
-  /** Monotonic session-state version. */
   version: number;
 }
 
@@ -277,19 +237,11 @@ export interface UserProfile {
     heightCm?: number;
   };
 
-  /**
-   * User-configured real load increments.
-   *
-   * Key may be an exercise ID or equipment identifier.
-   */
   loadIncrementsKg?: Record<
     string,
     number[]
   >;
 
-  /**
-   * Optional known barbell weight.
-   */
   barbellBarKg?: number;
 
   createdAt: string;
@@ -357,9 +309,6 @@ export interface Exercise {
 
   loadDescription?: string;
 
-  /**
-   * Target duration range for timed exercises, in seconds.
-   */
   durationRangeSec?: [number, number];
 }
 
@@ -367,14 +316,8 @@ export interface SetLog {
   id: string;
   type: SetType;
 
-  /**
-   * Canonical progression/load value.
-   */
   weight?: number;
 
-  /**
-   * Explicit representation of what `weight` means.
-   */
   loadDetail?: LoadDetail;
 
   reps?: number;
@@ -386,17 +329,11 @@ export interface SetLog {
 
   completed: boolean;
 
-  /**
-   * More precise state than `completed === false`.
-   */
   disposition?: SetDisposition;
 
   note?: string;
   timestamp?: string;
 
-  /**
-   * Legacy/runtime assistance value.
-   */
   assistance?: number;
 
   tempo?: string;
@@ -411,19 +348,10 @@ export interface WorkoutExercise {
 
   repRange: [number, number];
 
-  /**
-   * Target duration range for timed exercises.
-   */
   durationRangeSec?: [number, number];
 
-  /**
-   * Recommended working load.
-   */
   recommendedWeight?: number;
 
-  /**
-   * Explicit semantics for the recommended load.
-   */
   recommendedLoadDetail?: LoadDetail;
 
   restSec: number;
@@ -435,10 +363,6 @@ export interface WorkoutExercise {
   originalPlanVersion?: number;
   currentPlanVersion?: number;
 
-  /**
-   * If this exercise replaced another exercise,
-   * retain the original exercise identity.
-   */
   baselineExerciseId?: string;
 
   status?:
@@ -449,9 +373,6 @@ export interface WorkoutExercise {
 
   replacementFrom?: string;
 
-  /**
-   * Why a session-only substitution occurred.
-   */
   replacementReason?: string;
 }
 
@@ -481,12 +402,6 @@ export interface Workout {
     | 'custom'
     | 'extra';
 
-  /**
-   * Legacy/runtime pause fields.
-   *
-   * GuidedSessionState is the source of truth for active
-   * guided-session behavior.
-   */
   pausedAt?: string;
   pausedTotalSec?: number;
 
@@ -494,9 +409,6 @@ export interface Workout {
     | 'user'
     | 'background';
 
-  /**
-   * Persisted guided-session state.
-   */
   guidedSession?: GuidedSessionState & {
     workingLoads?: Record<string, number>;
 
@@ -506,11 +418,6 @@ export interface Workout {
     >;
   };
 
-  /**
-   * Lightweight workout-local event history.
-   *
-   * This is intentionally separate from the global AppState event log.
-   */
   eventLog?: {
     id: string;
     type: string;
@@ -566,9 +473,6 @@ export interface Plan {
   createdAt: string;
   updatedAt: string;
 
-  /**
-   * Immutable plan history.
-   */
   history?: {
     version: number;
     createdAt: string;
@@ -730,14 +634,8 @@ export interface AppState {
     };
   };
 
-  /**
-   * Current APEX route.
-   */
   activeRoute: string;
 
-  /**
-   * Workout currently being operated on.
-   */
   activeWorkoutId?: string;
 
   onboardingComplete: boolean;
@@ -751,9 +649,6 @@ export interface AppState {
     string
   >;
 
-  /**
-   * Global lightweight event history.
-   */
   eventLog?: {
     id: string;
     type: string;
