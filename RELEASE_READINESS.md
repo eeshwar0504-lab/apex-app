@@ -19,7 +19,7 @@ The application source now includes explicit native notification ownership/deep-
 ### Must pass before 100%
 - Clean GitHub Actions Android build from the uploaded source.
 - Install and exercise the APK on a physical Android device.
-- Verify SQLite persistence across process death.
+- Verify SQLite persistence across process death and successful reopen recovery.
 - Verify backup/restore with both passphrase and recovery key.
 - Verify notification permission, scheduling, cancellation and deep navigation.
 - Verify lock/background/call interruption during an active workout.

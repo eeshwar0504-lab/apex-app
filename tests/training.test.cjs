@@ -14,16 +14,25 @@ function loadTrainingEngine(){
   const root=path.resolve(__dirname,'..');
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'apex-training-test-'));
   fs.writeFileSync(path.join(temp,'package.json'),'{"type":"commonjs"}');
-  execFileSync(process.platform==='win32'?'npx.cmd':'npx',[
-    'tsc',
+  const tsc=path.join(
+    root,
+    'node_modules',
+    'typescript',
+    'bin',
+    'tsc'
+  );
+
+  execFileSync(process.execPath,[
+    tsc,
     path.join(root,'src/engine/training.ts'),
     '--target','ES2022',
     '--module','commonjs',
     '--moduleResolution','node',
     '--skipLibCheck',
+    '--rootDir',root,
     '--outDir',temp
   ],{cwd:root,stdio:'pipe'});
-  return require(path.join(temp,'src/engine/training.js'));
+  return require(path.join(temp,'src','engine','training.js'));
 }
 
 const training=loadTrainingEngine();
@@ -182,7 +191,7 @@ test('recommendation: Romanian Deadlift is a positive total-load calibration',()
 test('recommendation: Plank is timed and never recommends external kilograms',()=>{
   const r=training.personalizedLoad(exercises.plank,[],configuredProfile,[exercises.plank]);
   assert.equal(r.weight,undefined);assert.equal(r.kind,'baseline');assert.equal(training.loadUnit(exercises.plank),'seconds');
-  assert.equal(training.formatLoad(exercises.plank,0),'20–45s');
+  assert.equal(training.formatLoad(exercises.plank,0),'20–45 sec');
 });
 
 /* ============================================================
@@ -318,3 +327,4 @@ test('session state: workout completion assessment reaches full completion',()=>
   const assessment=training.sessionAssessment(workout,[ex],[]);
   assert.equal(assessment.completedSets,2);assert.equal(assessment.plannedSets,2);assert.equal(assessment.skippedSets,0);
 });
+
