@@ -6,6 +6,7 @@ import {EXERCISES,findExercises} from './knowledge/exercises';
 import {repository} from './data/repository';
 import {encryptBackup,decryptBackup,recoveryKey} from './data/backupCrypto';
 import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad,makeSet,progression,recommendedRest,markMissedWorkouts,createRescheduled,volumeForWorkout,updateSetType,safetyCheck,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,applyWorkoutAdaptation,planWithDays,summarizeSets,rescheduleWorkout,equipmentFit,smartAlternatives,personalizedLoad,feedbackLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
+import {normalizeGuidedPosition,completeSet,applySetFeedback,continueAfterRest as continueGuidedAfterRest,advanceToNextExercise as advanceGuidedToNextExercise} from './engine/guidedSession';
 import {homeInsights,readiness,buildObservations,adaptationsForWorkout,goalProgress,goalMilestones,trainingLoadSummary} from './engine/intelligence';
 import {notificationIntents} from './engine/notifications';
 import {syncLocalNotifications,listenForNotificationActions} from './native/localNotifications';
@@ -1617,44 +1618,9 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  }));
 
  const normalizeGuided=(ww:Workout):Workout=>{
-   const c=structuredClone(ww);
-   const gs=completeGuidedSession(c.guidedSession);
-
-   let ei=Math.max(0,Math.min(gs.exerciseIndex,c.exercises.length-1));
-   let si=Math.max(0,gs.setIndex);
-
-   const findNext=(from:number)=>{
-     for(let i=Math.max(0,from);i<c.exercises.length;i++){
-       const e=c.exercises[i];
-       if(e.status==='skipped')continue;
-       const setIndex=e.sets.findIndex(x=>!x.completed);
-       if(setIndex>=0)return {exerciseIndex:i,setIndex};
-     }
-     return null;
-   };
-
-   const currentExercise=c.exercises[ei];
-   if(!currentExercise||currentExercise.status==='skipped'||currentExercise.sets[si]?.completed){
-     const next=findNext(ei);
-     if(next){
-       ei=next.exerciseIndex;
-       si=next.setIndex;
-     }else{
-       const first=findNext(0);
-       if(first){
-         ei=first.exerciseIndex;
-         si=first.setIndex;
-       }
-     }
-   }
-
-   c.guidedSession={
-     ...completeGuidedSession(gs),
-     exerciseIndex:ei,
-     setIndex:si,
-     updatedAt:gs.updatedAt||new Date().toISOString()
-   };
-   return c;
+   const phase=ww.guidedSession?.phase;
+   if(phase==='feedback'||phase==='set_active'||phase==='rest')return structuredClone(ww);
+   return normalizeGuidedPosition(ww);
  };
 
  const guided=normalizeGuided(current);
@@ -1760,37 +1726,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
    hapticKey.current=key;
    vibrate([18,45,18]);
 
-   const nextSet=activeExercise?.sets.findIndex((x,i)=>i>setIndex&&!x.completed);
-   const nextExercise=current.exercises.findIndex((e,i)=>
-     i>exerciseIndex &&
-     e.status!=='skipped' &&
-     e.sets.some(x=>!x.completed)
-   );
-
-   if(nextSet!==undefined&&nextSet>=0){
-     setGuided(
-       {phase:'set_ready',exerciseIndex,setIndex:nextSet},
-       {restStartedAt:undefined,restTargetSec:undefined}
-     );
-     return;
-   }
-
-   if(nextExercise>=0){
-     setGuided(
-       {phase:'exercise_complete',exerciseIndex,setIndex},
-       {
-         restStartedAt:undefined,
-         restTargetSec:undefined,
-         nextExerciseIndex:nextExercise
-       }
-     );
-     return;
-   }
-
-   setGuided(
-     {phase:'complete'},
-     {restStartedAt:undefined,restTargetSec:undefined}
-   );
+   mutate(ww=>continueGuidedAfterRest(ww).workout);
  },[phase,restRemaining,current.id,exerciseIndex,setIndex,restStartedAt,activeExercise]);
 
  const togglePause=()=>{
@@ -1873,183 +1809,40 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  const completeGuidedSet=()=>{
    if(!activeExercise||!activeSet||!activeEx||current.pausedAt)return;
 
-   mutate(ww=>{
-     const c=structuredClone(ww);
-     const e=c.exercises.find(x=>x.exerciseId===activeExercise.exerciseId);
-     const set=e?.sets.find(x=>x.id===activeSet.id);
-     if(!e||!set)return ww;
-
-     if(set.completed){
-       set.completed=false;
-       set.timestamp=undefined;
-       c.guidedSession={
-         ...completeGuidedSession(c.guidedSession),
-         phase:'set_active',
-         exerciseIndex,
-         setIndex,
-         updatedAt:new Date().toISOString(),
-         version:(c.guidedSession?.version||1)+1
-       };
-       return c;
-     }
-
-     if(set.type!=='warmup'&&set.reps===undefined&&set.seconds===undefined)return ww;
-     if(activeEx.loadSemantics==='time'){set.seconds=Math.max(1,Number(set.seconds)||activeEx.repRange[0]);set.loadDetail=loadDetailForSet(activeEx,undefined,set.loadDetail);}
-     else set.loadDetail=loadDetailForSet(activeEx,set.weight,set.loadDetail);
-     set.completed=true;
-     set.timestamp=new Date().toISOString();
-
-     const at=new Date().toISOString();
-
-     c.guidedSession={
-       ...completeGuidedSession(c.guidedSession),
-       completedSetIds:[
-         ...(c.guidedSession?.completedSetIds||[]),
-         activeSet.id
-       ].filter((id,index,array)=>array.indexOf(id)===index),
-       phase:'feedback',
-       exerciseIndex,
-       setIndex,
-       updatedAt:at,
-       version:(c.guidedSession?.version||1)+1
-     };
-
-     return c;
-   });
-
+   mutate(ww=>completeSet(ww,exerciseIndex,setIndex));
    vibrate([12,30,12]);
  };
 
  const applyFeedback=(kind:'heavy'|'right'|'easy')=>{
    if(!activeExercise||!activeSet||!activeEx)return;
 
-   const currentLoad=
-     activeExercise.recommendedWeight??activeSet.weight;
-
-   const next=feedbackLoad(
-     activeEx,
-     currentLoad,
-     kind,
-     {reps:activeSet.reps,rir:activeSet.rir},
-     activeExercise.repRange,
-     currentRecommendation?.targetRir,
-     s.profile
-   );
-
    mutate(ww=>{
-     const c=structuredClone(ww);
-     const target=c.exercises.find(
-       x=>x.exerciseId===activeExercise.exerciseId
-     );
-     if(!target)return ww;
-
      const at=new Date().toISOString();
-     const recommendationWeight=
-       next!==undefined
-         ?snapToAvailableLoad(activeEx,next,s.profile)
-         :undefined;
-
-     const feedbackRecord={
-       ...(c.guidedSession?.setFeedback||{}),
-       [activeSet.id]:{
-         rir:activeSet.rir,
-         difficulty:(kind==='heavy'?4:kind==='easy'?2:3) as 1|2|3|4|5,
-         timestamp:at
-       }
-     };
-
-     if(recommendationWeight!==undefined){
-       target.recommendedWeight=recommendationWeight;
-       target.note=
-         `Set feedback: ${kind}. ${
-           kind==='easy'
-             ?'A small evidence-based increase is proposed.'
-             :kind==='heavy'
-               ?'A conservative reduction is proposed.'
-               :'This load strengthens the personal baseline.'
-         }`;
-
-       target.sets.forEach((z,j)=>{
-         if(
-           !z.completed&&
-           j>setIndex&&
-           z.type!=='warmup'
-         ){
-           z.weight=recommendationWeight;
-         }
-       });
-     }
-
-     c.guidedSession={
-       ...completeGuidedSession(c.guidedSession),
-       workingLoads:{
-         ...(c.guidedSession?.workingLoads||{}),
-         ...(recommendationWeight!==undefined
-           ?{[activeExercise.exerciseId]:recommendationWeight}
-           :{})
-       },
-       recommendations:{
-         ...(c.guidedSession?.recommendations||{}),
-         [activeExercise.exerciseId]:({
-           ...(c.guidedSession?.recommendations?.[activeExercise.exerciseId]||{}),
-           weight:recommendationWeight,
-           confidence:kind==='right'?'high':'medium',
-           kind:'user_adjustment',
-           reason:
-             kind==='right'
-               ?'You marked the load about right; this performance strengthens the exercise-specific baseline.'
-               :kind==='heavy'
-                 ?'You reported the load as too heavy; the next recommendation is reduced conservatively.'
-                 :'You reported the load as too easy; the next recommendation is increased conservatively.',
-           evidence:[
-             `User feedback: ${kind}`,
-             activeSet.reps!==undefined
-               ?`Actual reps: ${activeSet.reps}`
-               :'Reps not recorded',
-             activeSet.rir!==undefined
-               ?`Actual RIR: ${activeSet.rir}`
-               :'RIR not recorded',
-             `Target RIR: ${currentRecommendation?.targetRir??2}`
-           ],
-           targetRir:currentRecommendation?.targetRir??2,
-           loadSemantics:activeEx.loadSemantics,
-           incrementKg:loadAvailability(activeEx,s.profile).incrementKg,
-           generatedAt:at
-         } as any),
-       },
-       setFeedback:feedbackRecord,
-       calibration:{
-         ...(c.guidedSession?.calibration||{}),
-         [activeExercise.exerciseId]:
-           kind==='right'?'established':'calibrating'
-       },
-       phase:'rest',
+     const next=applySetFeedback(
+       ww,
+       activeEx,
        exerciseIndex,
        setIndex,
-       updatedAt:at,
-       version:(c.guidedSession?.version||1)+1
-     };
+       kind,
+       s.profile,
+       currentRecommendation?.targetRir,
+       at
+     );
 
-     Object.assign(c.guidedSession as any,{
-       workStartedAt:undefined,
-       workTargetSec:undefined,
-       restStartedAt:at,
-       restTargetSec:recommendedRest(
-         activeEx,
-         s.preferences.restPreference,
-         s.preferences.restCustomSec,
-         activeSet.rir
-       )
-     });
+     if(next===ww)return ww;
 
-     c.eventLog=[
-       ...(c.eventLog||[]),
+     const recommendationWeight=
+       next.exercises[exerciseIndex]?.sets[setIndex+1]?.weight ??
+       next.exercises[exerciseIndex]?.recommendedWeight;
+
+     next.eventLog=[
+       ...(next.eventLog||[]),
        {
          id:uid('evt'),
          type:'load_feedback',
          timestamp:at,
          payload:{
-           workoutId:c.id,
+           workoutId:next.id,
            exerciseId:activeExercise.exerciseId,
            setId:activeSet.id,
            feedback:kind,
@@ -2060,92 +1853,17 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
      ];
 
-     return c;
+     return next;
    });
  };
 
  const continueAfterRest=()=>{
    if(phase!=='rest')return;
-
-   const nextSet=activeExercise?.sets.findIndex(
-     (x,i)=>i>setIndex&&!x.completed
-   );
-
-   if(nextSet!==undefined&&nextSet>=0){
-     setGuided(
-       {phase:'set_ready',exerciseIndex,setIndex:nextSet},
-       {restStartedAt:undefined,restTargetSec:undefined}
-     );
-     return;
-   }
-
-   const nextExercise=current.exercises.findIndex((e,i)=>
-     i>exerciseIndex&&
-     e.status!=='skipped'&&
-     e.sets.some(x=>!x.completed)
-   );
-
-   if(nextExercise>=0){
-     setGuided(
-       {phase:'exercise_complete',exerciseIndex,setIndex},
-       {
-         restStartedAt:undefined,
-         restTargetSec:undefined,
-         nextExerciseIndex:nextExercise
-       }
-     );
-     return;
-   }
-
-   setGuided(
-     {phase:'complete'},
-     {restStartedAt:undefined,restTargetSec:undefined}
-   );
+   mutate(ww=>continueGuidedAfterRest(ww).workout);
  };
 
  const advanceToNextExercise=()=>{
-   const nextExercise=Number(
-     (guided.guidedSession as any)?.nextExerciseIndex
-   );
-
-   if(Number.isInteger(nextExercise)&&nextExercise>=0){
-     const nextIndex=current.exercises[nextExercise]?.sets.findIndex(
-       x=>!x.completed
-     );
-
-     if(nextIndex!==undefined&&nextIndex>=0){
-       setGuided(
-         {
-           phase:'set_ready',
-           exerciseIndex:nextExercise,
-           setIndex:nextIndex
-         },
-         {nextExerciseIndex:undefined}
-       );
-       return;
-     }
-   }
-
-   const fallback=current.exercises.findIndex((e,i)=>
-     i>exerciseIndex&&
-     e.status!=='skipped'&&
-     e.sets.some(x=>!x.completed)
-   );
-
-   if(fallback>=0){
-     const nextIndex=current.exercises[fallback].sets.findIndex(
-       x=>!x.completed
-     );
-     setGuided(
-       {phase:'set_ready',exerciseIndex:fallback,setIndex:Math.max(0,nextIndex)},
-       {nextExerciseIndex:undefined}
-     );
-   }else{
-     setGuided(
-       {phase:'complete'},
-       {nextExerciseIndex:undefined}
-     );
-   }
+   mutate(ww=>advanceGuidedToNextExercise(ww));
  };
 
  const skipRest=()=>{
@@ -2652,8 +2370,8 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
 
            <div className="active-set-hero">
              <span className="eyebrow">SET ACTIVE</span>
-             <strong>{phase6LoadDisplay(activeEx,activeSet,currentRecommendation?.weight,s.profile).primary}</strong>
-             <small>{phase6LoadDisplay(activeEx,activeSet,currentRecommendation?.weight,s.profile).secondary??(activeEx.loadSemantics==='time'?`Work ${formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}`:`Target ${activeExercise.repRange[0]}–${activeExercise.repRange[1]} reps · RIR ${targetRir}`)}</small>
+             <strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong>
+             <small>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).secondary??(activeEx.loadSemantics==='time'?`Work ${formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}`:`Target ${activeExercise.repRange[0]}–${activeExercise.repRange[1]} reps · RIR ${targetRir}`)}</small>
            </div>
 
            <SetEditor

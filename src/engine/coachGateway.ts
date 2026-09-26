@@ -34,3 +34,56 @@ export function groundedCoachAnswer(state:AppState,question:string):CoachAnswer{
   }
   return {text:'I can explain the evidence APEX currently has, but I will not invent an answer when the local record is insufficient.',facts:[`${done.length} completed sessions`,`${state.exercises.length} canonical exercises`,`${state.achievements.length} achievements`],uncertainty:'Ask about progression, RIR, recovery, goals, observations, or a specific exercise.'};
 }
+
+
+/**
+ * Headless APEX Coach Core integration.
+ * The existing groundedCoachAnswer() remains the compatibility/conversational
+ * surface; these functions expose the new deterministic coach boundary.
+ */
+import {
+  coach,
+  decide,
+  evaluateObservation,
+  applyUserOverride,
+} from '../coach';
+import type {
+  CoachAction,
+  CoachContext,
+  CoachDecision,
+  CoachDecisionRequest,
+  CoachEvidence,
+  CoachEvaluation,
+  CoachResult,
+} from '../coach';
+
+export function coachDecision(
+  context: CoachContext,
+  requestedAction?: CoachAction,
+): CoachResult {
+  return coach(context, requestedAction);
+}
+
+export function runCoachDecision(
+  request: CoachDecisionRequest,
+): CoachResult {
+  return decide(request);
+}
+
+export function evaluateCoachObservation(input: {
+  context: CoachContext;
+  decision?: CoachDecision;
+  observation: CoachEvidence[];
+  outcome?: CoachEvaluation['outcome'];
+  interpretation?: string;
+}): CoachResult {
+  return evaluateObservation(input);
+}
+
+export function overrideCoachDecision(
+  result: CoachResult,
+  action: CoachAction,
+  instruction?: string,
+): CoachResult {
+  return applyUserOverride(result, action, instruction);
+}
