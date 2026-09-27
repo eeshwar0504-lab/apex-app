@@ -1,5 +1,7 @@
-import type {AppState, Exercise, Observation, Workout} from '../core/types';
-import {volumeForWorkout, summarizeSets, comparable} from './training';
+import type {AppState, Observation, Workout} from '../core/types';
+import type {CoachContext, CoachResult} from '../coach/types';
+import {runCoachDecision} from '../coach/decisionPipeline';
+import {volumeForWorkout, summarizeSets} from './training';
 
 export type EvidenceGrade='high'|'medium'|'low';
 export interface Insight {title:string; detail:string; evidence:string[]; confidence:EvidenceGrade; kind:'fact'|'inference'|'recommendation';}
@@ -139,3 +141,110 @@ export function trainingLoadSummary(s:AppState){
   };
 }
 export function explainObservation(o:Observation){return `${o.statement} Evidence: ${o.evidence.join('; ')}. Confidence: ${o.confidence}. Purpose: ${o.purpose}.`;}
+
+/**
+ * Build the UI-independent context consumed by the APEX Coach Core.
+ *
+ * This is the bridge between persisted application state and the headless
+ * coaching pipeline. The Coach Core remains the source of truth for decisions;
+ * this module only assembles the context required to evaluate one.
+ */
+export function buildCoachContext(
+  s:AppState,
+  options:{
+    userInput?:string;
+    workoutId?:string;
+    exerciseId?:string;
+    setId?:string;
+    context?:CoachContext['context'];
+    now?:string;
+  }={}
+):CoachContext{
+  const activeWorkout=s.activeWorkoutId
+    ? s.workouts.find(w=>w.id===s.activeWorkoutId)
+    : undefined;
+
+  const workout=(
+    (options.workoutId
+      ? s.workouts.find(w=>w.id===options.workoutId)
+      : undefined)
+    || activeWorkout
+    || s.workouts.find(w=>w.status==='in_progress')
+    || s.workouts.find(w=>w.status==='planned')
+  );
+
+  const workoutExercise=
+    options.exerciseId
+      ? workout?.exercises.find(e=>e.exerciseId===options.exerciseId)
+      : workout?.exercises[0];
+
+  const exerciseId=options.exerciseId||workoutExercise?.exerciseId;
+  const exercise=exerciseId
+    ? s.exercises.find(e=>e.id===exerciseId)
+    : undefined;
+
+  const setId=options.setId
+    || workoutExercise?.sets.find(set=>!set.completed&&set.disposition!=='skipped')?.id;
+
+  const set=setId
+    ? workoutExercise?.sets.find(item=>item.id===setId)
+    : undefined;
+
+  const recentWorkoutIds=completedWorkouts(s)
+    .slice()
+    .reverse()
+    .slice(0,10)
+    .map(item=>item.id);
+
+  const recentExerciseEntryIds=exerciseId
+    ? exerciseHistory(s,exerciseId)
+        .slice()
+        .reverse()
+        .slice(0,10)
+        .map(item=>item.entry.id)
+    : [];
+
+  return {
+    state:s,
+    profile:s.profile,
+    goals:s.goals,
+    primaryGoal:s.profile?.primaryGoal,
+    planId:s.plan?.id,
+    workoutId:workout?.id,
+    workout,
+    exerciseId,
+    exercise,
+    workoutExercise,
+    setId,
+    set,
+    recentWorkoutIds,
+    recentExerciseEntryIds,
+    userInput:options.userInput,
+    context:options.context,
+    now:options.now||new Date().toISOString(),
+  };
+}
+
+/**
+ * Canonical coaching entry point for engine/UI callers.
+ *
+ * Keep coaching decisions out of React components and out of the older
+ * analytics helpers above. Every new coaching surface should call this
+ * adapter rather than implementing its own decision rules.
+ */
+export function coachDecision(
+  s:AppState,
+  options:{
+    userInput?:string;
+    workoutId?:string;
+    exerciseId?:string;
+    setId?:string;
+    context?:CoachContext['context'];
+    now?:string;
+  }={}
+):CoachResult{
+  return runCoachDecision({
+    context:buildCoachContext(s,options),
+  });
+}
+

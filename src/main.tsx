@@ -594,9 +594,9 @@ function App(){
  if(!hydrated)return <div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b><small>Restoring local training data…</small></div>;
  if(!s.onboardingComplete)return <Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/>;
  return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b></div>}
- <header className="topbar" data-apex-header><button className="brand" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="top-actions"><button className="icon-btn" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
+ <header className="topbar premium-topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="top-actions"><button className="icon-btn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
  <main className="main">
- <div className="page-transition" key={route}>
+ <div className="page-transition screen-page" data-apex-route={route} key={route}>
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
  {route==='train'&&<Train s={s} onStart={start} onNav={nav} update={update}/>}
  {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} update={update} onStart={(w)=>{update(x=>{const now=new Date().toISOString();const prepared=hydrateWorkoutRecommendations(ensureGuidedSession({...w,status:'in_progress',startedAt:w.startedAt||now,updatedAt:now}),x);return {...x,activeWorkoutId:w.id,activeRoute:'workout',workouts:x.workouts.map(q=>q.id===w.id?{...q,...prepared}:q)}});nav('workout')}} onBack={()=>nav('train')}/>}
@@ -614,7 +614,7 @@ function App(){
  {route==='templates'&&<Templates s={s} update={update} onStart={start}/>}
  </div>
  </main>
- <nav className="bottom"><NavItem active={route==='home'} icon="home" label="Home" click={()=>nav('home')}/><NavItem active={route==='train'||route==='workout'} icon="train" label="Train" click={()=>nav(active?'workout':'train')}/><NavItem active={['progress','history','goals'].includes(route)||route.startsWith('session:')} icon="chart" label="Progress" click={()=>nav('progress')}/><NavItem active={route==='you'} icon="user" label="You" click={()=>nav('you')}/></nav>
+ <nav className="bottom premium-bottom-nav"><NavItem active={route==='home'} icon="home" label="Home" click={()=>nav('home')}/><NavItem active={route==='train'||route==='workout'} icon="train" label="Train" click={()=>nav(active?'workout':'train')}/><NavItem active={['progress','history','goals'].includes(route)||route.startsWith('session:')} icon="chart" label="Progress" click={()=>nav('progress')}/><NavItem active={route==='you'} icon="user" label="You" click={()=>nav('you')}/></nav>
  {sheet==='command'&&<Command nav={nav} setQuery={setQuery} close={()=>setSheet(null)}/>}
  {sheet?.startsWith('exercise:')&&(()=>{const ex=s.exercises.find(e=>e.id===sheet.slice(9));return ex?<ExerciseSheet ex={ex} s={s} close={()=>setSheet(null)} onAlternative={id=>setSheet('exercise:'+id)} onUse={()=>{setSheet(null);nav('train')}}/>:<Modal title="Exercise unavailable" close={()=>setSheet(null)}><p className="modal-copy">This exercise is no longer available in the current local knowledge set.</p></Modal>})()}
  </div>
@@ -785,6 +785,8 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
 
   return (
     <div className="onboarding">
+
+      <div className="onboard-progress-meta"><span>SETUP</span><strong>{String(step+1).padStart(2,'0')} / 05</strong></div>
 
       <div className="onboard-brand">
         <img
@@ -1108,26 +1110,178 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
 }
 
 function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Workout)=>void}){
- const active=s.workouts.find(w=>w.status==='in_progress'),todayW=s.workouts.find(w=>w.scheduledDate===today()&&['planned','rescheduled'].includes(w.status)),goal=s.goals.find(g=>g.status==='active'),read=readiness(s),ins=homeInsights(s);
- return <><section className="hero editorial"><span className="eyebrow">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</span><h1>{active?'Your workout is waiting.':todayW?todayW.name:'Build the habit, then build the load.'}</h1><p>{active?'Resume exactly where you stopped.':todayW?`${todayW.exercises.length} movements · adaptive prescription · your pace.`:'APEX starts with evidence, not assumptions.'}</p>{active?<button className="button primary" onClick={()=>onStart(active)}><Icon name="play"/> Resume workout</button>:todayW?<button className="button primary" onClick={()=>onStart(todayW)}><Icon name="play"/> Start {todayW.name}</button>:<button className="button secondary" onClick={()=>onNav('train')}>View training <Icon name="chev"/></button>}</section>
- <section className="section"><div className="metric-strip"><Metric label="Sessions" value={String(s.workouts.filter(w=>w.status==='completed').length)} sub="completed"/><Metric label="Readiness" value={read.label} sub={read.level}/><Metric label="Goal" value={goal?.title?.split(' ').slice(-1)[0]||'—'} sub="active"/></div></section>
- <section className="section"><div className="section-head"><div><span className="eyebrow">NOW</span><h2>Useful context.</h2></div></div><div className="insight-stack">{ins.map((x,i)=><article className="insight" key={i}><div><span className={`badge ${x.kind}`}>{x.kind}</span><h3>{x.title}</h3><p>{x.detail}</p><small>{x.evidence.join(' · ')}</small></div></article>)}</div></section>
- <section className="section quick-grid"><button className="quick" onClick={()=>onNav('progress')}><Icon name="chart"/><span><strong>Progress</strong><small>Strength, volume and evidence</small></span><Icon name="chev"/></button><button className="quick" onClick={()=>onNav('plan')}><Icon name="target"/><span><strong>Plan Studio</strong><small>Edit future training</small></span><Icon name="chev"/></button><button className="quick" onClick={()=>onNav('library')}><Icon name="search"/><span><strong>Exercise Library</strong><small>Find a movement</small></span><Icon name="chev"/></button><button className="quick" onClick={()=>onNav('coach')}><Icon name="bolt"/><span><strong>Coach</strong><small>Explain the evidence</small></span><Icon name="chev"/></button></section></>
+ const active=s.workouts.find(w=>w.status==='in_progress');
+ const todayW=s.workouts.find(w=>w.scheduledDate===today()&&['planned','rescheduled'].includes(w.status));
+ const goal=s.goals.find(g=>g.status==='active');
+ const read=readiness(s);
+ const ins=homeInsights(s);
+ const completed=s.workouts.filter(w=>w.status==='completed').length;
+ const recentCompleted=s.workouts.filter(w=>w.status==='completed').sort((a,b)=>String(b.completedAt||b.updatedAt||'').localeCompare(String(a.completedAt||a.updatedAt||''))).slice(0,3);
+ const focus=active||todayW;
+ const focusExercise=focus?.exercises?.find(x=>x.sets?.some(set=>!set.completed));
+ const focusExerciseData=focusExercise?s.exercises.find(e=>e.id===focusExercise.exerciseId):undefined;
+ const focusSet=focusExercise?.sets?.find(set=>!set.completed);
+ const gp=goal?goalProgress(s,goal):undefined;
+ const load=trainingLoadSummary(s);
+ const coachContext={
+   state:s,
+   profile:s.profile,
+   goals:s.goals,
+   primaryGoal:s.profile?.primaryGoal,
+   planId:s.plan?.id,
+   workoutId:focus?.id,
+   workout:focus,
+   exerciseId:focusExerciseData?.id,
+   exercise:focusExerciseData,
+   workoutExercise:focusExercise,
+   setId:focusSet?.id,
+   set:focusSet,
+   recentWorkoutIds:recentCompleted.map(w=>w.id),
+   recentExerciseEntryIds:[],
+   now:new Date().toISOString()
+ };
+ const coachResult=coach(coachContext);
+ const coachDecision=coachResult.decision;
+ return <div className="home-screen">
+   <section className="hero editorial">
+     <span className="eyebrow">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</span>
+     <h1>{active?'Continue where you left off.':todayW?todayW.name:'Build the habit, then build the load.'}</h1>
+     <p>{active?'Your session is still active. APEX keeps the completed work intact and resumes from the next useful action.':todayW?`${todayW.exercises.length} movements · adaptive prescription · one session at a time.`:'No assumptions. Start with the plan, collect useful evidence, and let the coach adapt from reality.'}</p>
+     {active?<button className="button primary" onClick={()=>onStart(active)}><Icon name="play"/> Resume workout</button>:todayW?<button className="button primary" onClick={()=>onStart(todayW)}><Icon name="play"/> Start {todayW.name}</button>:<button className="button secondary" onClick={()=>onNav('train')}>View training <Icon name="chev"/></button>}
+   </section>
+
+   <section className="section">
+     <div className="metric-strip">
+       <Metric label="Sessions" value={String(completed)} sub="completed"/>
+       <Metric label="Readiness" value={read.label} sub={read.level}/>
+       <Metric label="Goal" value={goal?.title?.split(' ').slice(-1)[0]||'—'} sub="active"/>
+       <Metric label="Sets" value={String(load.workingSets30||0)} sub="last 30 days"/>
+     </div>
+   </section>
+
+   <section className="section">
+     <div className="section-head">
+       <div><span className="eyebrow">COACH / NOW</span><h2>Your next useful action.</h2></div>
+       <button className="mini-btn" onClick={()=>onNav('coach')}>Open Coach</button>
+     </div>
+     <article className="callout">
+       <Icon name="bolt"/>
+       <div>
+         <span className="badge">{coachDecision.action}</span>
+         <strong>{focusExerciseData?.name||coachDecision.prescription?.instruction||'APEX is ready.'}</strong>
+         <p>{focusExerciseData&&focusSet?`${focusSet.type||'Working set'} · ${focusSet.reps||'—'} reps · ${focusSet.load??'—'} ${focusSet.load!==undefined?'load':''}`:coachResult.explanation}</p>
+         <small>{coachDecision.confidence?`Confidence: ${coachDecision.confidence}`:'Decision grounded in current training context.'}</small>
+       </div>
+     </article>
+   </section>
+
+   <section className="section">
+     <div className="section-head">
+       <div><span className="eyebrow">TODAY</span><h2>Session at a glance.</h2></div>
+     </div>
+     {focus?<div className="timeline">
+       <button className="timeline-row" onClick={()=>onStart(focus)}>
+         <span className="timeline-dot">{active?'NOW':'NEXT'}</span>
+         <span><strong>{focus.name}</strong><small>{focus.exercises.length} exercises · {focus.status} · {focus.scheduledDate}</small></span>
+         <Icon name="chev"/>
+       </button>
+       {focusExerciseData&&<div className="timeline-row">
+         <span className="timeline-dot">01</span>
+         <span><strong>{focusExerciseData.name}</strong><small>{focusSet?`${focusSet.reps||'—'} reps · ${focusSet.load??'—'} load`:'Exercise complete'}</small></span>
+       </div>}
+     </div>:<Empty title="No session today" text="Your next scheduled session will appear here."/>}
+   </section>
+
+   {goal&&<section className="section">
+     <div className="section-head">
+       <div><span className="eyebrow">GOAL</span><h2>{goal.title}</h2></div>
+       <button className="mini-btn" onClick={()=>onNav('goals')}>Details</button>
+     </div>
+     <article className="goal-card">
+       <div className="goal-ring">{gp?.percent===null||gp?.percent===undefined?'—':`${gp.percent}%`}</div>
+       <div><p>{goal.target?`${goal.target.label}: ${goal.target.value} ${goal.target.unit}`:'No numeric target yet.'}{goal.targetDate?` · by ${goal.targetDate}`:''}</p>{gp?.percent!==null&&gp?.percent!==undefined&&<div className="progress-track"><i style={{width:`${Math.max(0,Math.min(100,gp.percent))}%`}}/></div>}<small>{gp?.status||'Active goal'}</small></div>
+     </article>
+   </section>}
+
+   <section className="section">
+     <div className="section-head"><div><span className="eyebrow">SIGNALS</span><h2>Useful context.</h2></div></div>
+     <div className="insight-stack">{ins.slice(0,3).map((x,i)=><article className="insight" key={i}><div><span className={`badge ${x.kind}`}>{x.kind}</span><h3>{x.title}</h3><p>{x.detail}</p><small>{x.evidence.join(' · ')}</small></div></article>)}</div>
+   </section>
+
+   <section className="section quick-grid">
+     <button className="quick" onClick={()=>onNav('progress')}><Icon name="chart"/><span><strong>Progress</strong><small>Strength, volume and evidence</small></span><Icon name="chev"/></button>
+     <button className="quick" onClick={()=>onNav('plan')}><Icon name="target"/><span><strong>Plan Studio</strong><small>Shape future training</small></span><Icon name="chev"/></button>
+     <button className="quick" onClick={()=>onNav('library')}><Icon name="search"/><span><strong>Exercise Library</strong><small>Find and understand movements</small></span><Icon name="chev"/></button>
+     <button className="quick" onClick={()=>onNav('coach')}><Icon name="bolt"/><span><strong>Coach</strong><small>Ask what to do next</small></span><Icon name="chev"/></button>
+   </section>
+ </div>
 }
 function Train({s,onStart,onNav,update}:{s:AppState;onStart:(w:Workout)=>void;onNav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const upcoming=s.workouts.filter(w=>w.status==='planned'||w.status==='rescheduled').sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate));
  const extra=s.workouts.filter(w=>w.source==='extra');
+ const todayWorkout=upcoming.find(w=>w.scheduledDate===today());
+ const nextWorkout=upcoming[0];
  const [reschedule,setReschedule]=useState<Workout|null>(null),[date,setDate]=useState(today());
  const createExtra=()=>{const ids=s.exercises.slice(0,5).map(e=>e.id);const w=createCustomWorkout('Extra Session',today(),ids,s.exercises);w.source='extra';w.status='planned';update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'extra_workout_created',timestamp:new Date().toISOString(),payload:{workoutId:w.id}}]}));onStart(w)};
  const commitReschedule=()=>{if(!reschedule||!date)return;const pair=rescheduleWorkoutWithEvent(reschedule,date);update(x=>({...x,workouts:x.workouts.map(w=>w.id===pair.original.id?pair.original:w).concat(pair.replacement),eventLog:[...(x.eventLog||[]),pair.event]}));setReschedule(null);};
- return <><PageTitle eyebrow="TRAIN" title="Your training floor." sub="Scheduled work, flexible sessions and quick access to the movement library."/>
- <div className="command-row"><button className="button primary" onClick={createExtra}><Icon name="plus"/> Quick extra workout</button><button className="button secondary" onClick={()=>onNav('templates')}>Templates</button><button className="button secondary" onClick={()=>onNav('plan')}>Plan Studio</button></div>
- <section className="section"><div className="section-head"><div><span className="eyebrow">UP NEXT</span><h2>Scheduled sessions.</h2></div></div><div className="timeline">{upcoming.slice(0,6).map(w=><div className="timeline-row" key={w.id}><span className="timeline-dot">{w.scheduledDate===today()?'NOW':w.scheduledDate.slice(5)}</span><button className="timeline-main" onClick={()=>onStart(w)}><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.source} · v{w.version}</small></button><button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button><button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button></div>)}{!upcoming.length&&<Empty title="No scheduled session" text="Use Plan Studio or create a custom workout."/>}</div></section>
- <section className="section"><div className="callout"><Icon name="bolt"/><div><strong>Flexible training</strong><p>Missed sessions become explicit history. Rescheduling creates a new event and keeps the original record visible.</p></div></div></section>
- {extra.length>0&&<section className="section"><div className="section-head"><div><span className="eyebrow">EXTRA</span><h2>Unscheduled work.</h2></div></div><div className="timeline">{extra.slice(-4).reverse().map(w=><button className="timeline-row" key={w.id} onClick={()=>onStart(w)}><span className="timeline-dot">+</span><span><strong>{w.name}</strong><small>{w.scheduledDate} · {w.status}</small></span><Icon name="chev"/></button>)}</div></section>}
- {reschedule&&<Modal title="Reschedule session" close={()=>setReschedule(null)}><p className="modal-copy">The original session stays in history as rescheduled. The new date becomes a separate scheduled event.</p><label>New date<input type="date" value={date} min={today()} onChange={e=>setDate(e.target.value)}/></label><button className="button primary wide" onClick={commitReschedule}>Confirm new date</button></Modal>}
- </>}
+ const exerciseCount=nextWorkout?.exercises.length||0;
+ return <div className="train-screen">
+  <PageTitle eyebrow="TRAIN" title="Train with intent." sub="Your next session, your current plan, and the actions that keep training moving forward."/>
 
+  <section className="section" style={{paddingTop:0}}>
+   <div className="callout" style={{display:'grid',gridTemplateColumns:'1fr auto',gap:24,alignItems:'center',padding:'24px 26px'}}>
+    <div>
+     <span className="eyebrow">{todayWorkout?'TODAY':'NEXT SESSION'}</span>
+     <h2 style={{margin:'6px 0 6px'}}>{todayWorkout?.name||nextWorkout?.name||'No session scheduled'}</h2>
+     <p style={{margin:0}}>{todayWorkout?`${exerciseCount} exercises ready. Start when you are ready.`:nextWorkout?`${nextWorkout.scheduledDate} · ${exerciseCount} exercises · ${nextWorkout.source}`:'Build your next session in Plan Studio or start a custom workout.'}</p>
+    </div>
+    <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'flex-end'}}>
+     {todayWorkout&&<button className="button primary" onClick={()=>onStart(todayWorkout)}><Icon name="play"/> Start session</button>}
+     {!todayWorkout&&nextWorkout&&<button className="button primary" onClick={()=>onStart(nextWorkout)}><Icon name="play"/> Preview next</button>}
+     <button className="button secondary" onClick={createExtra}><Icon name="plus"/> Quick session</button>
+    </div>
+   </div>
+  </section>
+
+  <div className="command-row">
+   <button className="button secondary" onClick={()=>onNav('plan')}><Icon name="calendar"/> Plan Studio</button>
+   <button className="button secondary" onClick={()=>onNav('templates')}>Templates</button>
+   <button className="button secondary" onClick={()=>onNav('library')}>Exercise Library</button>
+  </div>
+
+  <section className="section">
+   <div className="section-head"><div><span className="eyebrow">TRAINING QUEUE</span><h2>What is coming up.</h2></div><small>{upcoming.length} planned</small></div>
+   <div className="timeline">
+    {upcoming.slice(0,7).map((w,i)=><div className="timeline-row" key={w.id} style={{alignItems:'center'}}>
+     <span className="timeline-dot" style={{minWidth:58}}>{w.scheduledDate===today()?'NOW':i===0?'NEXT':w.scheduledDate.slice(5)}</span>
+     <button className="timeline-main" onClick={()=>onStart(w)} style={{textAlign:'left'}}>
+      <strong>{w.name}</strong>
+      <small>{w.exercises.length} exercises · {w.source} · v{w.version}{w.status==='rescheduled'?' · rescheduled':''}</small>
+     </button>
+     <button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button>
+     <button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button>
+    </div>)}
+    {!upcoming.length&&<Empty title="No scheduled session" text="Use Plan Studio to build your next training block, or start a custom session."/>}
+   </div>
+  </section>
+
+  <section className="section">
+   <div className="section-head"><div><span className="eyebrow">SESSION PRINCIPLES</span><h2>Train from the plan. Adapt from reality.</h2></div></div>
+   <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>
+    <div className="detail-card"><span className="eyebrow">01</span><strong>Start</strong><p>Open the planned session and follow the current prescription.</p></div>
+    <div className="detail-card"><span className="eyebrow">02</span><strong>Observe</strong><p>Log what actually happened: load, reps, effort and interruptions.</p></div>
+    <div className="detail-card"><span className="eyebrow">03</span><strong>Adapt</strong><p>APEX can change future work without rewriting completed history.</p></div>
+   </div>
+  </section>
+
+  {extra.length>0&&<section className="section">
+   <div className="section-head"><div><span className="eyebrow">EXTRA WORK</span><h2>Unscheduled sessions.</h2></div><small>{extra.length} recorded</small></div>
+   <div className="timeline">{extra.slice(-4).reverse().map(w=><button className="timeline-row" key={w.id} onClick={()=>onStart(w)} style={{width:'100%',textAlign:'left'}}><span className="timeline-dot">+</span><span style={{flex:1}}><strong>{w.name}</strong><small>{w.scheduledDate} · {w.status}</small></span><Icon name="chev"/></button>)}</div>
+  </section>}
+
+  {reschedule&&<Modal title="Reschedule session" close={()=>setReschedule(null)}><p className="modal-copy">The original session stays in history as rescheduled. The new date becomes a separate scheduled event.</p><label>New date<input type="date" value={date} min={today()} onChange={e=>setDate(e.target.value)}/></label><button className="button primary wide" onClick={commitReschedule}>Confirm new date</button></Modal>}
+ </div>
+}
 function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(w:Workout)=>void;onBack:()=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const source=s.workouts.find(x=>x.id===id);
  const read=readiness(s);
@@ -3152,8 +3306,33 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
  };
 
  if(focused){
-   return <div className={`set-editor focused-set-editor ${set.completed?'done':''}`}>
-     <div className="focused-set-fields">
+   return <div className={`set-editor focused-set-editor premium-set-editor ${set.completed?'done':''}`}>
+     <div className="set-log-header">
+       <div>
+         <span className="eyebrow">SET {String(index+1).padStart(2,'0')}</span>
+         <strong>{set.completed?'SET SAVED':'READY TO LOG'}</strong>
+       </div>
+       <span className="set-log-status">{set.completed?'COMPLETE':'ACTIVE'}</span>
+     </div>
+
+     <div className="set-log-target">
+       <div>
+         <small>TARGET</small>
+         <strong>{timed ? `${ex.repRange[0]}–${ex.repRange[1]} sec` : `${ex.repRange[0]}–${ex.repRange[1]} reps`}</strong>
+       </div>
+       <div>
+         <small>RIR</small>
+         <strong>{targetRir}</strong>
+       </div>
+       <div>
+         <small>LOAD</small>
+         <strong>{displayLoad}</strong>
+       </div>
+     </div>
+
+     <div className="set-log-grid">
+       <div className="set-log-section-label">ACTUAL PERFORMANCE</div>
+       <div className="focused-set-fields">
 
        {loadable&&
          <div className="focused-control">
@@ -3310,10 +3489,16 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
          />
        </div>
      </div>
+     </div>
+
+     <div className="set-log-helper">
+       <span>Log what actually happened.</span>
+       <small>Prescription stays separate from your recorded performance.</small>
+     </div>
 
      <div className="focused-set-actions">
        <button
-         className={`complete-set focused-complete-button ${set.completed?'completed':''}`}
+         className={`complete-set focused-complete-button premium-complete-button ${set.completed?'completed':''}`}
          onClick={onComplete}
          aria-label={set.completed?'Undo set':'Complete set'}
        >
@@ -3325,6 +3510,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
      </div>
 
      <div className="set-secondary-actions">
+       <span className="set-secondary-label">SET OPTIONS</span>
        <select
          value={set.type}
          onChange={e=>
@@ -3500,8 +3686,8 @@ function SessionReview({s,id,onNav,update}:{s:AppState;id:string;onNav:(r:string
  const a=sessionAssessment(w,s.exercises,s.workouts.filter(x=>x.status==='completed'&&x.id!==w.id));
  const saveFeel=()=>{if(!feel)return;const text=`Session feel: ${feel}.`;const already=s.journal.some(j=>j.scope==='workout'&&j.refId===w.id&&j.text===text);if(!already) {const next={id:uid('journal'),date:today(),scope:'workout' as const,refId:w.id,text,tags:['session-feedback']};update(x=>({...x,journal:[...x.journal,next],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'session_feedback',timestamp:new Date().toISOString(),payload:{workoutId:w.id,feel}}]}));}onNav('home')};
  return <><PageTitle eyebrow="SESSION COMPLETE" title={w.name} sub={`${a.completedSets} completed sets · ${Math.round(a.volume).toLocaleString()} kg·reps · ${a.skipped} skipped`}/>
- <div className="metric-strip"><Metric label="Completion" value={`${Math.round(a.completion*100)}%`} sub={`${a.completedSets}/${a.plannedSets} sets`}/><Metric label="Volume" value={a.volume?Math.round(a.volume).toLocaleString():'—'} sub="kg·reps"/><Metric label="Achievements" value={String(a.achievements.length)} sub="this session"/></div>
- <section className="section"><div className="section-head"><div><span className="eyebrow">SESSION FEEDBACK</span><h2>How did the session feel?</h2><p>One lightweight signal helps APEX interpret performance without pretending to measure physiology.</p></div></div><div className="choice-grid feedback">{[['easy','Too easy'],['right','About right'],['hard','Hard but productive'],['rough','Rough / unusually difficult']].map(([id,label])=><button className={feel===id?'selected':''} key={id} onClick={()=>setFeel(id as any)}><strong>{label}</strong><small>{feel===id?'Selected':'Optional'}</small></button>)}</div></section>
+ <div className="session-review-metrics metric-strip"><Metric label="Completion" value={`${Math.round(a.completion*100)}%`} sub={`${a.completedSets}/${a.plannedSets} sets`}/><Metric label="Volume" value={a.volume?Math.round(a.volume).toLocaleString():'—'} sub="kg·reps"/><Metric label="Achievements" value={String(a.achievements.length)} sub="this session"/></div>
+ <section className="section session-feedback-panel"><div className="section-head"><div><span className="eyebrow">SESSION FEEDBACK</span><h2>How did the session feel?</h2><p>One lightweight signal helps APEX interpret performance without pretending to measure physiology.</p></div></div><div className="choice-grid feedback">{[['easy','Too easy'],['right','About right'],['hard','Hard but productive'],['rough','Rough / unusually difficult']].map(([id,label])=><button className={feel===id?'selected':''} key={id} onClick={()=>setFeel(id as any)}><strong>{label}</strong><small>{feel===id?'Selected':'Optional'}</small></button>)}</div></section>
  <section className="section"><div className="list-card">{a.achievements.map((x,i)=><ListRow key={i} title={x.label} sub={x.unit} icon="bolt" click={()=>{}}/>)}{!a.achievements.length&&<Empty title="No new achievement" text="A normal session is still useful evidence."/>}</div></section>
  <section className="section"><div className="callout"><Icon name="bolt"/><div><strong>Next step</strong><p>Keep the current structure unless new evidence supports a meaningful change. APEX adapts future prescription from actual performance, context and your feedback.</p></div></div></section>
  <button className="button primary wide" disabled={!feel} onClick={saveFeel}>{feel?'Save feedback & return home':'Select how it felt'}</button></>}
@@ -3516,7 +3702,7 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const top=s.achievements.slice(-5).reverse();
  const activeGoals=s.goals.filter(g=>g.status==='active');
  const loadSummary=trainingLoadSummary(s); return <><PageTitle eyebrow="PROGRESS" title="What is changing?" sub="Drill from the whole training record into muscle exposure and individual exercise evidence. APEX separates measured facts from interpretation."/>
- <div className="metric-strip"><Metric label="Sessions" value={String(done.length)} sub="completed"/><Metric label="Volume" value={total?Math.round(total).toLocaleString():'—'} sub="kg·reps"/><Metric label="PRs" value={String(s.achievements.length)} sub="achievements"/></div><section className="section"><div className="section-head"><div><span className="eyebrow">LONGITUDINAL SIGNALS</span><h2>Consistency and trend.</h2></div></div>{(()=>{const c=consistencySummary(s),trend=volumeTrend(s),plateaus=plateauCandidates(s);return <><div className="metric-strip"><Metric label="30-day adherence" value={`${c.rate}%`} sub={`${c.completed}/${c.planned||'—'} scheduled`}/><Metric label="Training streak" value={String(c.streak)} sub="recent sessions"/><Metric label="Trend points" value={String(trend.length)} sub="last 8 sessions"/></div>{trend.length>1&&<div className="trend-list" aria-label="Recent training volume trend">{trend.map((x,i)=><div className="trend-row" key={`${x.date}-${i}`}><span>{x.date}</span><i><b style={{width:`${Math.max(4,Math.min(100,(x.volume/Math.max(...trend.map(t=>t.volume),1))*100))}%`}}/></i><strong>{x.volume.toLocaleString()}</strong></div>)}</div>}{plateaus.length>0&&<div className="callout"><Icon name="clock"/><div><strong>Potential plateau signals</strong><p>{plateaus.map(p=>p.exerciseName).join(', ')}. APEX flags these for review; it does not automatically change the plan.</p></div></div>}</>})()}</section><section className="section"><div className="section-head"><div><span className="eyebrow">TRAINING INTERPRETATION</span><h2>Evidence before conclusions.</h2></div></div>{(()=>{const m=goalMomentum(s),b=trainingBalance(s);return <><div className="metric-strip"><Metric label="Momentum" value={m.direction==='insufficient'?'—':m.direction==='up'?'↑':m.direction==='down'?'↓':'→'} sub={m.direction==='insufficient'?'more data needed':`${m.changePct>=0?'+':''}${m.changePct}% volume`}/><Metric label="Highest exposure" value={b.highest?String(b.highest[1]):'—'} sub={b.highest?b.highest[0]:'working sets'}/><Metric label="Exposure spread" value={b.spread?String(b.spread):'—'} sub="sets between highest / lowest"/></div><p className="muted load-note">{m.detail}{b.highest&&b.lowest?` Highest recent primary-muscle exposure: ${b.highest[0]} (${b.highest[1]} sets); lowest: ${b.lowest[0]} (${b.lowest[1]}). This is exposure context, not a diagnosis.`:''}</p></>})()}</section><section className="section"><div className="section-head"><div><span className="eyebrow">TRAINING LOAD</span><h2>Recent workload context.</h2></div></div><div className="metric-strip"><Metric label="30-day sessions" value={String(loadSummary.consistency30)} sub="completed"/><Metric label="Working sets" value={String(loadSummary.workingSets30)} sub="last 30 days"/><Metric label="4-session avg" value={loadSummary.recentAverageVolume?Math.round(loadSummary.recentAverageVolume).toLocaleString():'—'} sub="kg·reps"/></div>{loadSummary.priorAverageVolume>0&&<p className="muted load-note">Recent 4-session average volume is {Math.round(loadSummary.recentAverageVolume).toLocaleString()} kg·reps versus {Math.round(loadSummary.priorAverageVolume).toLocaleString()} previously. This is context, not a readiness score.</p>}</section>
+ <div className="progress-overview metric-strip"><Metric label="Sessions" value={String(done.length)} sub="completed"/><Metric label="Volume" value={total?Math.round(total).toLocaleString():'—'} sub="kg·reps"/><Metric label="PRs" value={String(s.achievements.length)} sub="achievements"/></div><section className="section"><div className="section-head"><div><span className="eyebrow">LONGITUDINAL SIGNALS</span><h2>Consistency and trend.</h2></div></div>{(()=>{const c=consistencySummary(s),trend=volumeTrend(s),plateaus=plateauCandidates(s);return <><div className="metric-strip"><Metric label="30-day adherence" value={`${c.rate}%`} sub={`${c.completed}/${c.planned||'—'} scheduled`}/><Metric label="Training streak" value={String(c.streak)} sub="recent sessions"/><Metric label="Trend points" value={String(trend.length)} sub="last 8 sessions"/></div>{trend.length>1&&<div className="trend-list" aria-label="Recent training volume trend">{trend.map((x,i)=><div className="trend-row" key={`${x.date}-${i}`}><span>{x.date}</span><i><b style={{width:`${Math.max(4,Math.min(100,(x.volume/Math.max(...trend.map(t=>t.volume),1))*100))}%`}}/></i><strong>{x.volume.toLocaleString()}</strong></div>)}</div>}{plateaus.length>0&&<div className="callout"><Icon name="clock"/><div><strong>Potential plateau signals</strong><p>{plateaus.map(p=>p.exerciseName).join(', ')}. APEX flags these for review; it does not automatically change the plan.</p></div></div>}</>})()}</section><section className="section"><div className="section-head"><div><span className="eyebrow">TRAINING INTERPRETATION</span><h2>Evidence before conclusions.</h2></div></div>{(()=>{const m=goalMomentum(s),b=trainingBalance(s);return <><div className="metric-strip"><Metric label="Momentum" value={m.direction==='insufficient'?'—':m.direction==='up'?'↑':m.direction==='down'?'↓':'→'} sub={m.direction==='insufficient'?'more data needed':`${m.changePct>=0?'+':''}${m.changePct}% volume`}/><Metric label="Highest exposure" value={b.highest?String(b.highest[1]):'—'} sub={b.highest?b.highest[0]:'working sets'}/><Metric label="Exposure spread" value={b.spread?String(b.spread):'—'} sub="sets between highest / lowest"/></div><p className="muted load-note">{m.detail}{b.highest&&b.lowest?` Highest recent primary-muscle exposure: ${b.highest[0]} (${b.highest[1]} sets); lowest: ${b.lowest[0]} (${b.lowest[1]}). This is exposure context, not a diagnosis.`:''}</p></>})()}</section><section className="section"><div className="section-head"><div><span className="eyebrow">TRAINING LOAD</span><h2>Recent workload context.</h2></div></div><div className="metric-strip"><Metric label="30-day sessions" value={String(loadSummary.consistency30)} sub="completed"/><Metric label="Working sets" value={String(loadSummary.workingSets30)} sub="last 30 days"/><Metric label="4-session avg" value={loadSummary.recentAverageVolume?Math.round(loadSummary.recentAverageVolume).toLocaleString():'—'} sub="kg·reps"/></div>{loadSummary.priorAverageVolume>0&&<p className="muted load-note">Recent 4-session average volume is {Math.round(loadSummary.recentAverageVolume).toLocaleString()} kg·reps versus {Math.round(loadSummary.priorAverageVolume).toLocaleString()} previously. This is context, not a readiness score.</p>}</section>
  {activeGoals.length>0&&<section className="section"><div className="section-head"><div><span className="eyebrow">GOAL TRACKING</span><h2>Progress toward what you chose.</h2></div></div><div className="goal-stack">{activeGoals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <article className="goal-card" key={g.id}><div className="goal-ring">{gp.percent===null?'—':`${gp.percent}%`}</div><div><span className="eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="progress-track"><i style={{width:`${gp.percent}%`}}/></div>} {ms.length>0&&<div className="milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}</div></article>})}</div></section>}
  <section className="section"><div className="section-head"><div><span className="eyebrow">EXERCISE TREND</span><h2>Performance, not vanity metrics.</h2></div></div>{selected?<><label>Exercise<select value={selected.id} onChange={e=>setExerciseId(e.target.value)}>{exerciseOptions.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select></label><div className="history-list">{history.map(({w,e})=>{const doneSets=e.sets.filter(x=>x.completed&&x.type!=='warmup');const best=Math.max(0,...doneSets.map(x=>x.weight||x.assistance||0));const reps=Math.max(0,...doneSets.map(x=>x.reps||0));return <div className="history-item static" key={w.id}><div><span className="eyebrow">{w.scheduledDate}</span><strong>{best?formatLoad(selected,best):'Bodyweight / time'}</strong><small>{doneSets.length} working sets · best {reps||'—'} reps{doneSets.some(x=>x.rir!==undefined)?` · RIR ${((doneSets.map(x=>x.rir).filter((x):x is number=>x!==undefined).reduce((a,b)=>a+b,0))/(doneSets.filter(x=>x.rir!==undefined).length||1)).toFixed(1)}`:''}</small></div></div>})}</div></>:<Empty title="Complete an exercise first" text="Exercise-level trends appear after APEX has comparable performance evidence."/>}</section>
  <section className="section"><div className="section-head"><div><span className="eyebrow">MUSCLE EXPOSURE</span><h2>Recent working sets.</h2></div></div><div className="bars">{muscle.map(([m,v])=><div className="bar-row" key={m}><span>{m}</span><i><b style={{width:`${Math.min(100,v*8)}%`}}/></i><strong>{v}</strong></div>)}{!muscle.length&&<Empty title="No performance data yet" text="Complete a workout and APEX will build the evidence layer."/>}</div></section>
@@ -3537,7 +3723,7 @@ function Library({s,query,setQuery,onExercise}:{s:AppState;query:string;setQuery
  const equipmentLabel=available.length?`${available.length} equipment types available`:'Equipment not set'; const report=knowledgeReport(s);
  return <><PageTitle eyebrow="EXERCISE LIBRARY" title="Find a movement." sub="Canonical identity, aliases, equipment, load semantics and alternatives."/>
  <div className="search"><Icon name="search"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Chest press, row, squat…"/></div>
- <div className="chip-row">{['','horizontal_push','horizontal_pull','vertical_pull','squat','hinge','core','arm_flexion'].map(x=><button className="chip" key={x||'all'} onClick={()=>setQuery(x)}>{x?x.replace('_',' '):'all'}</button>)}</div>
+ <div className="library-filters chip-row">{['','horizontal_push','horizontal_pull','vertical_pull','squat','hinge','core','arm_flexion'].map(x=><button className="chip" key={x||'all'} onClick={()=>setQuery(x)}>{x?x.replace('_',' '):'all'}</button>)}</div>
  <div className="library-toolbar"><span className="muted">{filtered.length} movements · {equipmentLabel}</span><span className="muted">Knowledge {report.healthy?'validated':`${report.errors} issues`}</span><label className="toggle-row compact-toggle"><span>Available equipment first</span><input type="checkbox" checked={equipmentOnly} onChange={e=>setEquipmentOnly(e.target.checked)}/></label></div>
  <div className="library-grid">{filtered.map(e=>{const fit=equipmentFit(e,available);return <button className="exercise-tile" key={e.id} onClick={()=>onExercise(e.id)}><span className="tile-tag">{e.loadSemantics.replace('_',' ')}</span><strong>{e.name}</strong><small>{e.primaryMuscles.join(' · ')}</small><span>{e.repRange[0]}–{e.repRange[1]} · {e.equipment.join(', ')}</span>{available.length>0&&<em className={`fit-${fit}`}>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm for today':'Not in setup'}</em>}</button>})}</div></>
 }
@@ -3595,7 +3781,7 @@ const currentSet=currentExercise?.sets?.find(set=>!set.completed);    return {
     setQ('');
   };
 
-  return <><PageTitle eyebrow="APEX COACH" title="Train with a coach." sub="The Coach Core now makes the training decision. APEX separates evidence, confidence, prescription and user choice instead of treating the chat layer as the coach."/><div className="coach-box"><div className="messages">{messages.map((m,i)=><div className={`message ${m.from}`} key={i} style={{whiteSpace:'pre-wrap'}}>{m.text}</div>)}</div><div className="coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask APEX Coach…"/><button aria-label="Ask APEX Coach" onClick={ask}><Icon name="bolt"/></button></div></div></>}
+  return <div className="coach-screen"><PageTitle eyebrow="APEX COACH" title="Train with a coach." sub="The Coach Core now makes the training decision. APEX separates evidence, confidence, prescription and user choice instead of treating the chat layer as the coach."/><div className="coach-box"><div className="messages">{messages.map((m,i)=><div className={`message ${m.from}`} key={i} style={{whiteSpace:'pre-wrap'}}>{m.text}</div>)}</div><div className="coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask APEX Coach…"/><button aria-label="Ask APEX Coach" onClick={ask}><Icon name="bolt"/></button></div></div></div>}
 function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="term-list">{terms.map(([a,b])=><div className="term" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></>}
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const fields=['neck','shoulders','chest','waist','abdomen','hips','arms','forearms','thighs','calves'];
@@ -3633,8 +3819,8 @@ function Command({nav,setQuery,close}:{nav:(r:string)=>void;setQuery:(x:string)=
 function Detail({title,children}:{title:string;children:React.ReactNode}){return <div className="detail"><span className="eyebrow">{title}</span>{children}</div>}
 function Metric({label,value,sub}:{label:string;value:string;sub:string}){return <div className="metric"><small>{label}</small><strong>{value}</strong><small>{sub}</small></div>}
 function ListRow({title,sub,icon,click}:{title:string;sub:string;icon:string;click:()=>void}){return <button className="list-row" onClick={click}><span className="row-icon"><Icon name={icon}/></span><span><strong>{title}</strong><small>{sub}</small></span><Icon name="chev"/></button>}
-function NavItem({active,icon,label,click}:{active:boolean;icon:string;label:string;click:()=>void}){return <button className={`nav-item ${active?'active':''}`} onClick={click}><Icon name={icon}/><span>{label}</span></button>}
-function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <div className="page-title"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{sub}</p></div>}
+function NavItem({active,icon,label,click}:{active:boolean;icon:string;label:string;click:()=>void}){return <button aria-current={active?'page':undefined} className={`nav-item ${active?'active':''}`} onClick={click}><Icon name={icon}/><span>{label}</span></button>}
+function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <div className="page-title premium-page-title"><span className="eyebrow">{eyebrow}</span><h1><span className="page-title-accent">{title}</span></h1><p className="page-title-copy">{sub}</p></div>}
 function Empty({title,text}:{title:string;text:string}){return <div className="empty"><Icon name="bolt"/><strong>{title}</strong><p>{text}</p></div>}
-function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="modal-backdrop modal-transition" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
+function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="modal-backdrop modal-transition premium-modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal premium-modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" title="Close" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
 createRoot(document.getElementById('root')!).render(<App/>);
