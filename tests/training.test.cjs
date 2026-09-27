@@ -191,11 +191,11 @@ test('recommendation: Romanian Deadlift is a positive total-load calibration',()
 test('recommendation: Plank is timed and never recommends external kilograms',()=>{
   const r=training.personalizedLoad(exercises.plank,[],configuredProfile,[exercises.plank]);
   assert.equal(r.weight,undefined);assert.equal(r.kind,'baseline');assert.equal(training.loadUnit(exercises.plank),'seconds');
-assert.equal(training.formatLoad(exercises.plank,0),'20–45 sec');
+  assert.equal(training.formatLoad(exercises.plank,0),'20–45 sec');
+});
 /* ============================================================
    46 — Calibration progression
    ============================================================ */
-
 test('calibration: no history starts with an explicit low-confidence recommendation',()=>{
   const r=training.personalizedLoad(exercises.machineChestPress,[],configuredProfile,[exercises.machineChestPress]);
   assert.ok(r.weight>0);assert.equal(r.kind,'calibration');assert.equal(r.confidence,'low');assert.match(r.reason,/No exercise-specific history/i);

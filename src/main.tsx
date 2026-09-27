@@ -12,7 +12,7 @@ import {notificationIntents} from './engine/notifications';
 import {syncLocalNotifications,listenForNotificationActions} from './native/localNotifications';
 import {knowledgeReport} from './knowledge/knowledgeGraph';
 import {inspectState} from './data/integrity';
-import {groundedCoachAnswer} from './engine/coachGateway';
+import {coach} from './coach';
 import {consistencySummary,volumeTrend,plateauCandidates,goalMomentum,trainingBalance} from './engine/analytics';
 import {accessibilityClass,fontScaleValue} from './data/accessibility';
 import {App as CapacitorApp} from '@capacitor/app';
@@ -3550,7 +3550,52 @@ function ExerciseSheet({ex,s,close,onUse,onAlternative}:{ex:Exercise;s:AppState;
  <button className="button primary wide" onClick={onUse}>Use in training</button></Modal>
 }
 function Templates({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [name,setName]=useState('');const [selected,setSelected]=useState<string[]>([]);const toggle=(id:string)=>setSelected(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);const save=()=>{if(!name.trim()||!selected.length)return;const t:WorkoutTemplate={id:uid('tpl'),name:name.trim(),exerciseIds:selected,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};update(x=>({...x,workoutTemplates:[...(x.workoutTemplates||[]),t]}));setName('');setSelected([])};const useT=(t:WorkoutTemplate)=>{const w=cloneTemplateWorkout(t,today(),s.exercises);update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'template_used',timestamp:new Date().toISOString(),payload:{templateId:t.id,workoutId:w.id}}]}));onStart(w)};const remove=(id:string)=>update(x=>({...x,workoutTemplates:(x.workoutTemplates||[]).filter(t=>t.id!==id)}));return <><PageTitle eyebrow="TEMPLATES" title="Save the work you repeat." sub="Templates are reusable structures. Completed workouts remain separate historical events."/><section className="plan-editor"><label>Template name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Quick upper"/></label><div className="picker-list">{s.exercises.slice(0,35).map(e=><button className="picker-row" key={e.id} onClick={()=>toggle(e.id)}><span><strong>{e.name}</strong><small>{selected.includes(e.id)?'Included':'Tap to include'} · {e.pattern}</small></span>{selected.includes(e.id)?<Icon name="check"/>:<Icon name="plus"/>}</button>)}</div><button className="button primary wide" disabled={!name.trim()||!selected.length} onClick={save}>Save template</button></section><section className="section"><div className="list-card">{(s.workoutTemplates||[]).map(t=><div className="template-row" key={t.id}><ListRow title={t.name} sub={`${t.exerciseIds.length} exercises`} icon="train" click={()=>useT(t)}/><button className="mini-btn danger" onClick={()=>remove(t.id)}>Delete</button></div>)}</div></section></>}
-function Coach({s}:{s:AppState}){const [q,setQ]=useState(''),[messages,setMessages]=useState([{from:'apex',text:'Ask about your local training evidence. I explain what APEX knows, what it infers, and where uncertainty remains.'}]);const ask=()=>{const t=q.trim();if(!t)return;const a=groundedCoachAnswer(s,t);const text=[a.text,a.facts.length?`Facts: ${a.facts.join(' • ')}`:'',a.inference?`Inference: ${a.inference}`:'',a.recommendation?`Recommendation: ${a.recommendation}`:'',a.uncertainty?`Uncertainty: ${a.uncertainty}`:''].filter(Boolean).join('\n');setMessages(m=>[...m,{from:'user',text:t},{from:'apex',text}]);setQ('')};return <><PageTitle eyebrow="APEX COACH" title="Understand the work." sub="The deterministic training engine stays in control. Coach explains grounded local evidence without pretending to know more than the record supports."/><div className="coach-box"><div className="messages">{messages.map((m,i)=><div className={`message ${m.from}`} key={i} style={{whiteSpace:'pre-wrap'}}>{m.text}</div>)}</div><div className="coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask about your training…"/><button aria-label="Ask APEX Coach" onClick={ask}><Icon name="bolt"/></button></div></div></>}
+function Coach({s}:{s:AppState}){
+  const [q,setQ]=useState('');
+  const [messages,setMessages]=useState([{from:'apex',text:'APEX Coach is now connected to the Coach Core. Ask about what you should do next, and the coach will reason from your current training context.'}]);
+
+  const buildContext=(userInput?:string)=>{
+    const activeWorkout=s.activeWorkoutId?s.workouts.find(w=>w.id===s.activeWorkoutId):undefined;
+    const currentWorkout=activeWorkout||s.workouts.find(w=>w.status==='in_progress')||s.workouts.find(w=>w.status==='planned');
+    const currentExercise=currentWorkout?.exercises?.[0];
+    const exercise=currentExercise?s.exercises.find(e=>e.id===currentExercise.exerciseId):undefined;
+const currentSet=currentExercise?.sets?.find(set=>!set.completed);    return {
+      state:s,
+      profile:s.profile,
+      goals:s.goals,
+      primaryGoal:s.profile?.primaryGoal,
+      planId:s.plan?.id,
+      workoutId:currentWorkout?.id,
+      workout:currentWorkout,
+      exerciseId:exercise?.id,
+      exercise,
+      workoutExercise:currentExercise,
+      setId:currentSet?.id,
+      set:currentSet,
+      recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),
+      recentExerciseEntryIds:[],
+      userInput,
+      now:new Date().toISOString(),
+    };
+  };
+
+  const ask=()=>{
+    const t=q.trim();
+    if(!t)return;
+    const result=coach(buildContext(t));
+    const d=result.decision;
+    const text=[
+      result.explanation,
+      `Decision: ${d.action.toUpperCase()}`,
+      d.prescription?.instruction?`Next: ${d.prescription.instruction}`:'',
+      d.confidence?`Confidence: ${d.confidence}`:'',
+      d.confidenceReason?`Why: ${d.confidenceReason}`:'',
+    ].filter(Boolean).join('\n');
+    setMessages(m=>[...m,{from:'user',text:t},{from:'apex',text}]);
+    setQ('');
+  };
+
+  return <><PageTitle eyebrow="APEX COACH" title="Train with a coach." sub="The Coach Core now makes the training decision. APEX separates evidence, confidence, prescription and user choice instead of treating the chat layer as the coach."/><div className="coach-box"><div className="messages">{messages.map((m,i)=><div className={`message ${m.from}`} key={i} style={{whiteSpace:'pre-wrap'}}>{m.text}</div>)}</div><div className="coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask APEX Coach…"/><button aria-label="Ask APEX Coach" onClick={ask}><Icon name="bolt"/></button></div></div></>}
 function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="term-list">{terms.map(([a,b])=><div className="term" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></>}
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const fields=['neck','shoulders','chest','waist','abdomen','hips','arms','forearms','thighs','calves'];
