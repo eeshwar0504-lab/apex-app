@@ -8,11 +8,14 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.cjs",
-    "cap:sync": "npx cap sync",
-    "android": "npx cap open android",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "audit": "node scripts/release-audit.mjs",
+    "release:audit": "node scripts/release-audit.mjs",
     "verify": "npm test && npm run audit",
-    "verify:release": "npm test && npm run audit"
+    "verify:full": "npm test && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.0",
@@ -28,6 +31,7 @@
     "vite": "^7.1.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0"
   }

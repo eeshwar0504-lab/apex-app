@@ -201,7 +201,7 @@ export function buildCoachContext(
         .slice()
         .reverse()
         .slice(0,10)
-        .map(item=>item.entry.id)
+        .map(item=>`${item.workout.id}:${item.entry.exerciseId}`)
     : [];
 
   return {

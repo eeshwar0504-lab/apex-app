@@ -135,8 +135,8 @@ test('app records background interruption and recovery events',()=>{
 test('app keeps the final header focused on APEX and Search',()=>{
  const x=read('src/main.tsx');
 
- assert.match(x,/className="topbar"/);
- assert.match(x,/className="brand"/);
+ assert.match(x,/className="[^"]*\btopbar\b[^"]*"/);
+ assert.match(x,/className="[^"]*\bbrand\b[^"]*"/);
  assert.match(x,/className="top-actions"/);
  assert.match(x,/aria-label="Command Center"/);
 

@@ -21,7 +21,16 @@ const today=()=>new Date().toISOString().slice(0,10);
 const fmt=(n:number)=>`${String(Math.floor(Math.max(0,n)/60)).padStart(2,'0')}:${String(Math.max(0,n)%60).padStart(2,'0')}`;
 const SET_TYPES:SetType[]=['warmup','working','drop','failure','amrap','rest_pause','myo_reps','tempo','cluster','timed','bodyweight','assisted','unilateral'];
 
-function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-1.8.9"/></>};return <svg {...c}>{p[name]||p.bolt}</svg>}
+function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-1.8.9"/></>,pause:<><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></>,calendar:<><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,spark:<><path d="m12 2 1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6L12 2Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></>,activity:<><path d="M3 12h4l2-7 4 14 2-7h6"/></>,layers:<><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></>,shield:<><path d="M12 3 20 6v6c0 5-3.3 8-8 9-4.7-1-8-4-8-9V6l8-3Z"/><path d="m9 12 2 2 4-5"/></>,arrow:<path d="M5 12h14M13 6l6 6-6 6"/>};return <svg {...c}>{p[name]||p.bolt}</svg>}
+
+
+function ApexStatus({label,detail,icon='spark'}:{label:string;detail?:string;icon?:string}){
+ return <div className="apex-status-chip"><span className="apex-status-icon"><Icon name={icon} size={15}/></span><span><b>{label}</b>{detail&&<small>{detail}</small>}</span></div>
+}
+function ApexSection({eyebrow,title,action,children,className=''}:{eyebrow:string;title:string;action?:React.ReactNode;children:React.ReactNode;className?:string}){
+ return <section className={`section apex-section ${className}`}><div className="section-head apex-section-head"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>{action}</div>{children}</section>
+}
+function ApexBar({value}:{value:number}){return <div className="apex-progress"><i style={{width:`${Math.max(0,Math.min(100,value))}%`}}/></div>}
 
 
 function recommendationFor(ex:Exercise,s:AppState){
@@ -594,7 +603,7 @@ function App(){
  if(!hydrated)return <div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b><small>Restoring local training data…</small></div>;
  if(!s.onboardingComplete)return <Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/>;
  return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b></div>}
- <header className="topbar premium-topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="top-actions"><button className="icon-btn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
+ <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="apex-top-status"><i/> SYSTEM READY</div><div className="top-actions"><button className="icon-btn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
  <main className="main">
  <div className="page-transition screen-page" data-apex-route={route} key={route}>
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
@@ -650,6 +659,33 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
         ? a.filter(q=>q!==x)
         : [...a,x]
     );
+  };
+
+  const canContinue =
+    step===0 ||
+    (step===1 && !!exp) ||
+    (step===2 && !!goal) ||
+    (step===3 && !!days && !!mins);
+
+  const continueOnboarding=()=>{
+    setError('');
+
+    if(step===1 && !exp){
+      setError('Choose your training experience to continue.');
+      return;
+    }
+
+    if(step===2 && !goal){
+      setError('Choose your training goal to continue.');
+      return;
+    }
+
+    if(step===3 && (!days || !mins)){
+      setError('Choose your training days and typical session length to continue.');
+      return;
+    }
+
+    setStep(x=>Math.min(4,x+1));
   };
 
   const buildMyPlan=()=>{
@@ -1079,10 +1115,8 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
           <button
             type="button"
             className="button primary"
-            onClick={()=>{
-              setError('');
-              setStep(x=>x+1);
-            }}
+            disabled={!canContinue}
+            onClick={continueOnboarding}
           >
             Continue
             <Icon name="chev"/>
@@ -1116,106 +1150,60 @@ function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Wo
  const read=readiness(s);
  const ins=homeInsights(s);
  const completed=s.workouts.filter(w=>w.status==='completed').length;
- const recentCompleted=s.workouts.filter(w=>w.status==='completed').sort((a,b)=>String(b.completedAt||b.updatedAt||'').localeCompare(String(a.completedAt||a.updatedAt||''))).slice(0,3);
+ const recent=s.workouts.filter(w=>w.status==='completed').sort((a,b)=>String(b.completedAt||b.updatedAt||'').localeCompare(String(a.completedAt||a.updatedAt||''))).slice(0,4);
  const focus=active||todayW;
  const focusExercise=focus?.exercises?.find(x=>x.sets?.some(set=>!set.completed));
- const focusExerciseData=focusExercise?s.exercises.find(e=>e.id===focusExercise.exerciseId):undefined;
+ const focusEx=focusExercise?s.exercises.find(e=>e.id===focusExercise.exerciseId):undefined;
  const focusSet=focusExercise?.sets?.find(set=>!set.completed);
  const gp=goal?goalProgress(s,goal):undefined;
  const load=trainingLoadSummary(s);
- const coachContext={
-   state:s,
-   profile:s.profile,
-   goals:s.goals,
-   primaryGoal:s.profile?.primaryGoal,
-   planId:s.plan?.id,
-   workoutId:focus?.id,
-   workout:focus,
-   exerciseId:focusExerciseData?.id,
-   exercise:focusExerciseData,
-   workoutExercise:focusExercise,
-   setId:focusSet?.id,
-   set:focusSet,
-   recentWorkoutIds:recentCompleted.map(w=>w.id),
-   recentExerciseEntryIds:[],
-   now:new Date().toISOString()
- };
- const coachResult=coach(coachContext);
- const coachDecision=coachResult.decision;
- return <div className="home-screen">
-   <section className="hero editorial">
-     <span className="eyebrow">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</span>
-     <h1>{active?'Continue where you left off.':todayW?todayW.name:'Build the habit, then build the load.'}</h1>
-     <p>{active?'Your session is still active. APEX keeps the completed work intact and resumes from the next useful action.':todayW?`${todayW.exercises.length} movements · adaptive prescription · one session at a time.`:'No assumptions. Start with the plan, collect useful evidence, and let the coach adapt from reality.'}</p>
-     {active?<button className="button primary" onClick={()=>onStart(active)}><Icon name="play"/> Resume workout</button>:todayW?<button className="button primary" onClick={()=>onStart(todayW)}><Icon name="play"/> Start {todayW.name}</button>:<button className="button secondary" onClick={()=>onNav('train')}>View training <Icon name="chev"/></button>}
+ const coachResult=coach({state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:focus?.id,workout:focus,exerciseId:focusEx?.id,exercise:focusEx,workoutExercise:focusExercise,setId:focusSet?.id,set:focusSet,recentWorkoutIds:recent.map(w=>w.id),recentExerciseEntryIds:[],now:new Date().toISOString()});
+ const decision=coachResult.decision;
+ const nextAction=active?'Resume the active session':todayW?'Start today’s session':'Review your training plan';
+ return <div className="home-screen apex-home-v3">
+   <section className="hero editorial apex-command-hero apex-hero-v3">
+    <div className="apex-hero-copy">
+      <div className="apex-kicker"><span className="eyebrow">APEX / COMMAND</span><span className="apex-live-status"><i/>LIVE TRAINING SYSTEM</span></div>
+      <h1>{active?'Pick up exactly where you stopped.':todayW?todayW.name:'Build the signal before you chase the number.'}</h1>
+      <p>{active?'Your workout state is preserved. APEX will resume from the next actionable set.':todayW?`${todayW.exercises.length} movements · adaptive loading · live set feedback.`:'Your training record is the source of truth. Start a session, record reality, and let the coach adapt future work.'}</p>
+      <div className="apex-hero-actions">
+       <button className="button primary" onClick={()=>focus?onStart(focus):onNav('train')}><Icon name={focus?'play':'train'}/>{nextAction}</button>
+       <button className="button secondary" onClick={()=>onNav('coach')}><Icon name="spark"/> Ask Coach</button>
+      </div>
+      <div className="apex-command-meta"><ApexStatus label="READINESS" detail={`${read.label} · ${read.level}`} icon="activity"/><ApexStatus label="30-DAY LOAD" detail={`${load.workingSets30} working sets`} icon="layers"/><ApexStatus label="RECORD" detail={`${completed} completed sessions`} icon="shield"/></div>
+    </div>
+    <div className="apex-hero-visual" aria-hidden="true"><div className="apex-orbit orbit-a"/><div className="apex-orbit orbit-b"/><div className="apex-orbit orbit-c"/><div className="apex-hero-core"><span>APEX</span><b>{read.label}</b><small>READINESS</small></div><div className="apex-hero-scan"/></div>
    </section>
 
-   <section className="section">
-     <div className="metric-strip">
-       <Metric label="Sessions" value={String(completed)} sub="completed"/>
-       <Metric label="Readiness" value={read.label} sub={read.level}/>
-       <Metric label="Goal" value={goal?.title?.split(' ').slice(-1)[0]||'—'} sub="active"/>
-       <Metric label="Sets" value={String(load.workingSets30||0)} sub="last 30 days"/>
-     </div>
-   </section>
+   <ApexSection eyebrow="COACH / NOW" title="The next useful action." action={<button className="mini-btn" onClick={()=>onNav('coach')}>Open Coach <Icon name="arrow" size={14}/></button>}>
+    <article className="callout apex-coach-card"><div className="apex-coach-mark"><Icon name="spark" size={22}/></div><div className="apex-coach-copy"><div className="apex-card-line"><span className="badge">{decision.action}</span><span className="apex-confidence">{decision.confidence?`${decision.confidence} confidence`:'context grounded'}</span></div><h3>{focusEx?.name||decision.prescription?.instruction||'APEX is ready.'}</h3><p>{focusEx&&focusSet?`${focusSet.type||'Working set'} · ${focusSet.reps||'—'} reps · ${focusSet.weight??'—'} load`:coachResult.explanation}</p><small>{decision.prescription?.instruction||'Follow the current prescription and record what actually happens.'}</small></div></article>
+   </ApexSection>
 
-   <section className="section">
-     <div className="section-head">
-       <div><span className="eyebrow">COACH / NOW</span><h2>Your next useful action.</h2></div>
-       <button className="mini-btn" onClick={()=>onNav('coach')}>Open Coach</button>
-     </div>
-     <article className="callout">
-       <Icon name="bolt"/>
-       <div>
-         <span className="badge">{coachDecision.action}</span>
-         <strong>{focusExerciseData?.name||coachDecision.prescription?.instruction||'APEX is ready.'}</strong>
-         <p>{focusExerciseData&&focusSet?`${focusSet.type||'Working set'} · ${focusSet.reps||'—'} reps · ${focusSet.load??'—'} ${focusSet.load!==undefined?'load':''}`:coachResult.explanation}</p>
-         <small>{coachDecision.confidence?`Confidence: ${coachDecision.confidence}`:'Decision grounded in current training context.'}</small>
-       </div>
-     </article>
-   </section>
+   <ApexSection eyebrow="TODAY" title="Training command center" action={<button className="mini-btn" onClick={()=>onNav('train')}>Open Train <Icon name="arrow" size={14}/></button>}>
+    <div className="apex-command-grid">
+      <button className="apex-session-card" onClick={()=>focus&&onStart(focus)} disabled={!focus}>
+       <span className="eyebrow">{active?'IN PROGRESS':todayW?'READY NOW':'NO SESSION'}</span><strong>{focus?.name||'No session scheduled'}</strong><small>{focus?`${focus.exercises.length} exercises · ${focus.scheduledDate}`:'Use Train to create or schedule a session.'}</small><span className="apex-card-arrow"><Icon name="arrow"/></span>
+      </button>
+      <div className="apex-readout-card"><span className="eyebrow">CURRENT FOCUS</span><strong>{focusEx?.name||'Training foundation'}</strong><small>{focusSet?`${focusSet.reps||'—'} reps · ${focusSet.weight??'—'} load · target RIR ${focusSet.rir??'—'}`:'No active set. Your next session will appear here.'}</small>{focusSet&&<ApexBar value={Math.max(10,Math.min(100,(Number(focusSet.rir??2)/5)*100))}/>}</div>
+    </div>
+   </ApexSection>
 
-   <section className="section">
-     <div className="section-head">
-       <div><span className="eyebrow">TODAY</span><h2>Session at a glance.</h2></div>
-     </div>
-     {focus?<div className="timeline">
-       <button className="timeline-row" onClick={()=>onStart(focus)}>
-         <span className="timeline-dot">{active?'NOW':'NEXT'}</span>
-         <span><strong>{focus.name}</strong><small>{focus.exercises.length} exercises · {focus.status} · {focus.scheduledDate}</small></span>
-         <Icon name="chev"/>
-       </button>
-       {focusExerciseData&&<div className="timeline-row">
-         <span className="timeline-dot">01</span>
-         <span><strong>{focusExerciseData.name}</strong><small>{focusSet?`${focusSet.reps||'—'} reps · ${focusSet.load??'—'} load`:'Exercise complete'}</small></span>
-       </div>}
-     </div>:<Empty title="No session today" text="Your next scheduled session will appear here."/>}
-   </section>
+   {goal&&<ApexSection eyebrow="GOAL / ACTIVE" title={goal.title} action={<button className="mini-btn" onClick={()=>onNav('goals')}>Details</button>}>
+    <article className="goal-card apex-goal-card"><div className="goal-ring">{gp?.percent===null||gp?.percent===undefined?'—':`${gp.percent}%`}</div><div className="apex-goal-body"><div className="apex-card-line"><span className="badge">{gp?.status||'ACTIVE'}</span>{goal.targetDate&&<span className="apex-confidence">Target {goal.targetDate}</span>}</div><strong>{goal.target?`${goal.target.label}: ${goal.target.value} ${goal.target.unit}`:'No numeric target yet.'}</strong>{gp?.percent!==null&&gp?.percent!==undefined&&<ApexBar value={gp.percent}/>}<small>{gp?.status||'Active goal'}</small></div></article>
+   </ApexSection>}
 
-   {goal&&<section className="section">
-     <div className="section-head">
-       <div><span className="eyebrow">GOAL</span><h2>{goal.title}</h2></div>
-       <button className="mini-btn" onClick={()=>onNav('goals')}>Details</button>
-     </div>
-     <article className="goal-card">
-       <div className="goal-ring">{gp?.percent===null||gp?.percent===undefined?'—':`${gp.percent}%`}</div>
-       <div><p>{goal.target?`${goal.target.label}: ${goal.target.value} ${goal.target.unit}`:'No numeric target yet.'}{goal.targetDate?` · by ${goal.targetDate}`:''}</p>{gp?.percent!==null&&gp?.percent!==undefined&&<div className="progress-track"><i style={{width:`${Math.max(0,Math.min(100,gp.percent))}%`}}/></div>}<small>{gp?.status||'Active goal'}</small></div>
-     </article>
-   </section>}
+   <ApexSection eyebrow="SIGNALS" title="What the record is telling you.">
+    <div className="insight-stack apex-insight-grid">{ins.slice(0,3).map((x,i)=><article className="insight apex-insight" key={i}><span className={`badge ${x.kind}`}>{x.kind}</span><h3>{x.title}</h3><p>{x.detail}</p><small>{x.evidence.join(' · ')}</small></article>)}</div>
+   </ApexSection>
 
-   <section className="section">
-     <div className="section-head"><div><span className="eyebrow">SIGNALS</span><h2>Useful context.</h2></div></div>
-     <div className="insight-stack">{ins.slice(0,3).map((x,i)=><article className="insight" key={i}><div><span className={`badge ${x.kind}`}>{x.kind}</span><h3>{x.title}</h3><p>{x.detail}</p><small>{x.evidence.join(' · ')}</small></div></article>)}</div>
-   </section>
+   <ApexSection eyebrow="RECENT / RECORD" title="Recent training" action={<button className="mini-btn" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button>}>
+    <div className="apex-recent-list">{recent.map((w,i)=><button className="apex-recent-row" key={w.id} onClick={()=>onNav(`session:${w.id}`)}><span className="apex-recent-index">{String(i+1).padStart(2,'0')}</span><span><strong>{w.name}</strong><small>{w.completedAt?.slice(0,10)||w.scheduledDate} · {w.exercises.length} exercises</small></span><Icon name="arrow" size={16}/></button>)}{!recent.length&&<Empty title="No completed sessions yet" text="Your completed training record will appear here."/>}</div>
+   </ApexSection>
 
-   <section className="section quick-grid">
-     <button className="quick" onClick={()=>onNav('progress')}><Icon name="chart"/><span><strong>Progress</strong><small>Strength, volume and evidence</small></span><Icon name="chev"/></button>
-     <button className="quick" onClick={()=>onNav('plan')}><Icon name="target"/><span><strong>Plan Studio</strong><small>Shape future training</small></span><Icon name="chev"/></button>
-     <button className="quick" onClick={()=>onNav('library')}><Icon name="search"/><span><strong>Exercise Library</strong><small>Find and understand movements</small></span><Icon name="chev"/></button>
-     <button className="quick" onClick={()=>onNav('coach')}><Icon name="bolt"/><span><strong>Coach</strong><small>Ask what to do next</small></span><Icon name="chev"/></button>
-   </section>
+   <section className="section apex-quick-grid"><button onClick={()=>onNav('progress')}><Icon name="chart"/><span><b>Progress</b><small>Trends & evidence</small></span><Icon name="arrow"/></button><button onClick={()=>onNav('plan')}><Icon name="target"/><span><b>Plan Studio</b><small>Future training</small></span><Icon name="arrow"/></button><button onClick={()=>onNav('library')}><Icon name="search"/><span><b>Exercise Library</b><small>Movements & alternatives</small></span><Icon name="arrow"/></button><button onClick={()=>onNav('you')}><Icon name="user"/><span><b>You</b><small>Profile & system</small></span><Icon name="arrow"/></button></section>
  </div>
 }
+
 function Train({s,onStart,onNav,update}:{s:AppState;onStart:(w:Workout)=>void;onNav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const upcoming=s.workouts.filter(w=>w.status==='planned'||w.status==='rescheduled').sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate));
  const extra=s.workouts.filter(w=>w.source==='extra');
@@ -1223,65 +1211,24 @@ function Train({s,onStart,onNav,update}:{s:AppState;onStart:(w:Workout)=>void;on
  const nextWorkout=upcoming[0];
  const [reschedule,setReschedule]=useState<Workout|null>(null),[date,setDate]=useState(today());
  const createExtra=()=>{const ids=s.exercises.slice(0,5).map(e=>e.id);const w=createCustomWorkout('Extra Session',today(),ids,s.exercises);w.source='extra';w.status='planned';update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'extra_workout_created',timestamp:new Date().toISOString(),payload:{workoutId:w.id}}]}));onStart(w)};
- const commitReschedule=()=>{if(!reschedule||!date)return;const pair=rescheduleWorkoutWithEvent(reschedule,date);update(x=>({...x,workouts:x.workouts.map(w=>w.id===pair.original.id?pair.original:w).concat(pair.replacement),eventLog:[...(x.eventLog||[]),pair.event]}));setReschedule(null);};
- const exerciseCount=nextWorkout?.exercises.length||0;
- return <div className="train-screen">
-  <PageTitle eyebrow="TRAIN" title="Train with intent." sub="Your next session, your current plan, and the actions that keep training moving forward."/>
-
-  <section className="section" style={{paddingTop:0}}>
-   <div className="callout" style={{display:'grid',gridTemplateColumns:'1fr auto',gap:24,alignItems:'center',padding:'24px 26px'}}>
-    <div>
-     <span className="eyebrow">{todayWorkout?'TODAY':'NEXT SESSION'}</span>
-     <h2 style={{margin:'6px 0 6px'}}>{todayWorkout?.name||nextWorkout?.name||'No session scheduled'}</h2>
-     <p style={{margin:0}}>{todayWorkout?`${exerciseCount} exercises ready. Start when you are ready.`:nextWorkout?`${nextWorkout.scheduledDate} · ${exerciseCount} exercises · ${nextWorkout.source}`:'Build your next session in Plan Studio or start a custom workout.'}</p>
-    </div>
-    <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'flex-end'}}>
-     {todayWorkout&&<button className="button primary" onClick={()=>onStart(todayWorkout)}><Icon name="play"/> Start session</button>}
-     {!todayWorkout&&nextWorkout&&<button className="button primary" onClick={()=>onStart(nextWorkout)}><Icon name="play"/> Preview next</button>}
-     <button className="button secondary" onClick={createExtra}><Icon name="plus"/> Quick session</button>
-    </div>
-   </div>
+ const commitReschedule=()=>{if(!reschedule||!date)return;const pair=rescheduleWorkoutWithEvent(reschedule,date);update(x=>({...x,workouts:x.workouts.map(w=>w.id===pair.original.id?pair.original:w).concat(pair.replacement),eventLog:[...(x.eventLog||[]),pair.event]}));setReschedule(null)};
+ const completed=s.workouts.filter(w=>w.status==='completed').length;
+ return <div className="train-screen apex-train-v3">
+  <PageTitle eyebrow="TRAIN / COMMAND" title="Make today’s work count." sub="One queue. One active session. Every adjustment is recorded instead of silently rewriting the plan."/>
+  <section className="apex-train-command">
+   <div className="apex-train-primary"><span className="eyebrow">{todayWorkout?'TODAY / READY':'NEXT SESSION'}</span><h2>{todayWorkout?.name||nextWorkout?.name||'No session scheduled'}</h2><p>{todayWorkout?`${todayWorkout.exercises.length} movements ready for adaptive execution.`:nextWorkout?`${nextWorkout.scheduledDate} · ${nextWorkout.exercises.length} movements · ${nextWorkout.source}`:'Build your next session in Plan Studio or start a custom session.'}</p><div className="apex-command-actions">{todayWorkout&&<button className="button primary" onClick={()=>onStart(todayWorkout)}><Icon name="play"/> Start session</button>}{!todayWorkout&&nextWorkout&&<button className="button primary" onClick={()=>onStart(nextWorkout)}><Icon name="play"/> Preview next</button>}<button className="button secondary" onClick={createExtra}><Icon name="plus"/> Quick session</button></div></div>
+   <div className="apex-train-readout"><span className="eyebrow">TRAINING QUEUE</span><strong>{upcoming.length}</strong><small>planned sessions</small><div className="apex-queue-line"><i style={{width:`${Math.min(100,upcoming.length*12)}%`}}/></div><span>{completed} completed all-time</span></div>
   </section>
-
-  <div className="command-row">
-   <button className="button secondary" onClick={()=>onNav('plan')}><Icon name="calendar"/> Plan Studio</button>
-   <button className="button secondary" onClick={()=>onNav('templates')}>Templates</button>
-   <button className="button secondary" onClick={()=>onNav('library')}>Exercise Library</button>
-  </div>
-
-  <section className="section">
-   <div className="section-head"><div><span className="eyebrow">TRAINING QUEUE</span><h2>What is coming up.</h2></div><small>{upcoming.length} planned</small></div>
-   <div className="timeline">
-    {upcoming.slice(0,7).map((w,i)=><div className="timeline-row" key={w.id} style={{alignItems:'center'}}>
-     <span className="timeline-dot" style={{minWidth:58}}>{w.scheduledDate===today()?'NOW':i===0?'NEXT':w.scheduledDate.slice(5)}</span>
-     <button className="timeline-main" onClick={()=>onStart(w)} style={{textAlign:'left'}}>
-      <strong>{w.name}</strong>
-      <small>{w.exercises.length} exercises · {w.source} · v{w.version}{w.status==='rescheduled'?' · rescheduled':''}</small>
-     </button>
-     <button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button>
-     <button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button>
-    </div>)}
-    {!upcoming.length&&<Empty title="No scheduled session" text="Use Plan Studio to build your next training block, or start a custom session."/>}
-   </div>
-  </section>
-
-  <section className="section">
-   <div className="section-head"><div><span className="eyebrow">SESSION PRINCIPLES</span><h2>Train from the plan. Adapt from reality.</h2></div></div>
-   <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>
-    <div className="detail-card"><span className="eyebrow">01</span><strong>Start</strong><p>Open the planned session and follow the current prescription.</p></div>
-    <div className="detail-card"><span className="eyebrow">02</span><strong>Observe</strong><p>Log what actually happened: load, reps, effort and interruptions.</p></div>
-    <div className="detail-card"><span className="eyebrow">03</span><strong>Adapt</strong><p>APEX can change future work without rewriting completed history.</p></div>
-   </div>
-  </section>
-
-  {extra.length>0&&<section className="section">
-   <div className="section-head"><div><span className="eyebrow">EXTRA WORK</span><h2>Unscheduled sessions.</h2></div><small>{extra.length} recorded</small></div>
-   <div className="timeline">{extra.slice(-4).reverse().map(w=><button className="timeline-row" key={w.id} onClick={()=>onStart(w)} style={{width:'100%',textAlign:'left'}}><span className="timeline-dot">+</span><span style={{flex:1}}><strong>{w.name}</strong><small>{w.scheduledDate} · {w.status}</small></span><Icon name="chev"/></button>)}</div>
-  </section>}
-
-  {reschedule&&<Modal title="Reschedule session" close={()=>setReschedule(null)}><p className="modal-copy">The original session stays in history as rescheduled. The new date becomes a separate scheduled event.</p><label>New date<input type="date" value={date} min={today()} onChange={e=>setDate(e.target.value)}/></label><button className="button primary wide" onClick={commitReschedule}>Confirm new date</button></Modal>}
+  <div className="apex-tool-strip"><button onClick={()=>onNav('plan')}><Icon name="calendar"/>Plan Studio</button><button onClick={()=>onNav('templates')}><Icon name="layers"/>Templates</button><button onClick={()=>onNav('library')}><Icon name="search"/>Exercise Library</button><button onClick={()=>onNav('coach')}><Icon name="spark"/>Coach</button></div>
+  <ApexSection eyebrow="QUEUE / UPCOMING" title="What happens next." action={<span className="apex-section-count">{upcoming.length} scheduled</span>}>
+   <div className="apex-queue-list">{upcoming.slice(0,8).map((w,i)=><article className="apex-queue-card" key={w.id}><div className="apex-queue-date"><b>{w.scheduledDate===today()?'NOW':i===0?'NEXT':w.scheduledDate.slice(5)}</b><small>{w.status}</small></div><button onClick={()=>onStart(w)}><span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.source} · v{w.version}{w.status==='rescheduled'?' · rescheduled':''}</small></span><Icon name="arrow"/></button><div className="apex-queue-actions"><button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button><button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button></div></article>)}{!upcoming.length&&<Empty title="Queue is clear" text="Use Plan Studio to build your next block or create a quick session."/>}</div>
+  </ApexSection>
+  <ApexSection eyebrow="EXECUTION MODEL" title="Start. Observe. Adapt."><div className="apex-principles"><div><span>01</span><Icon name="play"/><strong>Start</strong><p>Open the scheduled prescription and enter the session.</p></div><div><span>02</span><Icon name="activity"/><strong>Observe</strong><p>Record load, reps, effort, substitutions and interruptions.</p></div><div><span>03</span><Icon name="spark"/><strong>Adapt</strong><p>APEX uses the new evidence to shape future work without changing history.</p></div></div></ApexSection>
+  {extra.length>0&&<ApexSection eyebrow="EXTRA WORK" title="Unscheduled sessions"><div className="apex-recent-list">{extra.slice(-5).reverse().map(w=><button className="apex-recent-row" key={w.id} onClick={()=>onStart(w)}><span className="apex-recent-index">+</span><span><strong>{w.name}</strong><small>{w.scheduledDate} · {w.status}</small></span><Icon name="arrow"/></button>)}</div></ApexSection>}
+  {reschedule&&<Modal title="Reschedule session" close={()=>setReschedule(null)}><p className="modal-copy">The original event remains auditable as rescheduled. The replacement becomes a separate scheduled event.</p><label>New date<input type="date" value={date} min={today()} onChange={e=>setDate(e.target.value)}/></label><button className="button primary wide" onClick={commitReschedule}>Confirm new date</button></Modal>}
  </div>
 }
+
 function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(w:Workout)=>void;onBack:()=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const source=s.workouts.find(x=>x.id===id);
  const read=readiness(s);
@@ -3701,12 +3648,96 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const muscle=useMemo(()=>{const m:Record<string,number>={};done.slice(-8).forEach(w=>w.exercises.forEach(we=>{const e=s.exercises.find(x=>x.id===we.exerciseId);e?.primaryMuscles.forEach(x=>m[x]=(m[x]||0)+we.sets.filter(z=>z.completed&&z.type!=='warmup').length)}));return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10)},[done,s.exercises]);
  const top=s.achievements.slice(-5).reverse();
  const activeGoals=s.goals.filter(g=>g.status==='active');
- const loadSummary=trainingLoadSummary(s); return <><PageTitle eyebrow="PROGRESS" title="What is changing?" sub="Drill from the whole training record into muscle exposure and individual exercise evidence. APEX separates measured facts from interpretation."/>
- <div className="progress-overview metric-strip"><Metric label="Sessions" value={String(done.length)} sub="completed"/><Metric label="Volume" value={total?Math.round(total).toLocaleString():'—'} sub="kg·reps"/><Metric label="PRs" value={String(s.achievements.length)} sub="achievements"/></div><section className="section"><div className="section-head"><div><span className="eyebrow">LONGITUDINAL SIGNALS</span><h2>Consistency and trend.</h2></div></div>{(()=>{const c=consistencySummary(s),trend=volumeTrend(s),plateaus=plateauCandidates(s);return <><div className="metric-strip"><Metric label="30-day adherence" value={`${c.rate}%`} sub={`${c.completed}/${c.planned||'—'} scheduled`}/><Metric label="Training streak" value={String(c.streak)} sub="recent sessions"/><Metric label="Trend points" value={String(trend.length)} sub="last 8 sessions"/></div>{trend.length>1&&<div className="trend-list" aria-label="Recent training volume trend">{trend.map((x,i)=><div className="trend-row" key={`${x.date}-${i}`}><span>{x.date}</span><i><b style={{width:`${Math.max(4,Math.min(100,(x.volume/Math.max(...trend.map(t=>t.volume),1))*100))}%`}}/></i><strong>{x.volume.toLocaleString()}</strong></div>)}</div>}{plateaus.length>0&&<div className="callout"><Icon name="clock"/><div><strong>Potential plateau signals</strong><p>{plateaus.map(p=>p.exerciseName).join(', ')}. APEX flags these for review; it does not automatically change the plan.</p></div></div>}</>})()}</section><section className="section"><div className="section-head"><div><span className="eyebrow">TRAINING INTERPRETATION</span><h2>Evidence before conclusions.</h2></div></div>{(()=>{const m=goalMomentum(s),b=trainingBalance(s);return <><div className="metric-strip"><Metric label="Momentum" value={m.direction==='insufficient'?'—':m.direction==='up'?'↑':m.direction==='down'?'↓':'→'} sub={m.direction==='insufficient'?'more data needed':`${m.changePct>=0?'+':''}${m.changePct}% volume`}/><Metric label="Highest exposure" value={b.highest?String(b.highest[1]):'—'} sub={b.highest?b.highest[0]:'working sets'}/><Metric label="Exposure spread" value={b.spread?String(b.spread):'—'} sub="sets between highest / lowest"/></div><p className="muted load-note">{m.detail}{b.highest&&b.lowest?` Highest recent primary-muscle exposure: ${b.highest[0]} (${b.highest[1]} sets); lowest: ${b.lowest[0]} (${b.lowest[1]}). This is exposure context, not a diagnosis.`:''}</p></>})()}</section><section className="section"><div className="section-head"><div><span className="eyebrow">TRAINING LOAD</span><h2>Recent workload context.</h2></div></div><div className="metric-strip"><Metric label="30-day sessions" value={String(loadSummary.consistency30)} sub="completed"/><Metric label="Working sets" value={String(loadSummary.workingSets30)} sub="last 30 days"/><Metric label="4-session avg" value={loadSummary.recentAverageVolume?Math.round(loadSummary.recentAverageVolume).toLocaleString():'—'} sub="kg·reps"/></div>{loadSummary.priorAverageVolume>0&&<p className="muted load-note">Recent 4-session average volume is {Math.round(loadSummary.recentAverageVolume).toLocaleString()} kg·reps versus {Math.round(loadSummary.priorAverageVolume).toLocaleString()} previously. This is context, not a readiness score.</p>}</section>
- {activeGoals.length>0&&<section className="section"><div className="section-head"><div><span className="eyebrow">GOAL TRACKING</span><h2>Progress toward what you chose.</h2></div></div><div className="goal-stack">{activeGoals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <article className="goal-card" key={g.id}><div className="goal-ring">{gp.percent===null?'—':`${gp.percent}%`}</div><div><span className="eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="progress-track"><i style={{width:`${gp.percent}%`}}/></div>} {ms.length>0&&<div className="milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}</div></article>})}</div></section>}
- <section className="section"><div className="section-head"><div><span className="eyebrow">EXERCISE TREND</span><h2>Performance, not vanity metrics.</h2></div></div>{selected?<><label>Exercise<select value={selected.id} onChange={e=>setExerciseId(e.target.value)}>{exerciseOptions.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select></label><div className="history-list">{history.map(({w,e})=>{const doneSets=e.sets.filter(x=>x.completed&&x.type!=='warmup');const best=Math.max(0,...doneSets.map(x=>x.weight||x.assistance||0));const reps=Math.max(0,...doneSets.map(x=>x.reps||0));return <div className="history-item static" key={w.id}><div><span className="eyebrow">{w.scheduledDate}</span><strong>{best?formatLoad(selected,best):'Bodyweight / time'}</strong><small>{doneSets.length} working sets · best {reps||'—'} reps{doneSets.some(x=>x.rir!==undefined)?` · RIR ${((doneSets.map(x=>x.rir).filter((x):x is number=>x!==undefined).reduce((a,b)=>a+b,0))/(doneSets.filter(x=>x.rir!==undefined).length||1)).toFixed(1)}`:''}</small></div></div>})}</div></>:<Empty title="Complete an exercise first" text="Exercise-level trends appear after APEX has comparable performance evidence."/>}</section>
- <section className="section"><div className="section-head"><div><span className="eyebrow">MUSCLE EXPOSURE</span><h2>Recent working sets.</h2></div></div><div className="bars">{muscle.map(([m,v])=><div className="bar-row" key={m}><span>{m}</span><i><b style={{width:`${Math.min(100,v*8)}%`}}/></i><strong>{v}</strong></div>)}{!muscle.length&&<Empty title="No performance data yet" text="Complete a workout and APEX will build the evidence layer."/>}</div></section>
- <section className="section"><div className="list-card">{top.map((a,i)=><ListRow key={i} title={a.label} sub={`${a.timestamp.slice(0,10)} · ${a.unit}`} icon="bolt" click={()=>{}}/>)}{!top.length&&<Empty title="Achievements will appear here" text="PRs are contextual to exercise and set type."/>}<ListRow title="History" sub="Timeline and filters" icon="history" click={()=>onNav('history')}/><ListRow title="Goals" sub="Targets and milestones" icon="target" click={()=>onNav('goals')}/></div></section></>}
+ const loadSummary=trainingLoadSummary(s);
+ const consistency=consistencySummary(s);
+ const trend=volumeTrend(s);
+ const momentum=goalMomentum(s);
+ const balance=trainingBalance(s);
+ const maxTrend=Math.max(...trend.map(x=>x.volume),1);
+ return <div className="apex-system-screen apex-progress-v4">
+   <section className="apex-page-hero">
+    <div><span className="eyebrow">PROGRESS / EVIDENCE</span><h1>What is changing?</h1><p>Your training record, translated into signals you can actually inspect. Facts stay separate from interpretation.</p></div>
+    <div className="apex-hero-stamp"><span>RECORD</span><strong>{done.length}</strong><small>completed sessions</small></div>
+   </section>
+
+   <section className="apex-stat-board">
+    <article><span>SESSIONS</span><strong>{done.length}</strong><small>completed</small></article>
+    <article><span>VOLUME</span><strong>{total?Math.round(total).toLocaleString():'—'}</strong><small>kg·reps</small></article>
+    <article><span>ACHIEVEMENTS</span><strong>{s.achievements.length}</strong><small>recorded</small></article>
+   </section>
+
+   <section className="apex-panel-section">
+    <div className="apex-section-heading"><div><span className="eyebrow">01 / CONSISTENCY</span><h2>Show up, then look at the trend.</h2></div><span className="apex-heading-note">LAST 30 DAYS</span></div>
+    <div className="apex-signal-grid">
+      <article><span>ADHERENCE</span><strong>{consistency.rate}%</strong><small>{consistency.completed}/{consistency.planned||'—'} scheduled</small><div className="apex-mini-track"><i style={{width:`${Math.min(100,Math.max(0,consistency.rate))}%`}}/></div></article>
+      <article><span>STREAK</span><strong>{consistency.streak}</strong><small>recent sessions</small></article>
+      <article><span>RECENT VOLUME</span><strong>{loadSummary.recentAverageVolume?Math.round(loadSummary.recentAverageVolume).toLocaleString():'—'}</strong><small>4-session average kg·reps</small></article>
+    </div>
+   </section>
+
+   <section className="apex-panel-section">
+    <div className="apex-section-heading"><div><span className="eyebrow">02 / WORKLOAD</span><h2>Recent training rhythm.</h2></div><span className="apex-heading-note">LAST {trend.length||0} SESSIONS</span></div>
+    <div className="apex-trend-panel">
+      {trend.length>0?trend.map((x,i)=><div className="apex-trend-bar" key={`${x.date}-${i}`}><div className="apex-trend-value">{x.volume?Math.round(x.volume).toLocaleString():'—'}</div><i><b style={{height:`${Math.max(8,Math.round((x.volume/maxTrend)*100))}%`}}/></i><span>{x.date.slice(5)}</span></div>):<Empty title="Not enough history yet" text="Complete more sessions and APEX will build the workload record."/>}
+    </div>
+    <div className="apex-two-readouts"><div><span>30-DAY WORKING SETS</span><strong>{loadSummary.workingSets30}</strong></div><div><span>30-DAY SESSIONS</span><strong>{loadSummary.consistency30}</strong></div><div><span>PR / ACHIEVEMENTS</span><strong>{s.achievements.length}</strong></div></div>
+   </section>
+
+   <section className="apex-panel-section">
+    <div className="apex-section-heading"><div><span className="eyebrow">03 / INTERPRETATION</span><h2>Evidence before conclusions.</h2></div><span className="apex-heading-note">CONTEXT ONLY</span></div>
+    <div className="apex-interpret-grid">
+      <article><span>MOMENTUM</span><strong>{momentum.direction==='insufficient'?'—':momentum.direction==='up'?'↑':momentum.direction==='down'?'↓':'→'}</strong><small>{momentum.direction==='insufficient'?'More data needed':`${momentum.changePct>=0?'+':''}${momentum.changePct}% volume`}</small></article>
+      <article><span>HIGHEST EXPOSURE</span><strong>{balance.highest?balance.highest[1]:'—'}</strong><small>{balance.highest?balance.highest[0]:'working sets'}</small></article>
+      <article><span>EXPOSURE SPREAD</span><strong>{balance.spread||'—'}</strong><small>sets between highest / lowest</small></article>
+    </div>
+    <div className="apex-evidence-note"><Icon name="shield" size={16}/><p>{momentum.detail}{balance.highest&&balance.lowest?` Highest recent primary-muscle exposure: ${balance.highest[0]} (${balance.highest[1]} sets); lowest: ${balance.lowest[0]} (${balance.lowest[1]}).`:''}</p></div>
+   </section>
+
+   {activeGoals.length>0&&<section className="apex-panel-section">
+    <div className="apex-section-heading"><div><span className="eyebrow">04 / GOALS</span><h2>Progress toward what you chose.</h2></div><button className="mini-btn" onClick={()=>onNav('goals')}>Open goals <Icon name="arrow" size={14}/></button></div>
+    <div className="apex-goal-grid">{activeGoals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <article className="apex-goal-v4" key={g.id}><div className="apex-goal-percent">{gp.percent===null?'—':`${gp.percent}%`}</div><div><span className="eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="apex-mini-track"><i style={{width:`${gp.percent}%`}}/></div>}{ms.length>0&&<div className="apex-milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}</div></article>})}</div>
+   </section>}
+
+   <section className="apex-panel-section">
+    <div className="apex-section-heading"><div><span className="eyebrow">05 / EXERCISE EVIDENCE</span><h2>Performance, not vanity metrics.</h2></div></div>
+    {selected ? (
+      <div className="apex-exercise-evidence">
+        <label>EXERCISE
+          <select value={selected.id} onChange={e=>setExerciseId(e.target.value)}>
+            {exerciseOptions.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}
+          </select>
+        </label>
+        <div className="apex-performance-list">
+          {history.map(({w,e},i)=>{
+            const doneSets=e.sets.filter(x=>x.completed&&x.type!=='warmup');
+            const best=Math.max(0,...doneSets.map(x=>x.weight||x.assistance||0));
+            const reps=Math.max(0,...doneSets.map(x=>x.reps||0));
+            const rirValues=doneSets.map(x=>x.rir).filter((x):x is number=>x!==undefined);
+            const avgRir=rirValues.length?(rirValues.reduce((a,b)=>a+b,0)/rirValues.length).toFixed(1):null;
+            return <div className="apex-performance-row" key={w.id}>
+              <span>{String(i+1).padStart(2,'0')}</span>
+              <div><strong>{best?formatLoad(selected,best):'Bodyweight / time'}</strong><small>{w.scheduledDate} · {doneSets.length} working sets · best {reps||'—'} reps{avgRir?` · RIR ${avgRir}`:''}</small></div>
+              <Icon name="arrow" size={14}/>
+            </div>;
+          })}
+          {!history.length&&<Empty title="Complete this exercise first" text="Comparable performance evidence will appear here."/>}
+        </div>
+      </div>
+    ) : <Empty title="Complete an exercise first" text="Exercise-level trends appear after APEX has comparable performance evidence."/>}
+   </section>
+
+   <section className="apex-panel-section">
+    <div className="apex-section-heading"><div><span className="eyebrow">06 / MUSCLE EXPOSURE</span><h2>Where the work is landing.</h2></div><span className="apex-heading-note">RECENT WORKING SETS</span></div>
+    <div className="apex-muscle-list">{muscle.map(([m,v])=><div className="apex-muscle-row" key={m}><span>{m}</span><div><i><b style={{width:`${Math.min(100,v*8)}%`}}/></i></div><strong>{v}</strong></div>)}{!muscle.length&&<Empty title="No performance data yet" text="Complete a workout and APEX will build the evidence layer."/>}</div>
+   </section>
+
+   <section className="apex-panel-section apex-last-panel">
+    <div className="apex-section-heading"><div><span className="eyebrow">07 / RECORD</span><h2>Recent achievements.</h2></div><button className="mini-btn" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button></div>
+    <div className="apex-achievement-list">{top.map((a,i)=><div key={i}><span>{String(i+1).padStart(2,'0')}</span><div><strong>{a.label}</strong><small>{a.timestamp.slice(0,10)} · {a.unit}</small></div><Icon name="bolt" size={14}/></div>)}{!top.length&&<Empty title="Achievements will appear here" text="PRs are contextual to exercise and set type."/>}</div>
+   </section>
+ </div>
+}
+
 function History({s,onNav}:{s:AppState;onNav:(r:string)=>void}){const [q,setQ]=useState(''),[status,setStatus]=useState('all');const rows=s.workouts.filter(w=>w.status!=='planned'&&(status==='all'||w.status===status)&&(`${w.name} ${w.scheduledDate} ${w.source}`).toLowerCase().includes(q.toLowerCase())).slice().reverse();return <><PageTitle eyebrow="HISTORY" title="Your training timeline." sub="Performed, skipped, missed, rescheduled and extra work remain distinguishable."/><div className="search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search workout, date…"/></div><div className="chip-row">{['all','completed','skipped','missed','rescheduled','extra'].map(x=><button className={`chip ${status===x?'selected-chip':''}`} key={x} onClick={()=>setStatus(x)}>{x}</button>)}</div><div className="history-list">{rows.map(w=><button className="history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="eyebrow">{w.scheduledDate} · {w.status} · {w.source}</span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {Math.round(volumeForWorkout(w,s.exercises)).toLocaleString()} kg·reps</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Nothing to show" text="Your timeline will populate as training happens."/>}</div></>}
 function Goals({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const [open,setOpen]=useState(false),[title,setTitle]=useState(''),[kind,setKind]=useState<GoalKind>('strength'),[label,setLabel]=useState('Target'),[value,setValue]=useState(''),[unit,setUnit]=useState('kg'),[targetDate,setTargetDate]=useState('');
@@ -3738,50 +3769,41 @@ function ExerciseSheet({ex,s,close,onUse,onAlternative}:{ex:Exercise;s:AppState;
 function Templates({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [name,setName]=useState('');const [selected,setSelected]=useState<string[]>([]);const toggle=(id:string)=>setSelected(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);const save=()=>{if(!name.trim()||!selected.length)return;const t:WorkoutTemplate={id:uid('tpl'),name:name.trim(),exerciseIds:selected,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};update(x=>({...x,workoutTemplates:[...(x.workoutTemplates||[]),t]}));setName('');setSelected([])};const useT=(t:WorkoutTemplate)=>{const w=cloneTemplateWorkout(t,today(),s.exercises);update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'template_used',timestamp:new Date().toISOString(),payload:{templateId:t.id,workoutId:w.id}}]}));onStart(w)};const remove=(id:string)=>update(x=>({...x,workoutTemplates:(x.workoutTemplates||[]).filter(t=>t.id!==id)}));return <><PageTitle eyebrow="TEMPLATES" title="Save the work you repeat." sub="Templates are reusable structures. Completed workouts remain separate historical events."/><section className="plan-editor"><label>Template name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Quick upper"/></label><div className="picker-list">{s.exercises.slice(0,35).map(e=><button className="picker-row" key={e.id} onClick={()=>toggle(e.id)}><span><strong>{e.name}</strong><small>{selected.includes(e.id)?'Included':'Tap to include'} · {e.pattern}</small></span>{selected.includes(e.id)?<Icon name="check"/>:<Icon name="plus"/>}</button>)}</div><button className="button primary wide" disabled={!name.trim()||!selected.length} onClick={save}>Save template</button></section><section className="section"><div className="list-card">{(s.workoutTemplates||[]).map(t=><div className="template-row" key={t.id}><ListRow title={t.name} sub={`${t.exerciseIds.length} exercises`} icon="train" click={()=>useT(t)}/><button className="mini-btn danger" onClick={()=>remove(t.id)}>Delete</button></div>)}</div></section></>}
 function Coach({s}:{s:AppState}){
   const [q,setQ]=useState('');
-  const [messages,setMessages]=useState([{from:'apex',text:'APEX Coach is now connected to the Coach Core. Ask about what you should do next, and the coach will reason from your current training context.'}]);
-
+  const [messages,setMessages]=useState([{from:'apex',text:'APEX Coach is connected to your training record. Ask what to do next, why a prescription changed, or how to handle today’s session.'}]);
   const buildContext=(userInput?:string)=>{
     const activeWorkout=s.activeWorkoutId?s.workouts.find(w=>w.id===s.activeWorkoutId):undefined;
     const currentWorkout=activeWorkout||s.workouts.find(w=>w.status==='in_progress')||s.workouts.find(w=>w.status==='planned');
     const currentExercise=currentWorkout?.exercises?.[0];
     const exercise=currentExercise?s.exercises.find(e=>e.id===currentExercise.exerciseId):undefined;
-const currentSet=currentExercise?.sets?.find(set=>!set.completed);    return {
-      state:s,
-      profile:s.profile,
-      goals:s.goals,
-      primaryGoal:s.profile?.primaryGoal,
-      planId:s.plan?.id,
-      workoutId:currentWorkout?.id,
-      workout:currentWorkout,
-      exerciseId:exercise?.id,
-      exercise,
-      workoutExercise:currentExercise,
-      setId:currentSet?.id,
-      set:currentSet,
-      recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),
-      recentExerciseEntryIds:[],
-      userInput,
-      now:new Date().toISOString(),
-    };
+    const currentSet=currentExercise?.sets?.find(set=>!set.completed);
+    return {state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:currentWorkout?.id,workout:currentWorkout,exerciseId:exercise?.id,exercise,workoutExercise:currentExercise,setId:currentSet?.id,set:currentSet,recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),recentExerciseEntryIds:[],userInput,now:new Date().toISOString()};
   };
-
+  const live=coach(buildContext());
   const ask=()=>{
     const t=q.trim();
     if(!t)return;
     const result=coach(buildContext(t));
     const d=result.decision;
-    const text=[
-      result.explanation,
-      `Decision: ${d.action.toUpperCase()}`,
-      d.prescription?.instruction?`Next: ${d.prescription.instruction}`:'',
-      d.confidence?`Confidence: ${d.confidence}`:'',
-      d.confidenceReason?`Why: ${d.confidenceReason}`:'',
-    ].filter(Boolean).join('\n');
-    setMessages(m=>[...m,{from:'user',text:t},{from:'apex',text}]);
-    setQ('');
+    const text=[result.explanation,d.prescription?.instruction?`Next: ${d.prescription.instruction}`:'',d.confidence?`Confidence: ${d.confidence}`:'',d.confidenceReason?`Why: ${d.confidenceReason}`:''].filter(Boolean).join('\n');
+    setMessages(m=>[...m,{from:'user',text:t},{from:'apex',text}]);setQ('');
   };
-
-  return <div className="coach-screen"><PageTitle eyebrow="APEX COACH" title="Train with a coach." sub="The Coach Core now makes the training decision. APEX separates evidence, confidence, prescription and user choice instead of treating the chat layer as the coach."/><div className="coach-box"><div className="messages">{messages.map((m,i)=><div className={`message ${m.from}`} key={i} style={{whiteSpace:'pre-wrap'}}>{m.text}</div>)}</div><div className="coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask APEX Coach…"/><button aria-label="Ask APEX Coach" onClick={ask}><Icon name="bolt"/></button></div></div></div>}
+  const activeWorkout=s.activeWorkoutId?s.workouts.find(w=>w.id===s.activeWorkoutId):s.workouts.find(w=>w.status==='in_progress');
+  const currentSet=activeWorkout?.exercises.flatMap(x=>x.sets).find(x=>!x.completed);
+  return <div className="apex-system-screen apex-coach-v4">
+    <section className="apex-page-hero coach-hero"><div><span className="eyebrow">APEX COACH / LIVE</span><h1>Make the next decision useful.</h1><p>The Coach Core reads your current context, evidence and prescription. It explains the decision instead of hiding it behind a chat bubble.</p></div><div className="apex-coach-pulse"><i/><span>CORE ONLINE</span><small>DECISION ENGINE</small></div></section>
+    <div className="apex-coach-layout">
+      <aside className="apex-coach-rail">
+        <div className="apex-rail-block"><span className="eyebrow">CURRENT CONTEXT</span><strong>{activeWorkout?.name||'No active session'}</strong><small>{currentSet?`${currentSet.type||'working'} set · ${currentSet.reps||'—'} reps · RIR ${currentSet.rir??'—'}`:'No active set. Coach is using your latest record.'}</small></div>
+        <div className="apex-rail-block"><span className="eyebrow">DECISION</span><strong>{live.decision.action}</strong><small>{live.decision.confidence?`${live.decision.confidence} confidence`:'Context grounded'}</small></div>
+        <div className="apex-rail-block"><span className="eyebrow">COACH RULE</span><p>Evidence → confidence → prescription → your choice.</p></div>
+      </aside>
+      <main className="apex-coach-main">
+        <section className="apex-decision-card"><div className="apex-decision-top"><span className="badge">{live.decision.action}</span><span>{live.decision.confidence||'CONTEXT GROUNDED'}</span></div><h2>{live.decision.prescription?.instruction||'Continue with the current training structure when the supplied evidence supports doing so.'}</h2><p>{live.explanation}</p>{live.decision.confidenceReason&&<div className="apex-decision-reason"><Icon name="shield" size={15}/><span>{live.decision.confidenceReason}</span></div>}</section>
+        <section className="apex-conversation"><div className="apex-conversation-head"><div><span className="eyebrow">CONVERSATION</span><h2>Ask the coach.</h2></div><span>{messages.length} messages</span></div><div className="apex-message-list">{messages.map((m,i)=><article className={`apex-message ${m.from}`} key={i}><span className="apex-message-label">{m.from==='apex'?'APEX':'YOU'}</span><p>{m.text}</p></article>)}</div><div className="apex-coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask about today, your progression, recovery context, or a prescription…"/><button aria-label="Ask APEX Coach" disabled={!q.trim()} onClick={ask}><Icon name="arrow"/></button></div><div className="apex-prompt-row"><button onClick={()=>setQ('What should I do in my next session?')}>Next session</button><button onClick={()=>setQ('Why did APEX choose this prescription?')}>Why this prescription?</button><button onClick={()=>setQ('Should I change anything today?')}>Change anything?</button></div></section>
+      </main>
+    </div>
+  </div>
+}
 function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="term-list">{terms.map(([a,b])=><div className="term" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></>}
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const fields=['neck','shoulders','chest','waist','abdomen','hips','arms','forearms','thighs','calves'];
