@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-09-28T19:57:51.284Z",
+  "passed": true,
+  "results": [
+    {
+      "label": "SOURCE + NODE REGRESSION",
+      "ok": true,
+      "status": 0,
+      "error": null
+    },
+    {
+      "label": "RELEASE CONTRACT AUDIT",
+      "ok": true,
+      "status": 0,
+      "error": null
+    },
+    {
+      "label": "PRODUCTION WEB BUILD",
+      "ok": true,
+      "status": 0,
+      "error": null
+    },
+    {
+      "label": "PLAYWRIGHT — FUNCTIONAL + UI/UX + ACCESSIBILITY + VISUAL",
+      "ok": true,
+      "status": 0,
+      "error": null
+    },
+    {
+      "label": "APEX DOMAIN + RECOVERY CONTRACTS",
+      "ok": true,
+      "status": 0,
+      "error": null
+    },
+    {
+      "label": "CAPACITOR SYNC",
+      "ok": true,
+      "status": 0,
+      "error": null
+    },
+    {
+      "label": "ANDROID DEBUG APK",
+      "ok": true,
+      "status": 0,
+      "error": null
+    }
+  ]
+}

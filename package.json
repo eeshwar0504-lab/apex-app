@@ -13,6 +13,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "audit": "node scripts/release-audit.mjs",
+    "apex:qa": "node scripts/apex-qa.mjs",
     "release:audit": "node scripts/release-audit.mjs",
     "verify": "npm test && npm run audit",
     "verify:full": "npm test && npm run build && npm run test:e2e"

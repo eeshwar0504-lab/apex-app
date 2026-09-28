@@ -126,8 +126,11 @@ export async function resetApp(page: Page) {
    */
   await page.addInitScript(() => {
     try {
-      localStorage.clear();
+      const resetMarker = '__apex_e2e_reset_once';
+      if (sessionStorage.getItem(resetMarker) === 'done') return;
       sessionStorage.clear();
+      sessionStorage.setItem(resetMarker, 'done');
+      localStorage.clear();
     } catch {
       // Storage may not be available yet.
     }
