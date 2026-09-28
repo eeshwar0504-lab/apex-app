@@ -423,10 +423,13 @@ test.describe('APEX training execution', () => {
 
     const confirmCount = await confirmButtons.count();
     const unavailableCount = await unavailableButtons.count();
+    const requirementLabels = await page.locator('.equipment-check-block .equipment-check-main .eyebrow').allTextContents();
 
     expect(
       confirmCount + unavailableCount
     ).toBeGreaterThan(0);
+    expect(requirementLabels).toContain('Machine Chest Press');
+    expect(new Set(requirementLabels).size).toBeGreaterThan(1);
 
     /*
      * Verify that APEX exposes the actual equipment decision surface.

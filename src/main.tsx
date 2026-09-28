@@ -629,8 +629,8 @@ function App(){
  const active=s.workouts.find(w=>w.id===s.activeWorkoutId&&w.status==='in_progress');
  const appClass=`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`;
  const appStyle={fontSize:`${fontScaleValue(s.preferences.fontScale)}em`};
- if(!s.onboardingComplete)return <div className={appClass} style={appStyle}>{splash&&<div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b><small>{hydrated?'Set up your training context…':'Restoring local training data…'}</small></div>}<Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
- return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="splash"><img src="/brand/apex-symbol-light.png"/><b>APEX</b></div>}
+ if(!s.onboardingComplete)return <div className={appClass} style={appStyle}>{splash&&<div className="apex3-splash"><img src="/brand/apex-symbol-light.png" alt=""/><b>APEX</b><small>{hydrated?'Set up your training context…':'Restoring local training data…'}</small></div>}<Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
+ return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="apex3-splash"><img src="/brand/apex-symbol-light.png" alt=""/><b>APEX</b></div>}
  <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="apex-top-status"><i/> SYSTEM READY</div><div className="top-actions"><button className="icon-btn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
  <main className="main">
  <div className="page-transition screen-page" data-apex-route={route} key={route}>
@@ -1274,10 +1274,10 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    ex:s.exercises.find(e=>e.id===we.exerciseId)
  })).filter(x=>!!x.ex) as Array<{we:Workout['exercises'][number];index:number;ex:Exercise}>;
 
- const required=Array.from(new Set(
-   validEntries.flatMap(({ex})=>ex.equipment||[])
-     .filter(x=>x&&x!=='none'&&x!=='bodyweight')
- ));
+ const requirements=validEntries.flatMap(({we,ex})=>(ex.equipment||[])
+   .filter(item=>item&&item!=='none'&&item!=='bodyweight')
+   .map(item=>({exerciseId:we.exerciseId,exerciseName:ex.name,item,key:`${we.exerciseId}::${item}`}))
+ );
 
  const equipmentLabels:Record<string,string>={
    machine:'Machines',
@@ -1298,26 +1298,27 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
 
  const label=(x:string)=>equipmentLabels[x]||x.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 
- const statusFor=(item:string):'confirmed'|'profile_available'|'unavailable'|undefined=>
-   w.guidedSession?.sessionEquipment?.[item];
+ const requirementKey=(exerciseId:string,item:string)=>`${exerciseId}::${item}`;
+ const statusFor=(exerciseId:string,item:string):'confirmed'|'profile_available'|'unavailable'|undefined=>
+   w.guidedSession?.sessionEquipment?.[requirementKey(exerciseId,item)] as 'confirmed'|'profile_available'|'unavailable'|undefined;
 
- const resolved=required.every(item=>{
-   const status=statusFor(item);
+ const resolved=requirements.every(({exerciseId,item})=>{
+   const status=statusFor(exerciseId,item);
    return status==='confirmed'||status==='unavailable';
  });
 
- const unavailable=required.filter(item=>statusFor(item)==='unavailable');
+ const unavailable=requirements.filter(({exerciseId,item})=>statusFor(exerciseId,item)==='unavailable');
  const readyToStart=resolved&&unavailable.length===0;
 
- const affectedExercises=(item:string)=>
-   validEntries.filter(({ex})=>(ex.equipment||[]).includes(item));
+ const affectedExercises=(exerciseId:string)=>
+   validEntries.filter(({we})=>we.exerciseId===exerciseId);
 
  const replaceTarget=replace?s.exercises.find(e=>e.id===replace):undefined;
  const sessionUnavailable=useMemo(
    ()=>new Set(
      Object.entries(w.guidedSession?.sessionEquipment||{})
        .filter(([,status])=>status==='unavailable')
-       .map(([equipment])=>equipment)
+       .map(([key])=>key.includes('::')?key.slice(key.indexOf('::')+2):key)
    ),
    [w.guidedSession?.sessionEquipment]
  );
@@ -1390,7 +1391,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    replaceExercise(oldId,nextEx);
  };
 
- const confirmEquipment=(item:string,status:'confirmed'|'unavailable')=>{
+ const confirmEquipment=(exerciseId:string,item:string,status:'confirmed'|'unavailable')=>{
    update(state=>{
      const target=state.workouts.find(x=>x.id===w.id);
      if(!target)return state;
@@ -1402,7 +1403,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
          ...guided,
          sessionEquipment:{
            ...(guided.sessionEquipment||{}),
-           [item]:status
+           [requirementKey(exerciseId,item)]:status
          },
          updatedAt:now
        },
@@ -1423,11 +1424,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
      const replaced=replaceWorkoutExercise(target,oldId,nextEx,state.exercises);
      const now=new Date().toISOString();
      const oldGuided=completeGuidedSession(target.guidedSession);
-     const affectedEquipment=oldEx?.equipment||[];
      const nextEquipment:Record<string,any>={...(oldGuided.sessionEquipment||{})};
-     affectedEquipment.forEach(item=>{
-       if(!nextEquipment[item])nextEquipment[item]='profile_available';
-     });
      const next={
        ...replaced,
        guidedSession:{
@@ -1528,28 +1525,28 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    <section className="brief-card equipment-prep-card">
      <span className="eyebrow">EQUIPMENT FOR TODAY</span>
      <h2>Confirm your training floor.</h2>
-     <p>APEX will remember these choices for this session. It will not ask again when an exercise uses the same equipment category.</p>
+     <p>Availability is tracked for each exercise requirement. A decision for one movement never marks unrelated exercises available.</p>
 
-     {required.length===0
+     {requirements.length===0
        ?<div className="callout"><Icon name="check"/><div><strong>No dedicated equipment required.</strong><p>This session can be started without equipment verification.</p></div></div>
        :<div className="equipment-check-list">
-         {required.map(item=>{
-           const status=statusFor(item);
-           const affected=affectedExercises(item);
+         {requirements.map(({exerciseId,exerciseName,item,key})=>{
+           const status=statusFor(exerciseId,item);
+           const affected=affectedExercises(exerciseId);
            const confirmed=status==='confirmed';
            const unavailableNow=status==='unavailable';
-           return <div className={`equipment-check-block equipment-confirm-motion ${confirmed?'confirmed':''} ${unavailableNow?'unavailable':''}`} key={item} data-equipment-state={status||'unconfirmed'}>
+           return <div className={`equipment-check-block equipment-confirm-motion ${confirmed?'confirmed':''} ${unavailableNow?'unavailable':''}`} key={key} data-equipment-state={status||'unconfirmed'} data-exercise-id={exerciseId} data-equipment-item={item}>
              <div className="equipment-check-main">
                <div>
-                 <span className="eyebrow">{label(item)}</span>
-                 <strong>{confirmed?'✓ CONFIRMED FOR TODAY':unavailableNow?'NOT AVAILABLE':'○ NOT CONFIRMED'}</strong>
-                 <small>{affected.length} {affected.length===1?'exercise':'exercises'} use this equipment: {affected.map(x=>x.ex.name).join(' · ')}</small>
+                 <span className="eyebrow">{exerciseName}</span>
+                 <strong>{label(item)} · {confirmed?'CONFIRMED FOR TODAY':unavailableNow?'NOT AVAILABLE':'AVAILABILITY'}</strong>
+                 <small>Required equipment for {exerciseName}.</small>
                </div>
                <div className="equipment-check-actions">
-                 {!confirmed&&<button className="button primary" onClick={()=>confirmEquipment(item,'confirmed')}>Confirm available</button>}
-                 {!unavailableNow&&<button className="button ghost" onClick={()=>confirmEquipment(item,'unavailable')}>Not available</button>}
-                 {confirmed&&<button className="mini-btn" onClick={()=>confirmEquipment(item,'unavailable')}>Change</button>}
-                 {unavailableNow&&<button className="mini-btn" onClick={()=>confirmEquipment(item,'confirmed')}>Mark available</button>}
+                 {!confirmed&&<button className="button primary" onClick={()=>confirmEquipment(exerciseId,item,'confirmed')}>Confirm available</button>}
+                 {!unavailableNow&&<button className="button ghost" onClick={()=>confirmEquipment(exerciseId,item,'unavailable')}>Not available</button>}
+                 {confirmed&&<button className="mini-btn" onClick={()=>confirmEquipment(exerciseId,item,'unavailable')}>Change</button>}
+                 {unavailableNow&&<button className="mini-btn" onClick={()=>confirmEquipment(exerciseId,item,'confirmed')}>Mark available</button>}
                </div>
              </div>
 
@@ -1589,7 +1586,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
                          <Icon name="settings"/>
                          <div>
                            <strong>No safe alternative is available from today's confirmed setup.</strong>
-                           <p>Mark another equipment category available or choose from the full movement library.</p>
+                           <p>Choose another movement or resolve this exercise's required equipment.</p>
                          </div>
                        </div>
                      }
@@ -3684,6 +3681,10 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const momentum=goalMomentum(s);
  const balance=trainingBalance(s);
  const maxTrend=Math.max(...trend.map(x=>x.volume),1);
+ const bodyEntries=s.measurements.filter(entry=>entry.weightKg!==undefined).slice().sort((a,b)=>a.date.localeCompare(b.date));
+ const latestBodyEntry=bodyEntries[bodyEntries.length-1];
+ const previousBodyEntry=bodyEntries.length>1?bodyEntries[bodyEntries.length-2]:undefined;
+ const bodyWeightChange=latestBodyEntry&&previousBodyEntry?latestBodyEntry.weightKg!-previousBodyEntry.weightKg!:undefined;
  return <div className="apex-system-screen apex-progress-v4">
    <section className="apex-page-hero">
     <div><span className="eyebrow">PROGRESS / EVIDENCE</span><h1>What is changing?</h1><p>Your training record, translated into signals you can actually inspect. Facts stay separate from interpretation.</p></div>
@@ -3695,6 +3696,11 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
     <article><span>VOLUME</span><strong>{total?Math.round(total).toLocaleString():'—'}</strong><small>kg·reps</small></article>
     <article><span>ACHIEVEMENTS</span><strong>{s.achievements.length}</strong><small>recorded</small></article>
    </section>
+
+    <section className="apex-body-shortcut">
+     <div><span className="eyebrow">BODY / WEIGHT</span><strong>{latestBodyEntry?`${latestBodyEntry.weightKg} kg`:'Start a recorded-weight history'}</strong><small>{bodyWeightChange===undefined?'Dated measurements · no estimated values':`${bodyWeightChange>=0?'+':''}${bodyWeightChange.toFixed(1)} kg since previous weigh-in`}</small></div>
+     <button className="mini-btn" onClick={()=>onNav('measurements')}>Open Body / Weight <Icon name="arrow" size={14}/></button>
+    </section>
 
    <section className="apex-panel-section">
     <div className="apex-section-heading"><div><span className="eyebrow">01 / CONSISTENCY</span><h2>Show up, then look at the trend.</h2></div><span className="apex-heading-note">LAST 30 DAYS</span></div>
@@ -3838,6 +3844,7 @@ function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many c
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const fields=['neck','shoulders','chest','waist','abdomen','hips','arms','forearms','thighs','calves'];
  const [date,setDate]=useState(today());
+ const [range,setRange]=useState<'7D'|'30D'|'3M'|'1Y'|'All'>('30D');
  const [values,setValues]=useState<Record<string,string>>(()=>Object.fromEntries(fields.map(k=>[k,''])));
  const [weight,setWeight]=useState('');
  useEffect(()=>{
@@ -3860,29 +3867,34 @@ function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>
  s.measurements.forEach(entry=>{
    if(entry.weightKg!==undefined&&Number.isFinite(entry.weightKg))weightByDay.set(entry.date,entry.weightKg);
  });
- const days=Array.from({length:30},(_,index)=>todayPlus(index-29));
- const daily=days.map(day=>({date:day,weight:weightByDay.get(day)}));
- const recorded=daily.filter((entry):entry is {date:string;weight:number}=>entry.weight!==undefined);
- const minWeight=recorded.length?Math.min(...recorded.map(entry=>entry.weight)):0;
- const maxWeight=recorded.length?Math.max(...recorded.map(entry=>entry.weight)):0;
- const weightRange=Math.max(maxWeight-minWeight,0.1);
- const firstWeight=recorded[0];
- const lastWeight=recorded[recorded.length-1];
- const weightChange=firstWeight&&lastWeight?lastWeight.weight-firstWeight.weight:undefined;
+ const dateOrdinal=(value:string)=>{const[y,m,d]=value.split('-').map(Number);return Date.UTC(y,m-1,d)/86400000};
+ const recordedDates=Array.from(weightByDay.keys()).sort();
+ const firstRecordedDate=recordedDates[0]||today();
+ const rangeLength=range==='7D'?7:range==='30D'?30:range==='3M'?90:range==='1Y'?365:Math.max(1,dateOrdinal(today())-dateOrdinal(firstRecordedDate)+1);
+ const chartDays=Array.from({length:rangeLength},(_,index)=>todayPlus(index-(rangeLength-1)));
+ const chartEntries=chartDays.map(day=>({date:day,weight:weightByDay.get(day)}));
+ const chartRecorded=chartEntries.filter((entry):entry is {date:string;weight:number}=>entry.weight!==undefined);
+ const chartMin=chartRecorded.length?Math.min(...chartRecorded.map(entry=>entry.weight)):0;
+ const chartMax=chartRecorded.length?Math.max(...chartRecorded.map(entry=>entry.weight)):0;
+ const chartRange=Math.max(chartMax-chartMin,0.1);
  const hasInput=(weight.trim()!==''&&Number.isFinite(Number(weight))&&Number(weight)>0)||fields.some(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k])));
  return <><PageTitle eyebrow="BODY DATA" title="Measure what matters." sub="Optional measurements add context to progress. APEX stores the numbers; it does not make medical or body-composition claims."/>
  <section className="plan-editor"><div className="form-grid"><label>Measurement date<input aria-label="Measurement date" type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)}/></label><label>Weight (kg)<input min="1" step="0.1" inputMode="decimal" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Optional"/></label>{fields.map(k=><label key={k}>{k[0].toUpperCase()+k.slice(1)} (cm)<input min="0" step="0.1" inputMode="decimal" value={values[k]} onChange={e=>setValues(v=>({...v,[k]:e.target.value}))} placeholder="Optional"/></label>)}</div><button className="button primary wide" disabled={!hasInput} onClick={save}>Save measurements for selected date</button></section>
- <section className="section body-weight-trend"><div className="section-head"><div><span className="eyebrow">BODY / DAILY WEIGHT</span><h2>Day-by-day record.</h2><p>Only logged weigh-ins are shown. Blank days are not estimated.</p></div><span className="apex-heading-note">LAST 30 DAYS</span></div>
-   {recorded.length? <>
-     <div className="weight-trend-summary"><div><small>EARLIEST LOGGED</small><strong>{firstWeight?.weight.toFixed(1)} kg</strong></div><div><small>LATEST LOGGED</small><strong>{lastWeight?.weight.toFixed(1)} kg</strong></div><div><small>CHANGE BETWEEN LOGS</small><strong>{weightChange===undefined?'—':`${weightChange>=0?'+':''}${weightChange.toFixed(1)} kg`}</strong></div></div>
-     <div className="weight-trend-chart" role="img" aria-label={`Daily weight over the last 30 days. ${recorded.map(entry=>`${entry.date}: ${entry.weight} kilograms`).join('; ')}`}>
-       {daily.map(({date:day,weight:value},index)=>{
-         const height=value===undefined?0:22+((value-minWeight)/weightRange)*70;
-         const label=index%7===0||index===29?day.slice(5):'';
+ <section className="section body-weight-trend"><div className="section-head"><div><span className="eyebrow">BODY / DAILY WEIGHT</span><h2>Day-by-day record.</h2><p>Only logged weigh-ins are shown. Blank days are not estimated.</p></div><span className="apex-heading-note">{range==='All'?'ALL RECORDED DAYS':`LAST ${range}`}</span></div>
+   <div className="weight-range-control" role="group" aria-label="Weight history range">
+    {(['7D','30D','3M','1Y','All'] as const).map(period=><button key={period} aria-label={`Show ${period} weight trend`} aria-pressed={range===period} className={range===period?'selected':''} onClick={()=>setRange(period)}>{period}</button>)}
+   </div>
+   {chartRecorded.length? <>
+     <div className="weight-trend-summary"><div><small>EARLIEST LOGGED</small><strong>{chartRecorded[0]?.weight.toFixed(1)} kg</strong></div><div><small>LATEST LOGGED</small><strong>{chartRecorded[chartRecorded.length-1]?.weight.toFixed(1)} kg</strong></div><div><small>CHANGE BETWEEN LOGS</small><strong>{chartRecorded[0]&&chartRecorded[chartRecorded.length-1]?`${chartRecorded[chartRecorded.length-1].weight-chartRecorded[0].weight>=0?'+':''}${(chartRecorded[chartRecorded.length-1].weight-chartRecorded[0].weight).toFixed(1)} kg`:'—'}</strong></div></div>
+     <div className="weight-trend-chart" style={{gridTemplateColumns:`repeat(${chartEntries.length},minmax(0,1fr))`}} role="img" aria-label={`Daily weight over ${range}. ${chartRecorded.map(entry=>`${entry.date}: ${entry.weight} kilograms`).join('; ')}`}>
+       {chartEntries.map(({date:day,weight:value},index)=>{
+         const height=value===undefined?0:22+((value-chartMin)/chartRange)*70;
+         const labelEvery=rangeLength<=30?7:rangeLength<=90?14:rangeLength<=365?30:Math.max(1,Math.ceil(rangeLength/12));
+         const label=index%labelEvery===0||index===chartEntries.length-1?day.slice(5):'';
          return <div className={`weight-trend-day ${value===undefined?'is-empty':'has-weight'}`} key={day} title={value===undefined?`${day}: no weigh-in`:`${day}: ${value} kg`}><i style={{height:`${height}%`}}/><small aria-hidden="true">{label}</small></div>;
        })}
      </div>
-     <div className="weight-trend-range"><span>{minWeight.toFixed(1)} kg</span><span>{maxWeight.toFixed(1)} kg</span></div>
+     <div className="weight-trend-range"><span>{chartMin.toFixed(1)} kg</span><span>{chartMax.toFixed(1)} kg</span></div>
    </>:<Empty title="No weight entries yet" text="Choose a date and log a weight to start the daily record."/>}
  </section>
  <section className="section"><div className="section-head"><div><span className="eyebrow">MEASUREMENT HISTORY</span><h2>Longitudinal context.</h2></div></div><div className="history-list">{s.measurements.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(m=><div className="history-item static" key={m.id}><div><span className="eyebrow">{m.date}</span><strong>{m.weightKg!==undefined?`${m.weightKg} kg`:'No weight logged'}</strong><small>{Object.entries(m.values).map(([k,v])=>`${k} ${v} cm`).join(' · ')||'No circumference measurements'}</small></div></div>)}{!s.measurements.length&&<Empty title="No measurements yet" text="Body data is optional. Add a dated snapshot whenever it is useful to you."/>}</div></section>

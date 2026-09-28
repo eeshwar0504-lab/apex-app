@@ -170,10 +170,10 @@ test.describe('APEX 3.0 visual QA', () => {
     await page.addInitScript(() => { localStorage.clear(); sessionStorage.clear(); });
     const start = Date.now();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    const splash = page.locator('.splash');
+    const splash = page.locator('.apex3-splash');
     await expect(splash).toBeVisible({ timeout: 3000 });
     const early = await page.evaluate(() => {
-      const el = document.querySelector('.splash');
+      const el = document.querySelector('.apex3-splash');
       if (!el) return null;
       const style = getComputedStyle(el);
       return { opacity: style.opacity, animationName: style.animationName, animationDuration: style.animationDuration };
@@ -191,7 +191,7 @@ test.describe('APEX 3.0 visual QA', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.addInitScript(() => { localStorage.clear(); sessionStorage.clear(); });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    const splash = page.locator('.splash');
+    const splash = page.locator('.apex3-splash');
     await expect(splash).toBeVisible({ timeout: 3000 });
     const style = await splash.evaluate(el => {
       const s = getComputedStyle(el);

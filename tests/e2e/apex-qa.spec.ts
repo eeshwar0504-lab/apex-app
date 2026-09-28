@@ -436,7 +436,7 @@ test.describe('APEX 3.0 — full automated UI/UX QA', () => {
   test('splash has a deliberate visible animation window', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    const splash = page.locator('.splash, .apex-splash-v3').first();
+    const splash = page.locator('.apex3-splash').first();
     if (!(await splash.count())) {
       test.info().annotations.push({
         type: 'warning',
@@ -468,7 +468,7 @@ test.describe('APEX 3.0 — full automated UI/UX QA', () => {
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    const splash = page.locator('.splash, .apex-splash-v3').first();
+    const splash = page.locator('.apex3-splash').first();
     if (await splash.count()) {
       await expect(page.locator('.app')).toBeVisible({ timeout: 6000 });
     } else {
