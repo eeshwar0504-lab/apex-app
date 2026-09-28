@@ -4411,180 +4411,250 @@ input,select,textarea{background:#0c0e0f;border-color:var(--apex-line)!important
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
 }
+
 /* ============================================================
-   APEX — MOBILE COMMAND ROW OVERFLOW FIX
-   Keeps command actions inside narrow viewports.
+   APEX 2.0 — FINAL RESPONSIVE / TOKEN SAFETY LAYER
+   Visual-only overrides. No application logic is changed.
    ============================================================ */
 
-@media (max-width: 700px) {
-  .command-row {
-    width: 100%;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-    align-items: stretch;
+:root{
+  /* Canonical public theme tokens. Components should consume these
+     rather than introducing new hard-coded theme colors. */
+  --apex-theme-bg:var(--apex-bg,#050607);
+  --apex-theme-surface:var(--apex-surface,#0c0e0f);
+  --apex-theme-surface-2:var(--apex-surface-2,#111415);
+  --apex-theme-surface-3:var(--apex-surface-3,#16191a);
+  --apex-theme-border:var(--apex-line,rgba(235,229,214,.115));
+  --apex-theme-text:var(--apex-white,#f5f1e8);
+  --apex-theme-muted:var(--apex-muted-2,#99958b);
+  --apex-theme-accent:var(--apex-gold,#d7a545);
+  --apex-theme-accent-hi:var(--apex-gold-hi,#efc66e);
+  --apex-theme-aurora:var(--apex-aurora,#8294a4);
+  --apex-theme-steel:var(--apex-steel,#8b8f91);
+  --apex-theme-crimson:var(--apex-crimson,#91443c);
+}
+
+/* The app remains Classic Gold by default. These theme scopes are
+   intentionally token-only so future theme switching never requires
+   component rewrites. */
+.app[data-apex-theme="aurora"]{
+  --apex-gold:#b8c8d5;
+  --apex-gold-hi:#dbe8f0;
+  --apex-gold-soft:rgba(130,148,164,.14);
+  --apex-gold-glow:rgba(130,148,164,.22);
+}
+.app[data-apex-theme="steel"]{
+  --apex-gold:#aeb3b4;
+  --apex-gold-hi:#e0e3e2;
+  --apex-gold-soft:rgba(156,163,163,.13);
+  --apex-gold-glow:rgba(156,163,163,.20);
+}
+.app[data-apex-theme="crimson"]{
+  --apex-gold:#a65a50;
+  --apex-gold-hi:#d18a7f;
+  --apex-gold-soft:rgba(145,68,60,.14);
+  --apex-gold-glow:rgba(145,68,60,.20);
+}
+
+/* Never allow decorative layers to create a horizontal scroll surface. */
+.app,
+.topbar,
+.main,
+.screen-page,
+.page-transition,
+.bottom{
+  min-width:0;
+  max-width:100%;
+}
+
+.app{
+  overflow-x:clip;
+}
+
+/* Android-safe header composition. The center status is decorative and
+   yields before the actionable search control at narrow widths. */
+.topbar{
+  box-sizing:border-box;
+  width:100%;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.apex-brand{
+  min-width:0;
+  flex:0 1 auto;
+}
+.apex-brand span{
+  min-width:0;
+}
+.brand-caption,
+.apex-top-status{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* Keep touch targets reliable when Android text scaling is enabled. */
+.button,
+.icon-btn,
+.nav-item,
+.mini-btn,
+.bottom button{
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* Large text must reflow rather than forcing the layout wider. */
+.app[style*="font-size"] h1,
+.app[style*="font-size"] h2,
+.app[style*="font-size"] h3,
+.app[style*="font-size"] p,
+.app[style*="font-size"] button,
+.app[style*="font-size"] label,
+.app[style*="font-size"] span,
+.app[style*="font-size"] small{
+  overflow-wrap:anywhere;
+}
+
+@media(max-width:700px){
+  .topbar{
+    gap:8px;
+    padding-top:calc(10px + env(safe-area-inset-top,0px));
+    padding-bottom:10px;
   }
 
-  .command-row .button {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    flex: none;
-    white-space: normal;
-    overflow-wrap: anywhere;
+  .brand-caption{
+    flex:1 1 auto;
+    text-align:center;
+    max-width:38vw;
+  }
+
+  .apex-top-status{
+    display:none;
+  }
+
+  .main{
+    width:100%;
+    box-sizing:border-box;
+    padding-left:16px!important;
+    padding-right:16px!important;
+  }
+
+  .apex-command-hero,
+  .apex-page-hero{
+    width:100%;
+    min-width:0;
+  }
+
+  .apex-command-hero{
+    gap:20px;
+  }
+
+  .apex-command-hero h1,
+  .apex-page-hero h1,
+  .page-title h1{
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+
+  .apex-hero-actions,
+  .command-row,
+  .button-row{
+    width:100%;
+    min-width:0;
+  }
+
+  .apex-hero-actions .button,
+  .command-row .button,
+  .button-row .button{
+    min-width:0;
+    max-width:100%;
+  }
+
+  .apex-quick-grid{
+    width:100%;
+    min-width:0;
+  }
+
+  .apex-session-card,
+  .apex-readout-card,
+  .apex-coach-card,
+  .apex-decision-card,
+  .focus-card,
+  .active-set-card{
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
+  }
+
+  .apex-message p,
+  .apex-coach-copy p,
+  .apex-decision-card p{
+    overflow-wrap:anywhere;
+  }
+
+  .bottom{
+    left:0;
+    right:0;
+    width:100%;
+    box-sizing:border-box;
   }
 }
 
-@media (max-width: 430px) {
-  .command-row {
-    grid-template-columns: 1fr;
+@media(max-width:430px){
+  .topbar{
+    padding-left:16px!important;
+    padding-right:16px!important;
   }
 
-  .command-row .button {
-    min-height: 48px;
-  }
-}
-/* ============================================================
-   APEX — MOBILE EDGE OVERFLOW FIX
-   Prevents header/logo and Plan Studio from escaping viewport.
-   ============================================================ */
-
-@media (max-width: 700px) {
-  /* Keep the APEX brand completely inside the viewport */
-  .brand,
-  .brand-link,
-  .logo,
-  .logo-link {
-    max-width: 100%;
-    min-width: 0;
+  .brand{
+    gap:8px;
+    letter-spacing:.22em;
+    font-size:14px;
   }
 
-  /* Prevent horizontal displacement caused by flex sizing */
-  .header,
-  .topbar,
-  .navbar,
-  .nav,
-  .header-inner {
-    max-width: 100%;
-    min-width: 0;
+  .brand img{
+    width:27px;
+    height:27px;
   }
 
-  /* Plan Studio / plan controls must never extend left of viewport */
-  .plan-studio,
-  .plan-studio *,
-  [class*="plan-studio"] {
-    max-width: 100%;
-    min-width: 0;
-  }
-}
-/* ============================================================
-   APEX — FINAL MOBILE EDGE CONTAINMENT
-   Fixes real 412px viewport clipping without touching tests.
-   ============================================================ */
-
-@media (max-width: 700px) {
-
-  /* ---------- HEADER ---------- */
-
-  .topbar {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-    overflow: hidden;
+  .brand-caption{
+    display:none;
   }
 
-  .apex-brand,
-  .brand {
-    min-width: 0;
-    max-width: calc(100% - 48px);
-    flex-shrink: 1;
-    margin-left: 0 !important;
-    transform: none;
+  .top-actions{
+    flex:0 0 auto;
   }
 
-  .brand span {
-    min-width: 0;
+  .main{
+    padding-left:16px!important;
+    padding-right:16px!important;
   }
 
-  .brand-caption,
-  .apex-top-status {
-    min-width: 0;
-    max-width: 0;
-    overflow: hidden;
+  .apex-command-hero h1{
+    font-size:clamp(42px,12.5vw,58px);
   }
 
-  .top-actions {
-    flex: 0 0 auto;
+  .apex-quick-grid{
+    grid-template-columns:1fr!important;
   }
 
-
-  /* ---------- PAGE CONTENT ---------- */
-
-  .main {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    margin-left: 0;
-    margin-right: 0;
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-    overflow-x: clip;
+  .apex-command-meta{
+    gap:7px;
   }
 
-  .screen-page,
-  .page-transition {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
+  .apex-status-chip{
+    min-width:0;
   }
 
-
-  /* ---------- QUICK CARDS ---------- */
-
-  .quick-grid {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    grid-template-columns: 1fr !important;
-  }
-
-  .quick {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    box-sizing: border-box;
-  }
-
-  .quick > span:nth-child(2) {
-    min-width: 0;
+  .bottom{
+    padding-left:8px;
+    padding-right:8px;
   }
 }
 
-
-/* ---------- VERY NARROW PHONES ---------- */
-
-@media (max-width: 430px) {
-
-  .topbar {
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-  }
-
-  .main {
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-  }
-
-  .apex-brand {
-    flex: 0 1 auto;
-  }
-
-  .quick {
-    min-height: 78px;
+@media(prefers-reduced-motion:reduce){
+  .apex-live-status i,
+  .apex-coach-pulse i{
+    animation:none!important;
   }
 }
