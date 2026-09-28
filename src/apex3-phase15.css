@@ -1,0 +1,43 @@
+/* ============================================================
+   APEX 3.0 — PHASE 15 / ACCESSIBILITY + FINAL POLISH
+   Prevents visual drift and keeps the product comfortable at all sizes.
+   ============================================================ */
+
+.app.high-contrast {
+  --apex-text: #ffffff;
+  --apex-muted: #ddd5c8;
+  --apex-border: rgba(255,255,255,0.18);
+}
+
+.app.font-large,
+.app.font-larger {
+  letter-spacing: 0.01em;
+}
+
+.app.font-large .eyebrow,
+.app.font-larger .eyebrow {
+  letter-spacing: 0.16em;
+}
+
+.app.reduce-motion *,
+.app.reduce-motion *::before,
+.app.reduce-motion *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(217,173,85,0.6);
+  outline-offset: 2px;
+}
+
+@media (max-width: 500px) {
+  .onboarding,
+  .main,
+  .topbar {
+    max-width: 100vw;
+  }
+}

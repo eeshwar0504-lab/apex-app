@@ -1,6 +1,22 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import './styles.css';
+import './apex3-phase2.css';
+import './apex3-phase3.css';
+import './apex3-phase4.css';
+import './apex3-phase5.css';
+import './apex3-phase6.css';
+import './apex3-phase7.css';
+import './apex3-phase8.css';
+import './apex3-phase9.css';
+import './apex3-phase10.css';
+import './apex3-phase11.css';
+import './apex3-phase12.css';
+import './apex3-phase13.css';
+import './apex3-phase14.css';
+import './apex3-phase15.css';
+import './apex3-design-system.css';
+import {APEX_TRAINING_IMAGES,imageKindForExercise,type TrainingImageKind} from './imagery';
 import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,PlanDay,Measurement} from './core/types';
 import {EXERCISES,findExercises} from './knowledge/exercises';
 import {repository} from './data/repository';
@@ -26,6 +42,17 @@ function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,hei
 
 function ApexStatus({label,detail,icon='spark'}:{label:string;detail?:string;icon?:string}){
  return <div className="apex-status-chip"><span className="apex-status-icon"><Icon name={icon} size={15}/></span><span><b>{label}</b>{detail&&<small>{detail}</small>}</span></div>
+}
+function ApexImage({kind,alt,className='',caption,eager=false}:{kind:TrainingImageKind;alt?:string;className?:string;caption?:string;eager?:boolean}){
+ const asset=APEX_TRAINING_IMAGES[kind];
+ const [failedKind,setFailedKind]=useState<TrainingImageKind|null>(null);
+ const failed=failedKind===kind;
+ return <figure className={`apex-image ${className} ${failed?'is-fallback':''}`}>
+   {failed
+     ?<div className="apex-image-fallback" aria-hidden="true"><Icon name="activity" size={24}/></div>
+     :<img src={asset.src} alt={alt??asset.alt} loading={eager?'eager':'lazy'} decoding="async" onError={()=>setFailedKind(kind)}/>}
+   {caption&&<figcaption>{caption}</figcaption>}
+ </figure>;
 }
 function ApexSection({eyebrow,title,action,children,className=''}:{eyebrow:string;title:string;action?:React.ReactNode;children:React.ReactNode;className?:string}){
  return <section className={`section apex-section ${className}`}><div className="section-head apex-section-head"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>{action}</div>{children}</section>
@@ -1173,7 +1200,7 @@ function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Wo
       </div>
       <div className="apex-command-meta"><ApexStatus label="READINESS" detail={`${read.label} · ${read.level}`} icon="activity"/><ApexStatus label="30-DAY LOAD" detail={`${load.workingSets30} working sets`} icon="layers"/><ApexStatus label="RECORD" detail={`${completed} completed sessions`} icon="shield"/></div>
     </div>
-    <div className="apex-hero-visual" aria-hidden="true"><div className="apex-orbit orbit-a"/><div className="apex-orbit orbit-b"/><div className="apex-orbit orbit-c"/><div className="apex-hero-core"><span>APEX</span><b>{read.label}</b><small>READINESS</small></div><div className="apex-hero-scan"/></div>
+    <div className="apex-hero-visual" aria-hidden="true"><ApexImage kind={focusEx?imageKindForExercise(focusEx):'training-floor'} alt="" className="apex-hero-image" eager/><div className="apex-orbit orbit-a"/><div className="apex-orbit orbit-b"/><div className="apex-orbit orbit-c"/><div className="apex-hero-core"><span>APEX</span><b>{read.label}</b><small>READINESS</small></div><div className="apex-hero-scan"/></div>
    </section>
 
    <ApexSection eyebrow="COACH / NOW" title="The next useful action." action={<button className="mini-btn" onClick={()=>onNav('coach')}>Open Coach <Icon name="arrow" size={14}/></button>}>
@@ -1439,6 +1466,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
 
  const first=w.exercises[0];
  const firstEx=first?s.exercises.find(e=>e.id===first.exerciseId):undefined;
+ const contextImage=firstEx?imageKindForExercise(firstEx):'training-floor';
  const adaptations=adaptationsForWorkout(s,w);
 
  const begin=()=>{
@@ -1468,6 +1496,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    <span className="eyebrow">TODAY</span>
    <h1>{w.name}</h1>
    <p className="muted">{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.prescribedSets,0)} planned sets</p>
+  <ApexImage kind={contextImage} alt="Training context for today's planned session." className="preworkout-context-image" caption="SESSION / CONTEXT"/>
 
    <section className="brief-card session-plan-card">
      <div className="section-head">
@@ -3761,7 +3790,7 @@ function Library({s,query,setQuery,onExercise}:{s:AppState;query:string;setQuery
 }
 function ExerciseSheet({ex,s,close,onUse,onAlternative}:{ex:Exercise;s:AppState;close:()=>void;onUse:()=>void;onAlternative:(id:string)=>void}){
  const alts=smartAlternatives(ex,s.exercises,s.profile?.equipment);
- return <Modal title={ex.name} close={close}><div className="detail-meta"><span>{ex.family}</span><span>{ex.primaryMuscles.join(' · ')}</span><span>{formatLoad(ex,undefined)}</span></div>
+ return <Modal title={ex.name} close={close}><ApexImage kind={imageKindForExercise(ex)} alt={`Training context for ${ex.name}.`} className="exercise-detail-image" caption={`${ex.pattern.replace(/_/g,' ')} / MOVEMENT CONTEXT`}/><div className="detail-meta"><span>{ex.family}</span><span>{ex.primaryMuscles.join(' · ')}</span><span>{formatLoad(ex,undefined)}</span></div>
  <Detail title="EQUIPMENT"><p>{ex.equipment.length?ex.equipment.join(' · '):'No dedicated equipment required.'}</p></Detail>
  <Detail title="SETUP"><ul>{ex.setup.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="EXECUTION"><ol>{ex.steps.map(x=><li key={x}>{x}</li>)}</ol></Detail><Detail title="BREATHING & TEMPO"><p>{ex.breathing}{ex.tempo?` Tempo: ${ex.tempo}.`:''}</p></Detail><Detail title="CUES"><div className="tag-list">{ex.cues.map(x=><span key={x}>{x}</span>)}</div></Detail><Detail title="COMMON MISTAKES"><ul>{ex.mistakes.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="SAFETY"><ul>{ex.safety.map(x=><li key={x}>{x}</li>)}</ul></Detail>
  <Detail title="ALTERNATIVES"><div className="alt-list">{alts.map(({exercise,fit,samePattern,sameLoad})=><button key={exercise.id} onClick={()=>onAlternative(exercise.id)}><span><strong>{exercise.name}</strong><small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in current setup'}{samePattern?' · same pattern':''}{sameLoad?' · same load semantics':''}</small></span><Icon name="chev"/></button>)}</div></Detail>
@@ -3808,12 +3837,54 @@ function Coach({s}:{s:AppState}){
 function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="term-list">{terms.map(([a,b])=><div className="term" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></>}
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const fields=['neck','shoulders','chest','waist','abdomen','hips','arms','forearms','thighs','calves'];
- const latest=s.measurements.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
- const [values,setValues]=useState<Record<string,string>>(()=>Object.fromEntries(fields.map(k=>[k,latest?.values?.[k]?.toString()||''])));
- const [weight,setWeight]=useState(latest?.weightKg?.toString()||s.profile?.body.weightKg?.toString()||'');
- const save=()=>{const vals=Object.fromEntries(fields.filter(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k]))).map(k=>[k,Number(values[k])]));const entry:Measurement={id:uid('measurement'),date:today(),weightKg:weight&&Number.isFinite(Number(weight))?Number(weight):undefined,values:vals};update(x=>({...x,measurements:[...x.measurements,entry],profile:x.profile?{...x.profile,body:{...x.profile.body,weightKg:weight?Number(weight):x.profile.body.weightKg}}:x.profile,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'measurement_logged',timestamp:new Date().toISOString(),payload:{fields:Object.keys(vals)}}]}))};
+ const [date,setDate]=useState(today());
+ const [values,setValues]=useState<Record<string,string>>(()=>Object.fromEntries(fields.map(k=>[k,''])));
+ const [weight,setWeight]=useState('');
+ useEffect(()=>{
+   const existing=s.measurements.slice().reverse().find(m=>m.date===date);
+   setWeight(existing?.weightKg?.toString()||'');
+   setValues(Object.fromEntries(fields.map(k=>[k,existing?.values?.[k]?.toString()||''])));
+ },[date,s.measurements]);
+
+ const save=()=>{
+   const vals=Object.fromEntries(fields.filter(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k]))).map(k=>[k,Number(values[k])]));
+   const numericWeight=weight.trim()?Number(weight):undefined;
+   const hasWeight=numericWeight!==undefined&&Number.isFinite(numericWeight)&&numericWeight>0;
+   if(!hasWeight&&!Object.keys(vals).length)return;
+   const entry:Measurement={id:uid('measurement'),date,weightKg:hasWeight?numericWeight:undefined,values:vals};
+   const latestWeightDate=s.measurements.reduce((latest,item)=>item.weightKg!==undefined&&item.date>latest?item.date:latest,'');
+   const updateProfileWeight=hasWeight&&date>=latestWeightDate;
+   update(x=>({...x,measurements:[...x.measurements,entry],profile:x.profile&&updateProfileWeight?{...x.profile,body:{...x.profile.body,weightKg:numericWeight}}:x.profile,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'measurement_logged',timestamp:new Date().toISOString(),payload:{date,fields:[...(hasWeight?['weightKg']:[]),...Object.keys(vals)]}}]}));
+ };
+ const weightByDay=new Map<string,number>();
+ s.measurements.forEach(entry=>{
+   if(entry.weightKg!==undefined&&Number.isFinite(entry.weightKg))weightByDay.set(entry.date,entry.weightKg);
+ });
+ const days=Array.from({length:30},(_,index)=>todayPlus(index-29));
+ const daily=days.map(day=>({date:day,weight:weightByDay.get(day)}));
+ const recorded=daily.filter((entry):entry is {date:string;weight:number}=>entry.weight!==undefined);
+ const minWeight=recorded.length?Math.min(...recorded.map(entry=>entry.weight)):0;
+ const maxWeight=recorded.length?Math.max(...recorded.map(entry=>entry.weight)):0;
+ const weightRange=Math.max(maxWeight-minWeight,0.1);
+ const firstWeight=recorded[0];
+ const lastWeight=recorded[recorded.length-1];
+ const weightChange=firstWeight&&lastWeight?lastWeight.weight-firstWeight.weight:undefined;
+ const hasInput=(weight.trim()!==''&&Number.isFinite(Number(weight))&&Number(weight)>0)||fields.some(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k])));
  return <><PageTitle eyebrow="BODY DATA" title="Measure what matters." sub="Optional measurements add context to progress. APEX stores the numbers; it does not make medical or body-composition claims."/>
- <section className="plan-editor"><div className="form-grid"><label>Weight (kg)<input inputMode="decimal" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Optional"/></label>{fields.map(k=><label key={k}>{k[0].toUpperCase()+k.slice(1)} (cm)<input inputMode="decimal" value={values[k]} onChange={e=>setValues(v=>({...v,[k]:e.target.value}))} placeholder="Optional"/></label>)}</div><button className="button primary wide" onClick={save}>Save today's measurements</button></section>
+ <section className="plan-editor"><div className="form-grid"><label>Measurement date<input aria-label="Measurement date" type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)}/></label><label>Weight (kg)<input min="1" step="0.1" inputMode="decimal" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Optional"/></label>{fields.map(k=><label key={k}>{k[0].toUpperCase()+k.slice(1)} (cm)<input min="0" step="0.1" inputMode="decimal" value={values[k]} onChange={e=>setValues(v=>({...v,[k]:e.target.value}))} placeholder="Optional"/></label>)}</div><button className="button primary wide" disabled={!hasInput} onClick={save}>Save measurements for selected date</button></section>
+ <section className="section body-weight-trend"><div className="section-head"><div><span className="eyebrow">BODY / DAILY WEIGHT</span><h2>Day-by-day record.</h2><p>Only logged weigh-ins are shown. Blank days are not estimated.</p></div><span className="apex-heading-note">LAST 30 DAYS</span></div>
+   {recorded.length? <>
+     <div className="weight-trend-summary"><div><small>EARLIEST LOGGED</small><strong>{firstWeight?.weight.toFixed(1)} kg</strong></div><div><small>LATEST LOGGED</small><strong>{lastWeight?.weight.toFixed(1)} kg</strong></div><div><small>CHANGE BETWEEN LOGS</small><strong>{weightChange===undefined?'—':`${weightChange>=0?'+':''}${weightChange.toFixed(1)} kg`}</strong></div></div>
+     <div className="weight-trend-chart" role="img" aria-label={`Daily weight over the last 30 days. ${recorded.map(entry=>`${entry.date}: ${entry.weight} kilograms`).join('; ')}`}>
+       {daily.map(({date:day,weight:value},index)=>{
+         const height=value===undefined?0:22+((value-minWeight)/weightRange)*70;
+         const label=index%7===0||index===29?day.slice(5):'';
+         return <div className={`weight-trend-day ${value===undefined?'is-empty':'has-weight'}`} key={day} title={value===undefined?`${day}: no weigh-in`:`${day}: ${value} kg`}><i style={{height:`${height}%`}}/><small aria-hidden="true">{label}</small></div>;
+       })}
+     </div>
+     <div className="weight-trend-range"><span>{minWeight.toFixed(1)} kg</span><span>{maxWeight.toFixed(1)} kg</span></div>
+   </>:<Empty title="No weight entries yet" text="Choose a date and log a weight to start the daily record."/>}
+ </section>
  <section className="section"><div className="section-head"><div><span className="eyebrow">MEASUREMENT HISTORY</span><h2>Longitudinal context.</h2></div></div><div className="history-list">{s.measurements.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(m=><div className="history-item static" key={m.id}><div><span className="eyebrow">{m.date}</span><strong>{m.weightKg!==undefined?`${m.weightKg} kg`:'No weight logged'}</strong><small>{Object.entries(m.values).map(([k,v])=>`${k} ${v} cm`).join(' · ')||'No circumference measurements'}</small></div></div>)}{!s.measurements.length&&<Empty title="No measurements yet" text="Body data is optional. Add a dated snapshot whenever it is useful to you."/>}</div></section>
  <div className="callout"><Icon name="bolt"/><div><strong>Context, not judgment</strong><p>APEX can compare these measurements with your own historical training record, but it will not infer health conditions or promise a body-composition outcome.</p></div></div></>}
 function You({s,nav,update}:{s:AppState;nav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){

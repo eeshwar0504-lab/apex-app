@@ -1,0 +1,35 @@
+/* ============================================================
+   APEX 3.0 — PHASE 14 / COMMAND + LEARN + COACH
+   Keeps knowledge surfaces and controls readable and premium.
+   ============================================================ */
+
+.command-box {
+  min-height: 56px;
+}
+
+.command-box button,
+.suggestions button {
+  border-radius: 12px;
+}
+
+.suggestions button {
+  background: rgba(12,14,16,0.8);
+}
+
+.learn-card,
+.coach-box,
+.command-box,
+.detail,
+.list-card {
+  border: 1px solid rgba(217,173,85,0.12);
+}
+
+.apex-status-chip,
+.callout {
+  border-radius: 14px;
+}
+
+.apex-status-chip {
+  border: 1px solid rgba(217,173,85,0.14);
+  background: rgba(15,17,19,0.76);
+}

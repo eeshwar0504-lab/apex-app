@@ -1,0 +1,303 @@
+:root {
+  --apex3-bg: #07090a;
+  --apex3-surface: #0d1011;
+  --apex3-surface-raised: #141819;
+  --apex3-surface-strong: #1b2021;
+  --apex3-text: #f2f0e9;
+  --apex3-muted: #a09f98;
+  --apex3-dim: #747671;
+  --apex3-line: rgba(225, 218, 202, 0.12);
+  --apex3-line-soft: rgba(225, 218, 202, 0.07);
+  --apex3-gold: #d8ad58;
+  --apex3-gold-bright: #f1d18c;
+  --apex3-steel: #91a3a6;
+  --apex3-signal: #d17c72;
+  --apex3-radius-surface: 16px;
+  --apex3-radius-control: 10px;
+  --apex3-shadow-surface: 0 18px 48px rgba(0, 0, 0, 0.28);
+  --apex3-ease: cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.app {
+  color: var(--apex3-text);
+  background:
+    radial-gradient(ellipse at 76% -14%, rgba(216, 173, 88, 0.11), transparent 34rem),
+    radial-gradient(ellipse at 10% 32%, rgba(94, 121, 126, 0.08), transparent 32rem),
+    linear-gradient(180deg, #080a0b 0%, var(--apex3-bg) 58%, #080a0b 100%);
+}
+
+.eyebrow,
+.apex-confidence,
+.apex-heading-note {
+  color: var(--apex3-muted);
+}
+
+.apex-section-head h2,
+.apex-page-hero h1,
+.apex-session-card strong,
+.apex-coach-copy h3,
+.apex-goal-body > strong,
+.apex-insight h3 {
+  color: var(--apex3-text);
+}
+
+.apex-status-chip,
+.apex-session-card,
+.apex-readout-card,
+.apex-coach-card,
+.apex-goal-card,
+.apex-insight,
+.apex-recent-row,
+.apex-quick-grid > button,
+.apex-stat-board > article,
+.apex-signal-grid > article,
+.apex-interpret-grid > article {
+  border-color: var(--apex3-line);
+  box-shadow: var(--apex3-shadow-surface);
+}
+
+.apex-status-chip,
+.apex-session-card,
+.apex-readout-card,
+.apex-coach-card,
+.apex-goal-card,
+.apex-insight,
+.apex-quick-grid > button {
+  background-color: var(--apex3-surface);
+}
+
+.apex-status-chip small,
+.apex-session-card small,
+.apex-readout-card small,
+.apex-coach-card p,
+.apex-coach-card small,
+.apex-goal-body small,
+.apex-insight p,
+.apex-insight small,
+.apex-recent-row small,
+.apex-quick-grid small {
+  color: var(--apex3-muted);
+}
+
+.apex-status-icon,
+.apex-coach-mark,
+.apex-recent-index {
+  border-color: var(--apex3-line);
+  background-color: var(--apex3-surface-raised);
+  color: var(--apex3-gold-bright);
+}
+
+.apex-session-card:hover,
+.apex-recent-row:hover,
+.apex-quick-grid > button:hover {
+  border-color: rgba(241, 209, 140, 0.38);
+  background-color: var(--apex3-surface-raised);
+}
+
+.button,
+.mini-btn,
+.icon-btn,
+.apex-session-card,
+.apex-recent-row,
+.apex-quick-grid > button {
+  transition:
+    color 180ms var(--apex3-ease),
+    border-color 180ms var(--apex3-ease),
+    background-color 180ms var(--apex3-ease),
+    transform 180ms var(--apex3-ease);
+}
+
+.button:focus-visible,
+.mini-btn:focus-visible,
+.icon-btn:focus-visible,
+.apex-session-card:focus-visible,
+.apex-recent-row:focus-visible,
+.apex-quick-grid > button:focus-visible {
+  outline: 2px solid var(--apex3-gold-bright);
+  outline-offset: 3px;
+}
+
+.badge {
+  border-color: rgba(216, 173, 88, 0.3);
+  background: rgba(216, 173, 88, 0.08);
+  color: var(--apex3-gold-bright);
+}
+
+.goal-ring {
+  color: var(--apex3-gold-bright);
+  border-color: rgba(216, 173, 88, 0.45);
+}
+
+.apex-progress i,
+.apex-queue-line i {
+  background: linear-gradient(90deg, var(--apex3-gold), var(--apex3-gold-bright));
+}
+
+.apex-image {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--apex3-line);
+  border-radius: var(--apex3-radius-surface);
+  background: var(--apex3-surface-raised);
+}
+
+.apex-image img,
+.apex-image-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.apex-image img {
+  object-fit: cover;
+  object-position: center;
+}
+
+.apex-image-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--apex3-gold-bright);
+  background:
+    linear-gradient(135deg, transparent 0 42%, rgba(145, 163, 166, 0.09) 42.2% 42.7%, transparent 43%),
+    linear-gradient(155deg, var(--apex3-surface-raised), var(--apex3-surface));
+}
+
+.apex-image figcaption {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 24px 14px 11px;
+  color: #f2f0e9;
+  font: 600 8px/1.4 var(--apex-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(transparent, rgba(4, 5, 5, 0.86));
+}
+
+.apex-hero-image {
+  position: absolute;
+  z-index: 0;
+  inset: 8px;
+  aspect-ratio: auto;
+  opacity: 0.72;
+  border-radius: 28px;
+}
+
+.apex-hero-image img {
+  object-position: center 38%;
+}
+
+.apex-hero-image::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(135deg, rgba(5, 7, 8, 0.08), rgba(5, 7, 8, 0.54));
+  pointer-events: none;
+}
+
+.preworkout-context-image {
+  width: min(100%, 760px);
+  margin: 18px 0 26px;
+}
+
+.exercise-detail-image {
+  margin: 0 0 16px;
+}
+
+.weight-trend-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--apex3-line-soft);
+  border-bottom: 1px solid var(--apex3-line-soft);
+}
+
+.weight-trend-summary > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.weight-trend-summary small,
+.weight-trend-range {
+  color: var(--apex3-muted);
+  font: 600 8px/1.4 var(--apex-mono);
+}
+
+.weight-trend-summary strong {
+  color: var(--apex3-text);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.weight-trend-chart {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  align-items: end;
+  gap: 3px;
+  height: 126px;
+  margin-top: 12px;
+  border-bottom: 1px solid var(--apex3-line);
+}
+
+.weight-trend-day {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 19px;
+  align-items: end;
+  min-width: 0;
+  height: 100%;
+}
+
+.weight-trend-day i {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--apex3-gold-bright), var(--apex3-gold));
+}
+
+.weight-trend-day.is-empty i {
+  background: var(--apex3-line-soft);
+}
+
+.weight-trend-day small {
+  overflow: visible;
+  color: var(--apex3-muted);
+  font: 600 7px/19px var(--apex-mono);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.weight-trend-range {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+}
+
+@media (max-width: 430px) {
+  .weight-trend-chart {
+    gap: 1px;
+  }
+
+  .weight-trend-summary {
+    gap: 6px;
+  }
+
+  .weight-trend-summary strong {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .mini-btn,
+  .icon-btn,
+  .apex-session-card,
+  .apex-recent-row,
+  .apex-quick-grid > button {
+    transition: none;
+  }
+}

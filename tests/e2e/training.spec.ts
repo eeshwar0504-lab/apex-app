@@ -545,4 +545,132 @@ test.describe('APEX training execution', () => {
 
     await expect(resume).toBeEnabled();
   });
+
+  test('set actions request haptics when the preference is enabled', async ({ page }) => {
+    await page.evaluate(() => {
+      const target=window as typeof window & {__apexVibrations:Array<number|number[]>};
+      target.__apexVibrations=[];
+      Object.defineProperty(navigator,'vibrate',{
+        configurable:true,
+        value:(pattern:number|number[])=>{
+          target.__apexVibrations.push(pattern);
+          return true;
+        }
+      });
+    });
+
+    await enterActiveSet(page);
+
+    const vibrations=await page.evaluate(()=>
+      (window as typeof window & {__apexVibrations:Array<number|number[]>}).__apexVibrations
+    );
+    expect(vibrations.length).toBeGreaterThan(0);
+  });
+
+  test('disabling haptics suppresses set-action vibration', async ({ page }) => {
+    await page.evaluate(() => {
+      const target=window as typeof window & {__apexVibrations:Array<number|number[]>};
+      target.__apexVibrations=[];
+      Object.defineProperty(navigator,'vibrate',{
+        configurable:true,
+        value:(pattern:number|number[])=>{
+          target.__apexVibrations.push(pattern);
+          return true;
+        }
+      });
+    });
+
+    await page.getByRole('button',{name:'You',exact:true}).click();
+    await page.getByRole('checkbox',{name:'Haptics',exact:true}).uncheck();
+    await enterActiveSet(page);
+
+    const vibrations=await page.evaluate(()=>
+      (window as typeof window & {__apexVibrations:Array<number|number[]>}).__apexVibrations
+    );
+    expect(vibrations).toEqual([]);
+  });
+
+  test('paused active workout restores after browser reload', async ({ page }) => {
+    await enterActiveSet(page);
+    await page.getByRole('button',{name:'Pause workout'}).click();
+    await expect(page.getByRole('button',{name:'Resume workout'})).toBeVisible();
+
+    await page.reload({waitUntil:'domcontentloaded'});
+    await expect(page.locator('[data-apex-route="workout"]')).toBeVisible({timeout:15000});
+    await expect(page.getByRole('button',{name:'Resume workout'})).toBeVisible();
+
+    await page.getByRole('button',{name:'Resume workout'}).click();
+    await expect(page.getByRole('button',{name:'Pause workout'})).toBeVisible();
+  });
+
+  test('scheduled workout flows through logging rest and completion', async ({ page }) => {
+    test.setTimeout(120_000);
+    await enterActiveSet(page);
+
+    for(let step=0;step<120;step++){
+      if(await page.locator('[data-apex-route^="session:"]').isVisible().catch(()=>false))break;
+
+      const complete=page.getByRole('button',{name:'Complete set'}).first();
+      if(await complete.isVisible().catch(()=>false)){
+        await complete.click();
+        continue;
+      }
+
+      const feedback=page.getByRole('button',{name:/^ABOUT RIGHT\b/});
+      if(await feedback.isVisible().catch(()=>false)){
+        await feedback.click();
+        continue;
+      }
+
+      const skipRest=page.getByRole('button',{name:'SKIP REST',exact:true});
+      if(await skipRest.isVisible().catch(()=>false)){
+        await skipRest.click();
+        continue;
+      }
+
+      const startSet=page.getByRole('button',{name:/START SET/i}).first();
+      if(await startSet.isVisible().catch(()=>false)){
+        await startSet.click();
+        continue;
+      }
+
+      const review=page.getByRole('button',{name:'REVIEW SESSION',exact:true});
+      if(await review.isVisible().catch(()=>false)){
+        await review.click();
+        continue;
+      }
+
+      const finish=page.getByRole('button',{name:'FINISH SESSION',exact:true});
+      if(await finish.isVisible().catch(()=>false)){
+        await finish.click();
+        continue;
+      }
+
+      const advance=page.getByRole('button',{name:/^CONTINUE/i}).first();
+      if(await advance.isVisible().catch(()=>false)){
+        await advance.click();
+        continue;
+      }
+
+      await page.waitForTimeout(50);
+    }
+
+    await expect(page.locator('[data-apex-route^="session:"]')).toBeVisible();
+    await expect(page.locator('.session-review-metrics')).toBeVisible();
+    await expect(page.getByText('SESSION COMPLETE',{exact:true}).first()).toBeVisible();
+
+    await page.getByRole('button',{name:'Command Center',exact:true}).click();
+    let dialog=page.getByRole('dialog');
+    let input=dialog.locator('input').first();
+    await input.fill('Open history');
+    await input.press('Enter');
+    await expect(page.locator('.history-item').first()).toContainText('completed');
+
+    await page.getByRole('button',{name:'Command Center',exact:true}).click();
+    dialog=page.getByRole('dialog');
+    input=dialog.locator('input').first();
+    await input.fill('Show my progress');
+    await input.press('Enter');
+    await expect(page.locator('.apex-stat-board article').first()).toContainText('1');
+  });
 });

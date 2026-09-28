@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-28T19:57:51.284Z",
-  "passed": true,
+  "generatedAt": "2026-09-28T20:43:32.286Z",
+  "passed": false,
   "results": [
     {
       "label": "SOURCE + NODE REGRESSION",
@@ -22,26 +22,8 @@
     },
     {
       "label": "PLAYWRIGHT — FUNCTIONAL + UI/UX + ACCESSIBILITY + VISUAL",
-      "ok": true,
-      "status": 0,
-      "error": null
-    },
-    {
-      "label": "APEX DOMAIN + RECOVERY CONTRACTS",
-      "ok": true,
-      "status": 0,
-      "error": null
-    },
-    {
-      "label": "CAPACITOR SYNC",
-      "ok": true,
-      "status": 0,
-      "error": null
-    },
-    {
-      "label": "ANDROID DEBUG APK",
-      "ok": true,
-      "status": 0,
+      "ok": false,
+      "status": 1,
       "error": null
     }
   ]

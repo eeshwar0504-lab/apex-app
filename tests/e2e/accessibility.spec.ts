@@ -72,4 +72,28 @@ test.describe('APEX accessibility and interaction safety', () => {
 
     await assertNoHorizontalOverflow(page);
   });
+
+  test('text-size setting changes rendered text and remains contained', async ({ page }) => {
+    const eyebrow=page.locator('.apex-kicker .eyebrow');
+    const systemSize=await eyebrow.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+
+    await page.getByRole('button',{name:'You',exact:true}).click();
+    const scale=page.getByLabel('Text size');
+    await scale.selectOption('large');
+    await expect(page.locator('.app')).toHaveClass(/font-large/);
+
+    await page.getByRole('button',{name:'APEX Home',exact:true}).click();
+    const largeSize=await eyebrow.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+    expect(largeSize).toBeGreaterThan(systemSize);
+
+    await page.getByRole('button',{name:'You',exact:true}).click();
+    await scale.selectOption('larger');
+    await expect(page.locator('.app')).toHaveClass(/font-larger/);
+
+    await page.setViewportSize({width:360,height:800});
+    await page.getByRole('button',{name:'APEX Home',exact:true}).click();
+    const largerSize=await eyebrow.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+    expect(largerSize).toBeGreaterThan(largeSize);
+    await assertNoHorizontalOverflow(page);
+  });
 });
