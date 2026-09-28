@@ -1,3 +1,4 @@
+@import "./apex3-phase2.css";
 :root{--bg:#070707;--surface:#0e0e0e;--surface2:#121212;--surface3:#171717;--text:#f2efe7;--muted:#88857d;--line:#242424;--gold:#d9a441;--gold2:#efbf59;--danger:#d9786d;--space:20px;--radius:20px;--radius-sm:14px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);background:var(--bg);font-synthesis:none;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box}html,body,#root{margin:0;min-height:100%;background:var(--bg)}html{background:var(--bg);-webkit-text-size-adjust:100%;text-size-adjust:100%}body{min-height:100vh;min-height:100dvh;overflow-x:hidden;overscroll-behavior-x:none}button,input,select{font:inherit}button{touch-action:manipulation}
 .app{min-height:100vh;min-height:100dvh;background:radial-gradient(circle at 50% -12%,#20180b 0,#070707 34rem);padding-bottom:calc(100px + env(safe-area-inset-bottom,0px))}.topbar{min-height:76px;height:auto;padding:calc(12px + env(safe-area-inset-top,0px)) var(--space) 12px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;background:rgba(7,7,7,.82);backdrop-filter:blur(22px);border-bottom:1px solid rgba(255,255,255,.04)}.brand{display:flex;align-items:center;gap:10px;border:0;background:none;color:var(--text);font-weight:800;letter-spacing:.22em;font-size:16px;cursor:pointer;min-height:42px}.brand img{width:30px;height:30px;object-fit:contain}.top-actions{display:flex;gap:8px}.icon-btn{width:42px;height:42px;border:1px solid var(--line);background:#0c0c0c;color:#c9c7c0;border-radius:50%;display:grid;place-items:center;cursor:pointer}.icon-btn:active,.button:active,.quick:active{transform:scale(.98)}.page-transition{animation:page-enter .34s cubic-bezier(.2,.8,.2,1) both}
@@ -4657,4 +4658,194 @@ input,select,textarea{background:#0c0e0f;border-color:var(--apex-line)!important
   .apex-coach-pulse i{
     animation:none!important;
   }
+}
+
+/* ============================================================
+   APEX 2.0 — FINAL REFERENCE-FIDELITY LAYER
+   Visual-only. Preserves existing component structure and logic.
+   ============================================================ */
+
+/* Cinematic architectural atmosphere without exercise-demo imagery. */
+.app::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  opacity:.52;
+  background:
+    linear-gradient(125deg,transparent 0 24%,rgba(215,165,69,.055) 24.15%,transparent 24.35% 49%,rgba(130,148,164,.045) 49.2%,transparent 49.4% 72%,rgba(215,165,69,.035) 72.2%,transparent 72.5%),
+    linear-gradient(155deg,rgba(255,255,255,.018) 0 1px,transparent 1px 74px),
+    linear-gradient(35deg,rgba(255,255,255,.012) 0 1px,transparent 1px 96px);
+  background-size:auto,74px 74px,96px 96px;
+  mask-image:linear-gradient(to bottom,rgba(0,0,0,.85),transparent 92%);
+}
+
+.app > *{position:relative;z-index:1}
+
+/* Stronger editorial hero treatment. */
+.apex-command-hero,
+.apex-page-hero{
+  position:relative;
+  isolation:isolate;
+}
+.apex-command-hero::before,
+.apex-page-hero::before{
+  content:"";
+  position:absolute;
+  inset:-30px -24px auto;
+  height:260px;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    linear-gradient(135deg,rgba(215,165,69,.11),transparent 35%),
+    linear-gradient(315deg,rgba(130,148,164,.08),transparent 42%),
+    repeating-linear-gradient(115deg,transparent 0 34px,rgba(255,255,255,.018) 35px 36px,transparent 37px 78px);
+  border-bottom:1px solid rgba(215,165,69,.08);
+  opacity:.9;
+}
+
+/* More premium serif hierarchy across major surfaces. */
+.page-title h1,
+.section h2,
+.apex-command-hero h1,
+.apex-page-hero h1,
+.apex-session-card strong,
+.apex-coach-copy h3,
+.apex-decision-card h2,
+.apex-train-primary h2,
+.plan-header h2,
+.plan-panel h2,
+.progress-screen h1,
+.coach-screen h1,
+.focused-exercise-head h2,
+.completion h1,
+.recover-card strong{
+  text-wrap:balance;
+}
+
+/* Reference-style gold edge lighting. */
+.apex-session-card,
+.apex-readout-card,
+.apex-train-primary,
+.apex-train-readout,
+.apex-coach-card,
+.apex-decision-card,
+.focus-card,
+.rest-panel,
+.completion,
+.plan-panel,
+.coach-box,
+.progress-card,
+.list-card,
+.history-list{
+  position:relative;
+  overflow:hidden;
+}
+
+.apex-session-card::after,
+.apex-train-primary::after,
+.apex-coach-card::after,
+.focus-card::after,
+.plan-panel::after,
+.coach-box::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(118deg,transparent 0 54%,rgba(215,165,69,.045) 67%,transparent 79%);
+  transform:translateX(-18%);
+  opacity:.7;
+}
+
+/* Primary buttons: stronger physical press / glow. */
+.button.primary,
+.focus-primary{
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .22s ease,filter .22s ease;
+}
+.button.primary:hover,
+.focus-primary:hover{filter:saturate(1.06) brightness(1.03)}
+.button.primary:active,
+.focus-primary:active{transform:translateY(1px) scale(.985);box-shadow:0 6px 22px rgba(215,165,69,.13)}
+
+/* Bottom navigation closer to the reference: floating, restrained, fixed. */
+.bottom{
+  box-shadow:0 -16px 50px rgba(0,0,0,.32),0 0 0 1px rgba(215,165,69,.025);
+}
+.nav-item.active{font-weight:700}
+.nav-item.active::after{
+  content:"";
+  width:22px;
+  height:2px;
+  border-radius:999px;
+  background:var(--apex-gold,#d7a545);
+  box-shadow:0 0 12px rgba(215,165,69,.45);
+}
+
+/* Splash: make the existing animation feel like a product launch screen. */
+.splash{
+  background:
+    radial-gradient(circle at 50% 42%,rgba(215,165,69,.13),transparent 20%),
+    radial-gradient(circle at 50% 55%,rgba(130,148,164,.07),transparent 34%),
+    #050607;
+}
+.splash::before{
+  content:"";
+  position:absolute;
+  width:min(78vw,420px);
+  aspect-ratio:1;
+  border:1px solid rgba(215,165,69,.12);
+  border-radius:50%;
+  box-shadow:0 0 90px rgba(215,165,69,.05),inset 0 0 70px rgba(130,148,164,.035);
+  animation:splash-ring-in 1.1s cubic-bezier(.2,.8,.2,1) both;
+}
+.splash img{position:relative;z-index:1;filter:drop-shadow(0 0 30px rgba(215,165,69,.18))}
+.splash b{position:relative;z-index:1}
+.splash small{
+  position:relative;
+  z-index:1;
+  margin-top:9px;
+  color:rgba(245,241,232,.45);
+  font:600 7px var(--apex-mono,ui-monospace,monospace);
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  opacity:0;
+  animation:wordIn .6s .32s ease forwards;
+}
+@keyframes splash-ring-in{from{transform:scale(.72);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* Rest experience: the timer remains the visual anchor. */
+.rest-countdown{
+  box-shadow:0 0 70px rgba(215,165,69,.07),inset 0 0 45px rgba(255,255,255,.018);
+}
+.rest-countdown strong{text-shadow:0 0 28px rgba(215,165,69,.12)}
+
+/* Accessibility: retain the premium look while making large text safer. */
+@media(max-width:700px){
+  .apex-command-hero::before,
+  .apex-page-hero::before{inset:-16px -12px auto;height:210px}
+  .apex-session-card,
+  .apex-readout-card,
+  .apex-train-primary,
+  .apex-train-readout,
+  .apex-coach-card,
+  .apex-decision-card,
+  .focus-card,
+  .plan-panel,
+  .coach-box{border-radius:18px}
+}
+
+@media(max-width:430px){
+  .app::before{opacity:.34}
+  .splash::before{width:78vw}
+  .splash img{width:116px;height:116px}
+  .splash b{font-size:17px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .splash::before,
+  .splash img,
+  .splash b,
+  .splash small{animation:none!important}
+  .splash b,.splash small{opacity:1}
 }
