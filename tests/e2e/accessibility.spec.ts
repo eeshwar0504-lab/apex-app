@@ -74,7 +74,7 @@ test.describe('APEX accessibility and interaction safety', () => {
   });
 
   test('text-size setting changes rendered text and remains contained', async ({ page }) => {
-    const eyebrow=page.locator('.apex-kicker .eyebrow');
+    const eyebrow=page.locator('.a3-greet .a3-eyebrow');
     const systemSize=await eyebrow.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
 
     await page.getByRole('button',{name:'You',exact:true}).click();

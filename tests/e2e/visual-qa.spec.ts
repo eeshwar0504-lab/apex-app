@@ -59,28 +59,20 @@ test.describe('APEX 3.0 visual QA', () => {
     });
 
     for (const selector of [
-      '.apex-hero-v3',
-      '.apex-hero-copy',
-      '.apex-hero-visual',
-      '.apex-command-meta',
-      '.apex-command-grid',
-      '.apex-session-card',
-      '.apex-readout-card',
-      '.apex-coach-card',
-      '.apex-goal-card',
-      '.apex-insight-grid',
-      '.apex-recent-list',
-      '.apex-quick-grid',
+      '.a3-hero',
+      '.a3-hero-body',
+      '.a3-hero-image',
+      '.a3-stats',
+      '.a3-coach',
+      '.a3-rings',
+      '.a3-block',
     ]) {
       await expect(page.locator(selector).first(), `${selector} should render on Home`).toBeVisible();
     }
 
-    const heroLayout = await page.locator('.apex-hero-v3').evaluate(el => ({
-      display: getComputedStyle(el).display,
-      columns: getComputedStyle(el).gridTemplateColumns,
-    }));
-    expect(heroLayout.display).toBe('grid');
-    expect(heroLayout.columns.trim().split(/\s+/)).toHaveLength(2);
+    const heroBox = await page.locator('.a3-hero').boundingBox();
+    expect(heroBox, 'hero must have a box on desktop').not.toBeNull();
+    expect(heroBox!.width).toBeLessThanOrEqual(1280);
 
     for (const size of [
       { width: 360, height: 800 },
@@ -93,10 +85,8 @@ test.describe('APEX 3.0 visual QA', () => {
       await assertNoHorizontalOverflow(page);
       await assertViewportIntegrity(page);
 
-      const responsiveColumns = await page.locator('.apex-hero-v3').evaluate(el =>
-        getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length
-      );
-      expect(responsiveColumns, `hero should stack at ${size.width}px`).toBe(1);
+      const heroWidth = await page.locator('.a3-hero').evaluate(el => el.getBoundingClientRect().width);
+      expect(heroWidth, `hero should fit within ${size.width}px`).toBeLessThanOrEqual(size.width);
 
       const topControls = await page.evaluate(() => {
         const rect = (selector: string) => {
@@ -142,7 +132,7 @@ test.describe('APEX 3.0 visual QA', () => {
     await boot(page);
     const failures = await page.evaluate(() => {
       const vw = document.documentElement.clientWidth;
-      const selectors = ['.apex-hero-core', '.apex-live-status', '.premium-bottom-nav', '.bottom'];
+      const selectors = ['.a3-hero', '.a3-stats', '.premium-bottom-nav', '.bottom'];
       return selectors.flatMap(selector => Array.from(document.querySelectorAll(selector)).map((node: any) => {
         const r = node.getBoundingClientRect();
         return r.left < -1 || r.right > vw + 1 ? { selector, left: r.left, right: r.right, width: r.width } : null;
@@ -219,7 +209,7 @@ test.describe('APEX 3.0 visual QA', () => {
 
 test('contextual Home imagery loads from the local asset bundle', async ({ page }) => {
   await boot(page);
-  const image = page.locator('.apex-hero-image img');
+  const image = page.locator('.a3-hero-image img');
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
 });
@@ -227,5 +217,5 @@ test('contextual Home imagery loads from the local asset bundle', async ({ page 
 test('contextual imagery shows a designed fallback when an asset fails', async ({ page }) => {
   await page.route('**/imagery/**', route => route.abort());
   await boot(page);
-  await expect(page.locator('.apex-hero-image.is-fallback .apex-image-fallback')).toBeVisible();
+  await expect(page.locator('.a3-hero-image.is-fallback .apex-image-fallback')).toBeVisible();
 });

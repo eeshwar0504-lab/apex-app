@@ -55,7 +55,7 @@ test('Body data records dated weights and plots daily history',async({page})=>{
   await expect(page.locator('.weight-trend-day')).toHaveCount(expectedAllDays);
 
   await page.getByRole('button',{name:'Progress',exact:true}).click();
-  await expect(page.locator('.apex-body-shortcut')).toContainText('79.8 kg');
+  await expect(page.locator('.apex-body-shortcut')).toContainText(/79\.8\s*kg/);
   await page.getByRole('button',{name:/Open Body \/ Weight/}).click();
   await expect(page.locator('[data-apex-route="measurements"]')).toBeVisible();
 

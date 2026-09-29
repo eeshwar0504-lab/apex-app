@@ -5,3 +5,9 @@ android/build
 android/app/build
 .DS_Store
 *.log
+
+# generated test output
+qa-results
+test-results
+playwright-report
+tsconfig.tsbuildinfo

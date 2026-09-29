@@ -52,58 +52,15 @@
   --apex30-spring:cubic-bezier(.16,1,.3,1);
 }
 
-html,body,#root{
-  background:var(--apex30-black);
-  color:var(--apex30-ink);
-}
-
-body{
-  font-family:var(--apex30-body);
-  text-rendering:optimizeLegibility;
-  -webkit-font-smoothing:antialiased;
-}
-
 button,input,select,textarea{
   font-family:var(--apex30-body);
 }
 
-.app{
-  color:var(--apex30-ink);
-  background:
-    radial-gradient(850px 520px at 84% -12%,rgba(217,173,85,.085),transparent 64%),
-    radial-gradient(720px 520px at -12% 32%,rgba(139,158,172,.075),transparent 68%),
-    linear-gradient(180deg,#07090a 0%,#050607 54%,#070809 100%);
-}
-
-.app::after{
-  content:"";
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  z-index:0;
-  opacity:.20;
-  background:
-    linear-gradient(115deg,transparent 0 48%,rgba(255,255,255,.025) 49%,transparent 50%),
-    linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px);
-  background-size:100% 100%,72px 72px;
-  mask-image:linear-gradient(to bottom,black,transparent 92%);
-}
-
-.topbar,.main,.bottom{
-  position:relative;
-  z-index:1;
-}
-
-/* ---------- TYPOGRAPHY ---------- */
-
-.screen-page h1,
+/* ---------- TYPOGRAPHY ---------- */.screen-page h1,
 .screen-page h2,
 .screen-page h3,
 .hero h1,
-.apex-command-hero h1,
-.apex-command-hero strong,
-.workout-title,
-.section-title{
+.workout-title{
   font-family:var(--apex30-display);
   letter-spacing:-.025em;
 }
@@ -121,30 +78,19 @@ button,input,select,textarea{
 
 .screen-page h3{
   font-weight:500;
-}
-
-.eyebrow,
+}.eyebrow,
 .kicker,
-.apex-kicker,
 .badge,
 .chip,
-.apex-confidence,
-.apex-top-status,
-.apex-command-meta,
-.metric small,
 .set-meta,
 .exercise-meta,
 .timer,
-.rest-timer,
 [class*="mono"]{
   font-family:var(--apex30-tech);
   letter-spacing:.075em;
   text-transform:uppercase;
-}
-
-.eyebrow,
-.kicker,
-.apex-kicker{
+}.eyebrow,
+.kicker{
   color:var(--apex30-gold);
   font-size:10px;
   font-weight:700;
@@ -160,13 +106,6 @@ small{
 
 /* ---------- HEADER ---------- */
 
-.topbar{
-  background:linear-gradient(180deg,rgba(5,6,7,.96),rgba(5,6,7,.76));
-  border-bottom:1px solid var(--apex30-line-soft);
-  box-shadow:0 12px 40px rgba(0,0,0,.20);
-  backdrop-filter:blur(24px) saturate(125%);
-}
-
 .apex-brand span{
   font-family:var(--apex30-display);
   color:var(--apex30-ink);
@@ -174,27 +113,7 @@ small{
   font-weight:600;
 }
 
-.brand-caption{
-  color:var(--apex30-dim);
-  font-family:var(--apex30-tech);
-  letter-spacing:.12em;
-  font-size:9px;
-}
-
-.apex-top-status{
-  color:var(--apex30-muted);
-  font-size:9px;
-}
-
-.apex-top-status i{
-  background:var(--apex30-gold);
-  box-shadow:0 0 12px rgba(217,173,85,.42);
-}
-
-/* ---------- SECTIONS ---------- */
-
-.section,
-.apex-section{
+/* ---------- SECTIONS ---------- */.section{
   position:relative;
 }
 
@@ -213,27 +132,9 @@ small{
   opacity:.7;
 }
 
-.section-title{
-  color:var(--apex30-ink);
-}
-
-/* ---------- PREMIUM SURFACES ---------- */
-
-.apex-command-hero,
-.apex-session-card,
-.apex-coach-card,
-.callout,
+/* ---------- PREMIUM SURFACES ---------- */.callout,
 .quick,
-.exercise-tile,
-.goal-card,
-.brief-card,
-.insight,
-.profile-card,
-.plan-panel,
-.coach-box,
-.history-item,
-.apex-recent-row,
-.apex-command-grid>button{
+.insight{
   position:relative;
   overflow:hidden;
   border:1px solid var(--apex30-line);
@@ -241,59 +142,24 @@ small{
     linear-gradient(145deg,rgba(255,255,255,.028),rgba(255,255,255,.008)),
     var(--apex30-surface);
   box-shadow:0 12px 42px rgba(0,0,0,.18);
-}
-
-.apex-command-hero{
-  border-radius:var(--apex30-r-xl);
-  box-shadow:var(--apex30-shadow-deep);
-}
-
-.apex-command-hero::after,
-.apex-session-card::after,
-.apex-coach-card::after,
-.callout::after,
+}.callout::after,
 .quick::after,
-.exercise-tile::after,
-.goal-card::after,
-.brief-card::after,
-.insight::after,
-.profile-card::after,
-.plan-panel::after,
-.coach-box::after,
-.history-item::after{
+.insight::after{
   content:"";
   position:absolute;
   inset:0;
   pointer-events:none;
   background:linear-gradient(115deg,transparent 0 54%,rgba(255,255,255,.018) 55%,transparent 68%);
-}
-
-.quick,
-.exercise-tile,
-.goal-card,
-.brief-card,
-.insight,
-.profile-card,
-.plan-panel,
-.coach-box,
-.history-item{
+}.quick,
+.insight{
   border-radius:var(--apex30-r-md);
   transition:
     transform .28s var(--apex30-ease),
     border-color .28s ease,
     background .28s ease,
     box-shadow .28s ease;
-}
-
-.quick:hover,
-.exercise-tile:hover,
-.goal-card:hover,
-.brief-card:hover,
-.insight:hover,
-.profile-card:hover,
-.plan-panel:hover,
-.coach-box:hover,
-.history-item:hover{
+}.quick:hover,
+.insight:hover{
   transform:translateY(-2px);
   border-color:rgba(217,173,85,.20);
   box-shadow:0 18px 55px rgba(0,0,0,.26);
@@ -335,57 +201,10 @@ textarea:focus-visible{
 
 /* ---------- METRICS ---------- */
 
-.metric,
-.apex-status-chip,
-.apex-command-meta>*{
-  border-color:var(--apex30-line);
-}
-
-.metric{
-  background:
-    linear-gradient(145deg,rgba(255,255,255,.026),rgba(255,255,255,.006)),
-    var(--apex30-surface);
-  border-radius:var(--apex30-r-md);
-}
-
-.metric strong,
-.metric b{
-  font-family:var(--apex30-display);
-  color:var(--apex30-ink);
-  font-weight:500;
-  letter-spacing:-.025em;
-}
-
-.metric small{
-  color:var(--apex30-dim);
-  font-size:9px;
-}
-
 /* ---------- COACH ---------- */
 
-.apex-coach-card{
-  border-color:rgba(217,173,85,.20);
-  background:
-    radial-gradient(520px 220px at 0% 0%,rgba(217,173,85,.07),transparent 70%),
-    var(--apex30-surface);
-}
-
-.apex-coach-mark{
-  color:var(--apex30-gold-hi);
-  background:var(--apex30-gold-wash);
-  border:1px solid var(--apex30-gold-line);
-}
-
-.apex-confidence{
-  color:var(--apex30-dim);
-  font-size:9px;
-}
-
-/* ---------- CHIPS / BADGES ---------- */
-
-.chip,
-.badge,
-.apex-status-chip{
+/* ---------- CHIPS / BADGES ---------- */.chip,
+.badge{
   border:1px solid var(--apex30-line) !important;
   background:rgba(255,255,255,.025) !important;
   color:var(--apex30-muted) !important;
@@ -421,33 +240,18 @@ textarea:focus{
   box-shadow:0 0 0 3px rgba(217,173,85,.06);
 }
 
-/* ---------- WORKOUT / SET LANGUAGE ---------- */
-
-.active-set-hero,
-.premium-set-editor,
-.focused-set-editor,
-.set-editor,
+/* ---------- WORKOUT / SET LANGUAGE ---------- */.set-editor,
 .workout-card{
   border-color:var(--apex30-line);
   background:
     radial-gradient(420px 180px at 12% 0%,rgba(139,158,172,.06),transparent 70%),
     var(--apex30-surface);
-}
-
-.active-set-hero{
-  box-shadow:var(--apex30-shadow);
-}
-
-.active-set-hero strong,
-.workout-title,
+}.workout-title,
 .exercise-name{
   font-family:var(--apex30-display);
   color:var(--apex30-ink);
   font-weight:500;
-}
-
-.set-inputs input,
-.focus-control-row input,
+}.set-inputs input,
 .feedback-edit-row input,
 .set-control input{
   font-family:var(--apex30-tech);
@@ -455,19 +259,7 @@ textarea:focus{
   text-align:center;
 }
 
-/* ---------- REST / TIMER ---------- */
-
-.rest-countdown{
-  background:
-    radial-gradient(circle,rgba(217,173,85,.085),transparent 58%),
-    var(--apex30-surface);
-  border:1px solid var(--apex30-gold-line);
-  box-shadow:0 0 70px rgba(217,173,85,.07);
-}
-
-.rest-countdown strong,
-.rest-timer strong,
-.timer strong{
+/* ---------- REST / TIMER ---------- */.timer strong{
   font-family:var(--apex30-display);
   font-variant-numeric:tabular-nums;
   color:var(--apex30-ink);
@@ -475,45 +267,11 @@ textarea:focus{
 
 /* ---------- BOTTOM NAV ---------- */
 
-.bottom{
-  background:rgba(5,6,7,.94) !important;
-  border-top:1px solid var(--apex30-line);
-  box-shadow:0 -18px 55px rgba(0,0,0,.34);
-  backdrop-filter:blur(26px) saturate(125%);
-}
-
-.nav-item{
-  color:#686a67;
-  transition:color .24s ease,background .24s ease,transform .24s var(--apex30-ease);
-}
-
-.nav-item.active{
-  color:var(--apex30-gold-hi);
-  background:rgba(217,173,85,.055);
-}
-
-.nav-item.active::before{
-  background:var(--apex30-gold-hi);
-  box-shadow:0 0 12px rgba(217,173,85,.42);
-}
-
-.nav-item:active{
-  transform:scale(.97);
-}
-
-/* ---------- SEARCH / COMMAND ---------- */
-
-.command-box,
-.search,
-.command-panel{
+/* ---------- SEARCH / COMMAND ---------- */.search{
   background:rgba(10,12,13,.97);
   border:1px solid var(--apex30-line);
   box-shadow:var(--apex30-shadow-deep);
-}
-
-.command-box input,
-.search input,
-.command-panel input{
+}.search input{
   font-family:var(--apex30-body);
 }
 
@@ -521,10 +279,7 @@ textarea:focus{
 
 a{
   color:var(--apex30-gold-hi);
-}
-
-.icon-btn:hover,
-.mini-btn:hover{
+}.mini-btn:hover{
   color:var(--apex30-gold-hi);
 }
 
@@ -552,46 +307,10 @@ a{
     font-size:clamp(38px,11vw,54px);
   }
 
-  .metric{
-    min-width:0;
-  }
-
   .button.primary,
   .button.secondary{
     min-height:50px;
   }
-}
-
-/* Large-font mode: preserve geometry instead of scaling the entire app
-   through giant fixed dimensions. */
-.app.font-large,
-.app.font-xlarge{
-  line-height:1.45;
-}
-
-.app.font-large .eyebrow,
-.app.font-large .badge,
-.app.font-large .chip{
-  font-size:11px;
-}
-
-.app.font-xlarge .eyebrow,
-.app.font-xlarge .badge,
-.app.font-xlarge .chip{
-  font-size:12px;
-}
-
-.app.font-large .nav-item,
-.app.font-xlarge .nav-item{
-  min-height:58px;
-}
-
-.app.font-xlarge .nav-item span{
-  font-size:12px;
-}
-
-.app.font-large .metric strong{
-  font-size:clamp(25px,7vw,38px);
 }
 
 /* ---------- REDUCED MOTION ---------- */
@@ -618,37 +337,12 @@ a{
 
 /* ---------- 412px CONTAINMENT ---------- */
 
-@media(max-width:430px){
-  .main{
-    width:100%;
-    max-width:100%;
-    min-width:0;
-  }
-
-  .screen-page,
-  .section,
-  .apex-command-hero,
-  .apex-command-grid,
-  .apex-quick-grid,
-  .metric-strip{
+@media(max-width:430px){.screen-page,
+.section{
     min-width:0;
     max-width:100%;
-  }
-
-  .apex-command-hero,
-  .apex-session-card,
-  .apex-coach-card,
-  .callout{
+  }.callout{
     border-radius:18px;
-  }
-
-  .apex-command-hero h1{
-    overflow-wrap:anywhere;
-  }
-
-  .apex-command-meta{
-    min-width:0;
-    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
 
@@ -665,16 +359,8 @@ a{
   max-width:100%;
 }
 
-@media(prefers-reduced-motion:reduce){
-  .quick,
-  .exercise-tile,
-  .goal-card,
-  .brief-card,
-  .insight,
-  .profile-card,
-  .plan-panel,
-  .coach-box,
-  .history-item{
+@media(prefers-reduced-motion:reduce){.quick,
+.insight{
     transition:none !important;
   }
 }

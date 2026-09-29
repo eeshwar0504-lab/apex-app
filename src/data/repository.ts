@@ -2,6 +2,7 @@ import type {AppState} from '../core/types';
 import {EXERCISES} from '../knowledge/exercises';
 import {ApexSQLiteStore} from './sqliteAdapter';
 import {isUsableState} from './integrity';
+import {normalizeUnits} from './units';
 
 const KEY='apex-state-v4';
 const SCHEMA_VERSION=4;
@@ -82,6 +83,8 @@ function merge(raw:any):AppState{
     ?incomingPreferences.fontScale
     :'system',
   highContrast:Boolean(incomingPreferences.highContrast),
+  theme:['apex','classic','steel','aurora','crimson'].includes(String(incomingPreferences.theme))?incomingPreferences.theme:'apex',
+  units:normalizeUnits(incomingPreferences.units),
   notifications
  };
 

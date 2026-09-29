@@ -1,4 +1,8 @@
-# APEX 2.1.0 build status
+# APEX 3.1.1 build status
+
+## Release 3.1.1
+
+APEX 3.0 visual reconstruction complete (reference-matched screens, system states, Units, Log Set screen). Android versionCode 5. QA: visual matrix, full Playwright E2E, unit tests, release audit and debug APK build all passing; physical-device verification pending.
 
 ## Current continuation pass — training continuity + plan integrity
 

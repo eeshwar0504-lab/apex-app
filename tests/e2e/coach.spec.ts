@@ -24,7 +24,7 @@ test.describe('APEX Coach', () => {
     await expect(coachRoute).toBeVisible();
 
     await expect(
-      page.getByText('CORE ONLINE', { exact: true })
+      page.getByRole('heading', { name: 'APEX Coach' })
     ).toBeVisible();
 
     const input = page.getByRole('textbox', {

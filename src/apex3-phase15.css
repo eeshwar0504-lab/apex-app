@@ -34,10 +34,7 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
-@media (max-width: 500px) {
-  .onboarding,
-  .main,
-  .topbar {
+@media (max-width: 500px) {.main{
     max-width: 100vw;
   }
 }

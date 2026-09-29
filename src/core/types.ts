@@ -595,6 +595,24 @@ export interface AppState {
 
   measurements: Measurement[];
 
+  nutrition?: {
+    targets: {
+      proteinG?: number;
+      calories?: number;
+      carbsG?: number;
+      fatsG?: number;
+      waterL?: number;
+    };
+    log: Record<string, {
+      proteinG: number;
+      calories: number;
+      carbsG: number;
+      fatsG: number;
+      waterL: number;
+      meals: number;
+    }>;
+  };
+
   journal: JournalEntry[];
 
   observations: Observation[];
@@ -625,6 +643,10 @@ export interface AppState {
       | 'larger';
 
     highContrast: boolean;
+
+    theme?: 'apex' | 'classic' | 'steel' | 'aurora' | 'crimson';
+
+    units?: 'metric' | 'imperial';
 
     notifications: {
       enabled: boolean;

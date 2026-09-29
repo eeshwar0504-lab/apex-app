@@ -238,8 +238,8 @@ test.describe('APEX 3.0 — full automated UI/UX QA', () => {
   test('home: viewport, overflow, hero and critical controls', async ({ page }) => {
     await assertNoHorizontalOverflow(page);
     await assertNoViewportOverflow(page);
-    await assertCriticalElementInsideViewport(page, '.apex-hero-core', 'Home hero');
-    await assertCriticalElementInsideViewport(page, '.apex-live-status', 'Live status');
+    await assertCriticalElementInsideViewport(page, '.a3-hero', 'Home hero');
+    await assertCriticalElementInsideViewport(page, '.a3-stats', 'Home stats');
     await assertNoClippedText(page);
     await screenshot(page, 'home');
   });
@@ -300,7 +300,7 @@ test.describe('APEX 3.0 — full automated UI/UX QA', () => {
   });
 
   test('normal motion exposes animation and reduced motion disables it', async ({ page }) => {
-    const indicator = page.locator('.apex-live-status i').first();
+    const indicator = page.locator('.a3-home > .a3-greet').first();
     await expect(indicator).toBeVisible();
 
     const normal = await indicator.evaluate(el => {

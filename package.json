@@ -1,7 +1,7 @@
 {
   "name": "apex-training",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,6 +25,7 @@
     "@capacitor/cli": "^7.4.3",
     "@capacitor/core": "^7.4.3",
     "@capacitor/local-notifications": "^7.0.0",
+    "@fontsource/playfair-display": "^5.3.0",
     "@vitejs/plugin-react": "^5.0.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

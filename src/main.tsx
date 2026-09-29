@@ -1,5 +1,9 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import {createPortal} from 'react-dom';
+import '@fontsource/playfair-display/latin-400.css';
+import '@fontsource/playfair-display/latin-500.css';
+import '@fontsource/playfair-display/latin-600.css';
 import './styles.css';
 import './apex3-phase2.css';
 import './apex3-phase3.css';
@@ -17,11 +21,11 @@ import './apex3-phase14.css';
 import './apex3-phase15.css';
 import './apex3-design-system.css';
 import {APEX_TRAINING_IMAGES,imageKindForExercise,type TrainingImageKind} from './imagery';
-import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,PlanDay,Measurement} from './core/types';
+import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,Measurement} from './core/types';
 import {EXERCISES,findExercises} from './knowledge/exercises';
 import {repository} from './data/repository';
 import {encryptBackup,decryptBackup,recoveryKey} from './data/backupCrypto';
-import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad,makeSet,progression,recommendedRest,markMissedWorkouts,createRescheduled,volumeForWorkout,updateSetType,safetyCheck,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,applyWorkoutAdaptation,planWithDays,summarizeSets,rescheduleWorkout,equipmentFit,smartAlternatives,personalizedLoad,feedbackLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
+import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad as engineFormatLoad,makeSet,recommendedRest,markMissedWorkouts,volumeForWorkout,updateSetType,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,applyWorkoutAdaptation,planWithDays,equipmentFit,smartAlternatives,personalizedLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail as engineFormatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
 import {normalizeGuidedPosition,completeSet,applySetFeedback,continueAfterRest as continueGuidedAfterRest,advanceToNextExercise as advanceGuidedToNextExercise} from './engine/guidedSession';
 import {homeInsights,readiness,buildObservations,adaptationsForWorkout,goalProgress,goalMilestones,trainingLoadSummary} from './engine/intelligence';
 import {notificationIntents} from './engine/notifications';
@@ -29,20 +33,22 @@ import {syncLocalNotifications,listenForNotificationActions} from './native/loca
 import {knowledgeReport} from './knowledge/knowledgeGraph';
 import {inspectState} from './data/integrity';
 import {coach} from './coach';
-import {consistencySummary,volumeTrend,plateauCandidates,goalMomentum,trainingBalance} from './engine/analytics';
+import {consistencySummary,volumeTrend,goalMomentum,trainingBalance} from './engine/analytics';
 import {accessibilityClass,fontScaleValue} from './data/accessibility';
+import pkg from '../package.json';
 import {App as CapacitorApp} from '@capacitor/app';
+import {setUnits,getUnits,wt,wtInput,fromWt,len,fromLen,vol,volLabel,weightLabel,weightWord,lengthLabel,displayText} from './data/units';
 
 const today=()=>new Date().toISOString().slice(0,10);
+/* Engine strings are authored in kg; convert at the presentation boundary only. */
+const formatLoad=(...a:Parameters<typeof engineFormatLoad>)=>displayText(engineFormatLoad(...a));
+const formatLoadDetail=(...a:Parameters<typeof engineFormatLoadDetail>)=>displayText(engineFormatLoadDetail(...a));
 const fmt=(n:number)=>`${String(Math.floor(Math.max(0,n)/60)).padStart(2,'0')}:${String(Math.max(0,n)%60).padStart(2,'0')}`;
 const SET_TYPES:SetType[]=['warmup','working','drop','failure','amrap','rest_pause','myo_reps','tempo','cluster','timed','bodyweight','assisted','unilateral'];
 
-function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-1.8.9"/></>,pause:<><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></>,calendar:<><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,spark:<><path d="m12 2 1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6L12 2Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></>,activity:<><path d="M3 12h4l2-7 4 14 2-7h6"/></>,layers:<><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></>,shield:<><path d="M12 3 20 6v6c0 5-3.3 8-8 9-4.7-1-8-4-8-9V6l8-3Z"/><path d="m9 12 2 2 4-5"/></>,arrow:<path d="M5 12h14M13 6l6 6-6 6"/>};return <svg {...c}>{p[name]||p.bolt}</svg>}
+function Icon({name,size=20}:{name:string;size?:number}){const c={width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};const p:Record<string,React.ReactNode>={home:<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,train:<><path d="M6 4v16M18 4v16M3 8v8M21 8v8M6 8h12M6 16h12"/></>,chart:<><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></>,user:<><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4-6 8-6s6.6 2 8 6"/></>,search:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,play:<path d="m8 5 11 7-11 7V5Z"/>,plus:<><path d="M12 5v14M5 12h14"/></>,minus:<path d="M5 12h14"/>,clock:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,check:<path d="m5 12 4 4L19 7"/>,chev:<path d="m9 18 6-6-6-6"/>,back:<path d="m15 18-6-6 6-6"/>,bolt:<path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z"/>,target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></>,history:<><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></>,pause:<><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></>,calendar:<><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,spark:<><path d="m12 2 1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6L12 2Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></>,activity:<><path d="M3 12h4l2-7 4 14 2-7h6"/></>,layers:<><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></>,shield:<><path d="M12 3 20 6v6c0 5-3.3 8-8 9-4.7-1-8-4-8-9V6l8-3Z"/><path d="m9 12 2 2 4-5"/></>,arrow:<path d="M5 12h14M13 6l6 6-6 6"/>,alert:<><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4M12 17h.01"/></>,crown:<><path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z"/></>,dumbbell:<><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></>};return <svg {...c}>{p[name]||p.bolt}</svg>}
 
 
-function ApexStatus({label,detail,icon='spark'}:{label:string;detail?:string;icon?:string}){
- return <div className="apex-status-chip"><span className="apex-status-icon"><Icon name={icon} size={15}/></span><span><b>{label}</b>{detail&&<small>{detail}</small>}</span></div>
-}
 function ApexImage({kind,alt,className='',caption,eager=false}:{kind:TrainingImageKind;alt?:string;className?:string;caption?:string;eager?:boolean}){
  const asset=APEX_TRAINING_IMAGES[kind];
  const [failedKind,setFailedKind]=useState<TrainingImageKind|null>(null);
@@ -54,10 +60,158 @@ function ApexImage({kind,alt,className='',caption,eager=false}:{kind:TrainingIma
    {caption&&<figcaption>{caption}</figcaption>}
  </figure>;
 }
-function ApexSection({eyebrow,title,action,children,className=''}:{eyebrow:string;title:string;action?:React.ReactNode;children:React.ReactNode;className?:string}){
- return <section className={`section apex-section ${className}`}><div className="section-head apex-section-head"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>{action}</div>{children}</section>
+function ApexRidge({className=''}:{className?:string}){
+ return <svg className={`a3-ridge ${className}`} viewBox="0 0 400 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+  <defs>
+   <radialGradient id="a3-sun" cx="72%" cy="34%" r="58%"><stop offset="0" style={{stopColor:'var(--apex3-gold-bright)',stopOpacity:0.5}}/><stop offset="0.45" style={{stopColor:'var(--apex3-gold)',stopOpacity:0.14}}/><stop offset="1" style={{stopColor:'var(--apex3-gold)',stopOpacity:0}}/></radialGradient>
+   <linearGradient id="a3-far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--apex3-steel)',stopOpacity:0.5}}/><stop offset="1" style={{stopColor:'var(--apex3-bg)',stopOpacity:0.15}}/></linearGradient>
+   <linearGradient id="a3-mid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--apex3-surface-strong)',stopOpacity:0.95}}/><stop offset="1" style={{stopColor:'var(--apex3-bg)',stopOpacity:1}}/></linearGradient>
+  </defs>
+  <rect width="400" height="220" fill="url(#a3-sun)"/>
+  <path d="M0 150 L34 122 L58 136 L96 92 L124 118 L152 84 L188 126 L214 104 L246 138 L286 96 L318 124 L352 100 L400 132 V220 H0Z" fill="url(#a3-far)"/>
+  <path d="M96 92 L108 105 M152 84 L165 99 M286 96 L297 109" className="a3-ridge-snow"/>
+  <path d="M0 176 L44 146 L82 166 L128 120 L166 158 L214 128 L262 168 L310 132 L356 160 L400 140 V220 H0Z" fill="url(#a3-mid)"/>
+  <path d="M0 200 L52 178 L100 194 L156 166 L212 192 L268 172 L330 196 L400 176 V220 H0Z" style={{fill:'var(--apex3-bg)'}}/>
+ </svg>
 }
-function ApexBar({value}:{value:number}){return <div className="apex-progress"><i style={{width:`${Math.max(0,Math.min(100,value))}%`}}/></div>}
+function Splash({message}:{message?:string}){
+ return <div className="apex3-splash"><ApexImage kind="strength-session" alt="" className="a3-splash-photo" eager/><ApexRidge className="a3-splash-ridge"/><img src="/brand/apex-mark-gold.png" alt=""/><b>APEX</b><span className="a3-splash-tag" aria-label="Train, track, progress, evolve"><i>TRAIN</i><i>TRACK</i><i>PROGRESS</i><i>EVOLVE</i></span><em className="a3-splash-claim">Your training is measured.<br/>Your progress is earned.</em>{message&&<small>{message}</small>}</div>
+}
+function ApexSpark({values,label,xLabels}:{values:number[];label:string;xLabels?:[string,string]}){
+ if(values.length<2)return <p className="a3-muted a3-note">Not enough logged points yet.</p>;
+ const w=320,h=xLabels?150:130,padL=38,padR=10,padT=10,padB=xLabels?24:10;
+ const min=Math.min(...values),max=Math.max(...values),span=Math.max(max-min,0.1);
+ const yOf=(v:number)=>h-padB-((v-min)/span)*(h-padT-padB);
+ const pts=values.map((v,i)=>[padL+i*(w-padL-padR)/(values.length-1),yOf(v)] as [number,number]);
+ const line=pts.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+ const last=pts[pts.length-1];
+ const grid=[max,(max+min)/2,min];
+ const fmt=(v:number)=>String(Math.round(v*10)/10);
+ return <svg className="a3-spark" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label}>
+  <defs><linearGradient id="a3-spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--apex3-gold)',stopOpacity:0.32}}/><stop offset="1" style={{stopColor:'var(--apex3-gold)',stopOpacity:0}}/></linearGradient></defs>
+  {grid.map((g,i)=><g key={i}><line x1={padL} x2={w-padR} y1={yOf(g)} y2={yOf(g)} className="a3-spark-grid"/><text x={padL-6} y={yOf(g)+3.5} textAnchor="end" className="a3-spark-axis">{fmt(g)}</text></g>)}
+  {xLabels&&<><text x={padL} y={h-6} className="a3-spark-axis">{xLabels[0]}</text><text x={w-padR} y={h-6} textAnchor="end" className="a3-spark-axis">{xLabels[1]}</text></>}
+  <polygon points={`${padL},${h-padB} ${line} ${w-padR},${h-padB}`} fill="url(#a3-spark-fill)"/>
+  <polyline points={line} className="a3-spark-line"/>
+  <circle cx={last[0]} cy={last[1]} r="4.5" className="a3-spark-dot"/>
+ </svg>
+}
+function SegBar<T extends string>({value,items,onChange,label}:{value:T;items:Array<[T,string]>;onChange:(v:T)=>void;label:string}){
+ return <div className="a3-seg" style={{gridTemplateColumns:`repeat(${items.length}, minmax(0, 1fr))`}} role="tablist" aria-label={label}>{items.map(([k,l])=><button key={k} role="tab" aria-selected={value===k} className={value===k?'active':''} onClick={()=>onChange(k)}>{l}</button>)}</div>
+}
+function SegTabs({route,onNav}:{route:'coach'|'today';onNav:(r:string)=>void}){
+ return <div className="a3-seg" role="tablist" aria-label="Coach and Today">
+  <button role="tab" aria-selected={route==='coach'} className={route==='coach'?'active':''} onClick={()=>onNav('coach')}>Coach</button>
+  <button role="tab" aria-selected={route==='today'} className={route==='today'?'active':''} onClick={()=>onNav('today')}>Today</button>
+ </div>
+}
+type NutritionDay={proteinG:number;calories:number;carbsG:number;fatsG:number;waterL:number;meals:number};
+const EMPTY_NUTRITION_DAY:NutritionDay={proteinG:0,calories:0,carbsG:0,fatsG:0,waterL:0,meals:0};
+function nutritionDay(s:AppState,date=today()):NutritionDay{return {...EMPTY_NUTRITION_DAY,...(s.nutrition?.log?.[date]||{})}}
+function Nutrition({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
+ const targets=s.nutrition?.targets||{};
+ const day=nutritionDay(s);
+ const [nutTab,setNutTab]=useState<'today'|'week'>('today');
+ const [meal,setMeal]=useState({protein:'',carbs:'',fats:'',calories:''});
+ const [tv,setTv]=useState({protein:String(targets.proteinG??''),calories:String(targets.calories??''),carbs:String(targets.carbsG??''),fats:String(targets.fatsG??''),water:String(targets.waterL??'')});
+ const num=(v:string)=>{const n=Number(v);return v.trim()!==''&&Number.isFinite(n)&&n>=0?n:undefined};
+ const pct=(v:number,t?:number)=>t&&t>0?Math.min(100,Math.round(v/t*100)):0;
+ const mutateDay=(fn:(d:NutritionDay)=>NutritionDay)=>update(x=>({...x,nutrition:{targets:x.nutrition?.targets||{},log:{...(x.nutrition?.log||{}),[today()]:fn(nutritionDay(x))}}}));
+ const logMeal=()=>{
+  const p=num(meal.protein)||0,c=num(meal.carbs)||0,f=num(meal.fats)||0;
+  const kcal=num(meal.calories)??Math.round(p*4+c*4+f*9);
+  if(p+c+f+kcal===0)return;
+  mutateDay(d=>({...d,proteinG:d.proteinG+p,carbsG:d.carbsG+c,fatsG:d.fatsG+f,calories:d.calories+kcal,meals:d.meals+1}));
+  setMeal({protein:'',carbs:'',fats:'',calories:''});
+ };
+ const addWater=(l:number)=>mutateDay(d=>({...d,waterL:Math.round((d.waterL+l)*100)/100}));
+ const saveTargets=()=>update(x=>({...x,nutrition:{log:x.nutrition?.log||{},targets:{proteinG:num(tv.protein),calories:num(tv.calories),carbsG:num(tv.carbs),fatsG:num(tv.fats),waterL:num(tv.water)}}}));
+ const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const iso=d.toISOString().slice(0,10);return {iso,protein:nutritionDay(s,iso).proteinG}});
+ const weekMax=Math.max(1,...week.map(x=>x.protein));
+ const remaining=targets.proteinG?Math.max(0,targets.proteinG-day.proteinG):undefined;
+ const rows:[string,number,number|undefined,string][]=[['Calories',day.calories,targets.calories,'kcal'],['Carbs',day.carbsG,targets.carbsG,'g'],['Fats',day.fatsG,targets.fatsG,'g'],['Water',day.waterL,targets.waterL,'L']];
+ return <div className="a3-home a3-nutrition">
+  <PageTitle eyebrow="NUTRITION · TODAY" title="Nutrition" sub="Log what you eat and drink against your own targets. APEX records the numbers; it does not prescribe a diet."/>
+  <SegBar label="Nutrition range" value={nutTab} onChange={setNutTab} items={[['today','Today'],['week','Week']]}/>
+  {nutTab==='today'&&<>
+  <div className="a3-card a3-nut-hero">
+   <ApexRing value={targets.proteinG?pct(day.proteinG,targets.proteinG):null} label="Protein" sub={targets.proteinG?`${Math.round(day.proteinG)} / ${targets.proteinG} g`:`${Math.round(day.proteinG)} g logged`}/>
+   <div className="a3-stats a3-stats-2"><ApexStat label="Consumed" value={String(Math.round(day.proteinG))} unit="g"/><ApexStat label="Remaining" value={remaining===undefined?'—':String(Math.round(remaining))} unit="g"/></div>
+  </div>
+  <div className="a3-card a3-stack">
+   <div className="a3-head"><h2>Daily totals</h2><span className="a3-chip">{day.meals} meal{day.meals===1?'':'s'}</span></div>
+   {rows.map(([label,v,t,unit])=><div className="a3-meter-row" key={label}><span>{label}</span><ApexMeter value={pct(v,t)}/><strong>{Math.round(v*100)/100}{t?` / ${t}`:''} {unit}</strong></div>)}
+   <div className="a3-actions"><button className="a3-pill" onClick={()=>addWater(0.25)}>+ 250 ml</button><button className="a3-pill" onClick={()=>addWater(0.5)}>+ 500 ml</button></div>
+  </div>
+  </>}
+  {nutTab==='week'&&<section className="a3-block">
+   <div className="a3-head"><h2>Protein this week</h2><span className="a3-eyebrow">Last 7 days</span></div>
+   <div className="a3-card"><div className="a3-bars">{week.map(x=><div className="a3-bar-col" key={x.iso}><small>{x.protein?Math.round(x.protein):'—'}</small><i><b style={{height:`${x.protein?Math.max(8,Math.round(x.protein/weekMax*100)):0}%`}}/></i><span>{x.iso.slice(5)}</span></div>)}</div></div>
+  </section>}
+  {nutTab==='today'&&<>
+  <section className="a3-card a3-stack">
+   <div className="a3-head"><h2>Log a meal</h2></div>
+   <div className="a3-fields">
+    <label>Protein (g)<input inputMode="decimal" value={meal.protein} onChange={e=>setMeal(m=>({...m,protein:e.target.value}))}/></label>
+    <label>Carbs (g)<input inputMode="decimal" value={meal.carbs} onChange={e=>setMeal(m=>({...m,carbs:e.target.value}))}/></label>
+    <label>Fats (g)<input inputMode="decimal" value={meal.fats} onChange={e=>setMeal(m=>({...m,fats:e.target.value}))}/></label>
+    <label>Calories (optional)<input inputMode="decimal" value={meal.calories} onChange={e=>setMeal(m=>({...m,calories:e.target.value}))} placeholder="Calculated if blank"/></label>
+   </div>
+   <button className="a3-cta" onClick={logMeal}>Add meal</button>
+  </section>
+  <section className="a3-card a3-stack">
+   <div className="a3-head"><h2>Your targets</h2></div>
+   <p className="a3-muted">Set the numbers you want to track against. Leave a field blank to track without a target.</p>
+   <div className="a3-fields">
+    <label>Protein (g)<input inputMode="decimal" value={tv.protein} onChange={e=>setTv(v=>({...v,protein:e.target.value}))}/></label>
+    <label>Calories<input inputMode="decimal" value={tv.calories} onChange={e=>setTv(v=>({...v,calories:e.target.value}))}/></label>
+    <label>Carbs (g)<input inputMode="decimal" value={tv.carbs} onChange={e=>setTv(v=>({...v,carbs:e.target.value}))}/></label>
+    <label>Fats (g)<input inputMode="decimal" value={tv.fats} onChange={e=>setTv(v=>({...v,fats:e.target.value}))}/></label>
+    <label>Water (L)<input inputMode="decimal" value={tv.water} onChange={e=>setTv(v=>({...v,water:e.target.value}))}/></label>
+   </div>
+   <button className="a3-cta a3-cta-ghost" onClick={saveTargets}>Save targets</button>
+  </section>
+  </>}
+ </div>
+}
+function Today({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Workout)=>void}){
+ const read=readiness(s);
+ const ins=homeInsights(s);
+ const day=nutritionDay(s);
+ const targets=s.nutrition?.targets||{};
+ const focus=s.workouts.find(w=>w.status==='in_progress')||s.workouts.find(w=>w.scheduledDate===today()&&['planned','rescheduled'].includes(w.status));
+ const dateLabel=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+ const pct=(v:number,t?:number)=>t&&t>0?Math.min(100,Math.round(v/t*100)):null;
+ return <div className="a3-home a3-today">
+  <SegTabs route="today" onNav={onNav}/>
+  <section className="a3-hero a3-today-hero" aria-label="Today">
+   <ApexImage kind="group-training" alt="" className="a3-hero-image" eager/>
+   <ApexRidge/>
+   <div className="a3-hero-body">
+    <span className="a3-eyebrow a3-gold">{dateLabel}</span>
+    <h2>{focus?niceName(focus.name):'Recovery and review'}</h2>
+    <p className="a3-meta"><Icon name="activity" size={14}/>Readiness · {read.label}</p>
+    <p className="a3-muted">{read.detail}</p>
+    <button className="a3-cta" onClick={()=>focus?onStart(focus):onNav('train')}>{focus?(focus.status==='in_progress'?'Resume Workout':'Start Workout'):'Open Train'}<Icon name="arrow" size={18}/></button>
+   </div>
+  </section>
+  <div className="a3-rings">
+   <ApexRing value={pct(day.proteinG,targets.proteinG)} label="Protein" sub={targets.proteinG?`${Math.round(day.proteinG)} / ${targets.proteinG} g`:`${Math.round(day.proteinG)} g logged`} onClick={()=>onNav('nutrition')}/>
+   <ApexRing value={pct(day.waterL,targets.waterL)} label="Water" sub={targets.waterL?`${day.waterL} / ${targets.waterL} L`:`${day.waterL} L logged`} onClick={()=>onNav('nutrition')}/>
+  </div>
+  {ins.length>0&&<section className="a3-block"><div className="a3-head"><h2>Signals</h2><button className="a3-link" onClick={()=>onNav('coach')}>Coach <Icon name="arrow" size={14}/></button></div>
+   <div className="a3-list">{ins.slice(0,2).map((x,i)=><article className="a3-card a3-row" key={i}><span className={`badge ${x.kind}`}>{x.kind}</span><div><strong>{x.title}</strong><p>{displayText(x.detail)}</p></div></article>)}</div>
+  </section>}
+  <button className="a3-card a3-row a3-tap" onClick={()=>onNav('nutrition')}><span className="a3-rowicon"><Icon name="activity"/></span><span><strong>Nutrition</strong><small>{day.meals} meal{day.meals===1?'':'s'} · {Math.round(day.calories)} kcal today</small></span><Icon name="chev"/></button>
+ </div>
+}
+function ApexStat({label,value,unit}:{label:string;value:string;unit?:string}){return <div className="a3-card a3-stat"><span className="a3-eyebrow">{label}</span><strong>{value}{unit&&<small>{unit}</small>}</strong></div>}
+function ApexRing({value,label,sub,onClick}:{value:number|null;label:string;sub?:string;onClick?:()=>void}){
+ const pct=value===null?0:Math.max(0,Math.min(100,value));const r=34,c=2*Math.PI*r;
+ const body=<><svg className="a3-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r={r}/><circle cx="40" cy="40" r={r} className="a3-ring-fill" strokeDasharray={c} strokeDashoffset={c*(1-pct/100)}/></svg><span className="a3-ring-value">{value===null?'—':`${pct}%`}</span><span className="a3-ring-copy"><strong>{label}</strong>{sub&&<small>{sub}</small>}</span></>;
+ return onClick?<button className="a3-card a3-ring-card a3-tap" onClick={onClick}>{body}</button>:<div className="a3-card a3-ring-card">{body}</div>
+}
+function ApexMeter({value}:{value:number}){return <div className="a3-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value)}><i style={{width:`${Math.max(0,Math.min(100,value))}%`}}/></div>}
 
 
 function recommendationFor(ex:Exercise,s:AppState){
@@ -217,6 +371,7 @@ function App(){
  const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false);
  const routeHistory=useRef<string[]>([]);
  const routeRef=useRef(route);
+ useEffect(()=>{window.scrollTo({top:0,behavior:'instant'})},[route]);
  const sheetRef=useRef<string|null>(sheet);
  const stateRef=useRef(s);
  const lifecycleBusy=useRef(false);
@@ -310,7 +465,7 @@ function App(){
 
    setRoute(r);
    setSheet(null);
-   window.scrollTo({top:0,behavior:'smooth'});
+   window.scrollTo({top:0,behavior:'instant'});
  };
 
  const goBack=()=>{
@@ -323,13 +478,13 @@ function App(){
 
    if(previous){
      setRoute(previous);
-     window.scrollTo({top:0,behavior:'smooth'});
+     window.scrollTo({top:0,behavior:'instant'});
      return;
    }
 
    if(routeRef.current!=='home'){
      setRoute('home');
-     window.scrollTo({top:0,behavior:'smooth'});
+     window.scrollTo({top:0,behavior:'instant'});
      return;
    }
 
@@ -626,12 +781,14 @@ function App(){
   nav('brief:'+w.id);
 };
 
+ setUnits(s.preferences.units);
  const active=s.workouts.find(w=>w.id===s.activeWorkoutId&&w.status==='in_progress');
  const appClass=`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`;
  const appStyle={fontSize:`${fontScaleValue(s.preferences.fontScale)}em`};
- if(!s.onboardingComplete)return <div className={appClass} style={appStyle}>{splash&&<div className="apex3-splash"><img src="/brand/apex-symbol-light.png" alt=""/><b>APEX</b><small>{hydrated?'Set up your training context…':'Restoring local training data…'}</small></div>}<Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
- return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}}>{splash&&<div className="apex3-splash"><img src="/brand/apex-symbol-light.png" alt=""/><b>APEX</b></div>}
- <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-symbol-light.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="apex-top-status"><i/> SYSTEM READY</div><div className="top-actions"><button className="icon-btn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
+ if(!hydrated&&!splash)return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} data-theme={s.preferences.theme||'apex'}><LoadingPanel/></div>;
+ if(!s.onboardingComplete)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'apex'}>{splash&&<Splash message={hydrated?'Set up your training context…':'Restoring local training data…'}/>}<Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
+ return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}} data-theme={s.preferences.theme||'apex'}>{splash&&<Splash/>}
+ <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-mark-gold.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="apex-top-status"><i/> SYSTEM READY</div><div className="top-actions"><button className="a3-iconbtn" title="Profile" aria-label="Profile" onClick={()=>nav('you')}><Icon name="user"/></button><button className="a3-iconbtn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
  <main className="main">
  <div className="page-transition screen-page" data-apex-route={route} key={route}>
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
@@ -646,7 +803,9 @@ function App(){
  {route==='plan'&&<PlanStudio s={s} update={update} onStart={start}/>}
  {route==='library'&&<Library s={s} query={query} setQuery={setQuery} onExercise={id=>setSheet('exercise:'+id)}/>}
  {route==='you'&&<You s={s} nav={nav} update={update}/>}
- {route==='coach'&&<Coach s={s}/>}
+ {route==='coach'&&<Coach s={s} onNav={nav}/>}
+ {route==='today'&&<Today s={s} onNav={nav} onStart={start}/>}
+ {route==='nutrition'&&<Nutrition s={s} update={update}/>}
  {route==='learn'&&<Learn/>}
  {route==='templates'&&<Templates s={s} update={update} onStart={start}/>}
  </div>
@@ -673,12 +832,20 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
   const [error,setError]=useState('');
 
   const goalText:Record<GoalKind,string>={
-    strength:'Build strength',
-    hypertrophy:'Build muscle',
-    fat_loss:'Improve body composition',
-    fitness:'Improve fitness',
-    general:'Balanced training'
+    strength:'Get Stronger',
+    hypertrophy:'Build Muscle',
+    fat_loss:'Get Leaner',
+    fitness:'Stay Fit',
+    general:'Train Balanced'
   };
+  const goalNote:Record<GoalKind,string>={
+    strength:'Increase strength',
+    hypertrophy:'Gain muscle mass',
+    fat_loss:'Reduce body fat',
+    fitness:'General fitness',
+    general:'Flexible balanced training'
+  };
+  const goalIcon:Record<GoalKind,string>={strength:'bolt',hypertrophy:'layers',fat_loss:'target',fitness:'activity',general:'shield'};
 
   const togg=(x:string)=>{
     setError('');
@@ -848,13 +1015,15 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
   };
 
   return (
-    <div className="onboarding">
+    <div className={`onboarding ${step===0?'is-intro':''}`}>
+      <ApexImage kind={step===0?'strength-session':'training-floor'} alt="" className="a3-onb-bg" eager/>
+      <ApexRidge className="a3-onb-ridge"/>
 
       <div className="onboard-progress-meta"><span>SETUP</span><strong>{String(step+1).padStart(2,'0')} / 05</strong></div>
 
       <div className="onboard-brand">
         <img
-          src="/brand/apex-symbol-light.png"
+          src="/brand/apex-mark-gold.png"
           alt="APEX"
         />
         <span>APEX</span>
@@ -869,43 +1038,16 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
       </div>
 
       {step===0&&(
-        <div className="onboard-body">
-          <span className="eyebrow">
-            APEX / 01
-          </span>
-
-          <h1>
-            Training that adapts to what you actually do.
-          </h1>
-
-          <p>
-            No fake body stats. No fixed routine.
-            APEX starts with your choices and becomes
-            more informed through performance.
-          </p>
-
-          <div className="feature-list">
-            <b>
-              01
-              <span>Track every useful set.</span>
-            </b>
-
-            <b>
-              02
-              <span>Progress from evidence.</span>
-            </b>
-
-            <b>
-              03
-              <span>Keep control of every change.</span>
-            </b>
-          </div>
+        <div className="onboard-body a3-intro">
+          <img className="a3-intro-mark" src="/brand/apex-mark-gold.png" alt="APEX"/>
+          <h1>Stronger you,<br/>with discipline.</h1>
+          <p>Small steps.<br/>Real progress.<br/>Lasting results.</p>
         </div>
       )}
 
       {step===1&&(
         <div className="onboard-body">
-          <span className="eyebrow">
+          <span className="a3-eyebrow">
             CONTEXT / 02
           </span>
 
@@ -965,40 +1107,29 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
       {step===2&&(
         <div className="onboard-body">
 
-          <span className="eyebrow">
+          <span className="a3-eyebrow">
             GOAL / 03
           </span>
 
           <h1>
-            What are you training for?
+            What’s your goal?
           </h1>
+          <p>Choose your primary focus.</p>
 
-          <div className="choice-grid">
+          <div className="choice-grid a3-goals">
 
             {(Object.keys(goalText) as GoalKind[]).map(g=>(
               <button
                 type="button"
-                className={goal===g?'selected':''}
+                className={`a3-goalcard ${goal===g?'selected':''}`}
                 onClick={()=>setGoal(g)}
                 key={g}
               >
-                <strong>
-                  {goalText[g]}
-                </strong>
-
-                <small>
-                  {
-                    g==='strength'
-                      ?'Performance first'
-                      :g==='hypertrophy'
-                        ?'Muscle-building focus'
-                        :g==='fat_loss'
-                          ?'Training alongside body-composition goals'
-                          :g==='fitness'
-                            ?'Capacity and consistency'
-                            :'Flexible balanced training'
-                  }
-                </small>
+                <span className="a3-goalicon"><Icon name={goalIcon[g]}/></span>
+                <span className="a3-goaltext">
+                  <strong>{goalText[g]}</strong>
+                  <small>{goalNote[g]}</small>
+                </span>
               </button>
             ))}
 
@@ -1009,7 +1140,7 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
       {step===3&&(
         <div className="onboard-body">
 
-          <span className="eyebrow">
+          <span className="a3-eyebrow">
             SCHEDULE / 04
           </span>
 
@@ -1063,7 +1194,7 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
       {step===4&&(
         <div className="onboard-body">
 
-          <span className="eyebrow">
+          <span className="a3-eyebrow">
             EQUIPMENT / 05
           </span>
 
@@ -1108,7 +1239,7 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
 
           {error&&(
             <div
-              className="callout onboarding-error"
+              className="a3-card a3-callout a3-error onboarding-error"
               role="alert"
             >
               <Icon name="bolt"/>
@@ -1132,17 +1263,22 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
 
         <button
           type="button"
-          className="button ghost"
+          className="a3-cta a3-cta-ghost"
           disabled={!step||building}
           onClick={()=>setStep(x=>x-1)}
         >
           Back
         </button>
 
-        {step<4?(
+        {step===0?(
+          <div className="a3-intro-nav">
+            <span className="a3-dots" aria-hidden="true"><i className="on"/><i/><i/><i/></span>
+            <button type="button" className="a3-arrowbtn" aria-label="Continue" disabled={!canContinue} onClick={continueOnboarding}><Icon name="arrow" size={22}/></button>
+          </div>
+        ):step<4?(
           <button
             type="button"
-            className="button primary"
+            className="a3-cta"
             disabled={!canContinue}
             onClick={continueOnboarding}
           >
@@ -1152,7 +1288,7 @@ function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
         ):(
           <button
             type="button"
-            className="button primary"
+            className="a3-cta"
            disabled={building||!exp||!goal||!days||!mins||!equipment.length}
             onClick={buildMyPlan}
           >
@@ -1177,58 +1313,74 @@ function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Wo
  const goal=s.goals.find(g=>g.status==='active');
  const read=readiness(s);
  const ins=homeInsights(s);
- const completed=s.workouts.filter(w=>w.status==='completed').length;
  const recent=s.workouts.filter(w=>w.status==='completed').sort((a,b)=>String(b.completedAt||b.updatedAt||'').localeCompare(String(a.completedAt||a.updatedAt||''))).slice(0,4);
  const focus=active||todayW;
  const focusExercise=focus?.exercises?.find(x=>x.sets?.some(set=>!set.completed));
  const focusEx=focusExercise?s.exercises.find(e=>e.id===focusExercise.exerciseId):undefined;
  const focusSet=focusExercise?.sets?.find(set=>!set.completed);
  const gp=goal?goalProgress(s,goal):undefined;
- const load=trainingLoadSummary(s);
  const coachResult=coach({state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:focus?.id,workout:focus,exerciseId:focusEx?.id,exercise:focusEx,workoutExercise:focusExercise,setId:focusSet?.id,set:focusSet,recentWorkoutIds:recent.map(w=>w.id),recentExerciseEntryIds:[],now:new Date().toISOString()});
  const decision=coachResult.decision;
- const nextAction=active?'Resume the active session':todayW?'Start today’s session':'Review your training plan';
- return <div className="home-screen apex-home-v3">
-   <section className="hero editorial apex-command-hero apex-hero-v3">
-    <div className="apex-hero-copy">
-      <div className="apex-kicker"><span className="eyebrow">APEX / COMMAND</span><span className="apex-live-status"><i/>LIVE TRAINING SYSTEM</span></div>
-      <h1>{active?'Pick up exactly where you stopped.':todayW?todayW.name:'Build the signal before you chase the number.'}</h1>
-      <p>{active?'Your workout state is preserved. APEX will resume from the next actionable set.':todayW?`${todayW.exercises.length} movements · adaptive loading · live set feedback.`:'Your training record is the source of truth. Start a session, record reality, and let the coach adapt future work.'}</p>
-      <div className="apex-hero-actions">
-       <button className="button primary" onClick={()=>focus?onStart(focus):onNav('train')}><Icon name={focus?'play':'train'}/>{nextAction}</button>
-       <button className="button secondary" onClick={()=>onNav('coach')}><Icon name="spark"/> Ask Coach</button>
-      </div>
-      <div className="apex-command-meta"><ApexStatus label="READINESS" detail={`${read.label} · ${read.level}`} icon="activity"/><ApexStatus label="30-DAY LOAD" detail={`${load.workingSets30} working sets`} icon="layers"/><ApexStatus label="RECORD" detail={`${completed} completed sessions`} icon="shield"/></div>
+  const hour=new Date().getHours();
+ const greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
+ const firstName=(s.profile?.name||'').trim().split(' ')[0];
+ const dateLabel=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'}).replace(/^([A-Za-z]+) /,'$1, ');
+ const consistency=consistencySummary(s);
+ const weekAgo=Date.now()-7*86400000;
+ const weekDone=s.workouts.filter(w=>w.status==='completed'&&new Date(w.completedAt||w.scheduledDate).getTime()>=weekAgo);
+ const weekVolume=vol(weekDone.reduce((n,w)=>n+volumeForWorkout(w,s.exercises),0));
+ const volumeLabel=weekVolume>=1000?(weekVolume/1000).toFixed(1)+'K':String(weekVolume);
+ const focusMuscles=focus?[...new Set(focus.exercises.flatMap(we=>s.exercises.find(e=>e.id===we.exerciseId)?.primaryMuscles||[]))].slice(0,3):[];
+ const kicker=active?'In progress':todayW?'Today’s workout':'Next up';
+ const weekDays=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7)+i);const iso=d.toISOString().slice(0,10);return {iso,label:'MTWTFSS'[i],on:s.workouts.some(w=>w.status==='completed'&&String(w.completedAt||w.scheduledDate).slice(0,10)===iso),today:iso===today()}});
+ return <div className="home-screen a3-home">
+   <header className="a3-greet"><span className="a3-eyebrow">{dateLabel}</span><h1>{firstName?<>{greeting},<br/>{firstName}.</>:`${greeting}.`}</h1></header>
+
+   <section className="a3-hero" aria-label="Daily briefing">
+    <ApexImage kind={focusEx?imageKindForExercise(focusEx):'training-floor'} alt="" className="a3-hero-image" eager/>
+    <ApexRidge/>
+    <div className="a3-hero-body">
+     <span className="a3-eyebrow a3-gold">{kicker}</span>
+     <h2>{focus?niceName(focus.name):'No session scheduled'}</h2>
+     {focusMuscles.length>0&&<p className="a3-muted">{focusMuscles.map(x=>x.replace(/_/g,' ')).join(' · ')}</p>}
+     <p className="a3-meta"><Icon name="clock" size={14}/>{focus?`${focus.exercises.length} exercises${s.profile?.sessionMinutes?` · ~${s.profile.sessionMinutes} min`:''}`:'Build a session in Train'}</p>
+     <button className="a3-cta" onClick={()=>focus?onStart(focus):onNav('train')}>{focus?(active?'Resume Workout':'Start Workout'):'Open Train'}<Icon name="arrow" size={18}/></button>
     </div>
-    <div className="apex-hero-visual" aria-hidden="true"><ApexImage kind={focusEx?imageKindForExercise(focusEx):'training-floor'} alt="" className="apex-hero-image" eager/><div className="apex-orbit orbit-a"/><div className="apex-orbit orbit-b"/><div className="apex-orbit orbit-c"/><div className="apex-hero-core"><span>APEX</span><b>{read.label}</b><small>READINESS</small></div><div className="apex-hero-scan"/></div>
    </section>
 
-   <ApexSection eyebrow="COACH / NOW" title="The next useful action." action={<button className="mini-btn" onClick={()=>onNav('coach')}>Open Coach <Icon name="arrow" size={14}/></button>}>
-    <article className="callout apex-coach-card"><div className="apex-coach-mark"><Icon name="spark" size={22}/></div><div className="apex-coach-copy"><div className="apex-card-line"><span className="badge">{decision.action}</span><span className="apex-confidence">{decision.confidence?`${decision.confidence} confidence`:'context grounded'}</span></div><h3>{focusEx?.name||decision.prescription?.instruction||'APEX is ready.'}</h3><p>{focusEx&&focusSet?`${focusSet.type||'Working set'} · ${focusSet.reps||'—'} reps · ${focusSet.weight??'—'} load`:coachResult.explanation}</p><small>{decision.prescription?.instruction||'Follow the current prescription and record what actually happens.'}</small></div></article>
-   </ApexSection>
+   <div className="a3-stats">
+    <ApexStat label="Streak" value={String(consistency.streak)} unit="days"/>
+    <ApexStat label="This week" value={String(weekDone.length)} unit="sessions"/>
+    <ApexStat label="Volume" value={volumeLabel} unit={weightLabel()}/>
+   </div>
 
-   <ApexSection eyebrow="TODAY" title="Training command center" action={<button className="mini-btn" onClick={()=>onNav('train')}>Open Train <Icon name="arrow" size={14}/></button>}>
-    <div className="apex-command-grid">
-      <button className="apex-session-card" onClick={()=>focus&&onStart(focus)} disabled={!focus}>
-       <span className="eyebrow">{active?'IN PROGRESS':todayW?'READY NOW':'NO SESSION'}</span><strong>{focus?.name||'No session scheduled'}</strong><small>{focus?`${focus.exercises.length} exercises · ${focus.scheduledDate}`:'Use Train to create or schedule a session.'}</small><span className="apex-card-arrow"><Icon name="arrow"/></span>
-      </button>
-      <div className="apex-readout-card"><span className="eyebrow">CURRENT FOCUS</span><strong>{focusEx?.name||'Training foundation'}</strong><small>{focusSet?`${focusSet.reps||'—'} reps · ${focusSet.weight??'—'} load · target RIR ${focusSet.rir??'—'}`:'No active set. Your next session will appear here.'}</small>{focusSet&&<ApexBar value={Math.max(10,Math.min(100,(Number(focusSet.rir??2)/5)*100))}/>}</div>
+    <div className="a3-card a3-week"><div className="a3-head"><span className="a3-eyebrow">This week</span><small className="a3-muted">{weekDone.length} session{weekDone.length===1?'':'s'}</small></div><div className="a3-week-days">{weekDays.map(d=><span key={d.iso} className={`${d.on?'on':''} ${d.today?'today':''}`} aria-label={`${d.iso}${d.on?' trained':''}`}><i/>{d.label}</span>)}</div></div>
+
+   <article className="a3-card a3-coach">
+    <span className="a3-coach-mark"><Icon name="spark" size={20}/></span>
+    <div>
+     <span className="a3-eyebrow a3-gold">Coach insight</span>
+     <h3>{focusEx?.name||displayText(decision.prescription?.instruction||'APEX is ready.')}</h3>
+     <p>{focusEx&&focusSet?`${focusSet.type||'Working set'} · ${focusSet.reps||'—'} reps · ${focusSet.weight!==undefined?`${wt(focusSet.weight)} ${weightLabel()}`:'—'} load`:displayText(coachResult.explanation)}</p>
+     <small>{displayText(decision.prescription?.instruction||`Readiness: ${read.label}. Follow the current prescription and record what actually happens.`)}</small>
+     <button className="a3-link" onClick={()=>onNav('coach')}>Ask Coach <Icon name="arrow" size={14}/></button>
     </div>
-   </ApexSection>
+   </article>
 
-   {goal&&<ApexSection eyebrow="GOAL / ACTIVE" title={goal.title} action={<button className="mini-btn" onClick={()=>onNav('goals')}>Details</button>}>
-    <article className="goal-card apex-goal-card"><div className="goal-ring">{gp?.percent===null||gp?.percent===undefined?'—':`${gp.percent}%`}</div><div className="apex-goal-body"><div className="apex-card-line"><span className="badge">{gp?.status||'ACTIVE'}</span>{goal.targetDate&&<span className="apex-confidence">Target {goal.targetDate}</span>}</div><strong>{goal.target?`${goal.target.label}: ${goal.target.value} ${goal.target.unit}`:'No numeric target yet.'}</strong>{gp?.percent!==null&&gp?.percent!==undefined&&<ApexBar value={gp.percent}/>}<small>{gp?.status||'Active goal'}</small></div></article>
-   </ApexSection>}
+   <div className="a3-rings">
+    <ApexRing value={consistency.rate} label="Consistency" sub={`${consistency.completed} sessions · 30d`}/>
+    {goal&&<ApexRing value={gp?.percent??null} label={goal.title} sub={gp?.status||'Active goal'} onClick={()=>onNav('goals')}/>}
+   </div>
 
-   <ApexSection eyebrow="SIGNALS" title="What the record is telling you.">
-    <div className="insight-stack apex-insight-grid">{ins.slice(0,3).map((x,i)=><article className="insight apex-insight" key={i}><span className={`badge ${x.kind}`}>{x.kind}</span><h3>{x.title}</h3><p>{x.detail}</p><small>{x.evidence.join(' · ')}</small></article>)}</div>
-   </ApexSection>
+   {ins.length>0&&<section className="a3-block"><div className="a3-head"><h2>Signals</h2></div>
+    <div className="a3-list">{ins.slice(0,3).map((x,i)=><article className="a3-card a3-row" key={i}><span className={`badge ${x.kind}`}>{x.kind}</span><div><strong>{x.title}</strong><p>{displayText(x.detail)}</p></div></article>)}</div>
+   </section>}
 
-   <ApexSection eyebrow="RECENT / RECORD" title="Recent training" action={<button className="mini-btn" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button>}>
-    <div className="apex-recent-list">{recent.map((w,i)=><button className="apex-recent-row" key={w.id} onClick={()=>onNav(`session:${w.id}`)}><span className="apex-recent-index">{String(i+1).padStart(2,'0')}</span><span><strong>{w.name}</strong><small>{w.completedAt?.slice(0,10)||w.scheduledDate} · {w.exercises.length} exercises</small></span><Icon name="arrow" size={16}/></button>)}{!recent.length&&<Empty title="No completed sessions yet" text="Your completed training record will appear here."/>}</div>
-   </ApexSection>
+   <section className="a3-block"><div className="a3-head"><h2>Recent training</h2><button className="a3-link" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button></div>
+    <div className="a3-list">{recent.map((w,i)=><button className="a3-card a3-row a3-tap" key={w.id} onClick={()=>onNav(`session:${w.id}`)}><span className="a3-index">{String(i+1).padStart(2,'0')}</span><div><strong>{w.name}</strong><p>{w.completedAt?.slice(0,10)||w.scheduledDate} · {w.exercises.length} exercises</p></div><Icon name="arrow" size={16}/></button>)}{!recent.length&&<Empty title="No completed sessions yet" text="Your completed training record will appear here."/>}</div>
+   </section>
 
-   <section className="section apex-quick-grid"><button onClick={()=>onNav('progress')}><Icon name="chart"/><span><b>Progress</b><small>Trends & evidence</small></span><Icon name="arrow"/></button><button onClick={()=>onNav('plan')}><Icon name="target"/><span><b>Plan Studio</b><small>Future training</small></span><Icon name="arrow"/></button><button onClick={()=>onNav('library')}><Icon name="search"/><span><b>Exercise Library</b><small>Movements & alternatives</small></span><Icon name="arrow"/></button><button onClick={()=>onNav('you')}><Icon name="user"/><span><b>You</b><small>Profile & system</small></span><Icon name="arrow"/></button></section>
+    <div className="a3-tools"><button className="a3-card a3-tap" onClick={()=>onNav('today')}><Icon name="calendar"/>Today</button><button className="a3-card a3-tap" onClick={()=>onNav('nutrition')}><Icon name="activity"/>Nutrition</button></div>
  </div>
 }
 
@@ -1241,18 +1393,72 @@ function Train({s,onStart,onNav,update}:{s:AppState;onStart:(w:Workout)=>void;on
  const createExtra=()=>{const ids=s.exercises.slice(0,5).map(e=>e.id);const w=createCustomWorkout('Extra Session',today(),ids,s.exercises);w.source='extra';w.status='planned';update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'extra_workout_created',timestamp:new Date().toISOString(),payload:{workoutId:w.id}}]}));onStart(w)};
  const commitReschedule=()=>{if(!reschedule||!date)return;const pair=rescheduleWorkoutWithEvent(reschedule,date);update(x=>({...x,workouts:x.workouts.map(w=>w.id===pair.original.id?pair.original:w).concat(pair.replacement),eventLog:[...(x.eventLog||[]),pair.event]}));setReschedule(null)};
  const completed=s.workouts.filter(w=>w.status==='completed').length;
- return <div className="train-screen apex-train-v3">
-  <PageTitle eyebrow="TRAIN / COMMAND" title="Make today’s work count." sub="One queue. One active session. Every adjustment is recorded instead of silently rewriting the plan."/>
-  <section className="apex-train-command">
-   <div className="apex-train-primary"><span className="eyebrow">{todayWorkout?'TODAY / READY':'NEXT SESSION'}</span><h2>{todayWorkout?.name||nextWorkout?.name||'No session scheduled'}</h2><p>{todayWorkout?`${todayWorkout.exercises.length} movements ready for adaptive execution.`:nextWorkout?`${nextWorkout.scheduledDate} · ${nextWorkout.exercises.length} movements · ${nextWorkout.source}`:'Build your next session in Plan Studio or start a custom session.'}</p><div className="apex-command-actions">{todayWorkout&&<button className="button primary" onClick={()=>onStart(todayWorkout)}><Icon name="play"/> Start session</button>}{!todayWorkout&&nextWorkout&&<button className="button primary" onClick={()=>onStart(nextWorkout)}><Icon name="play"/> Preview next</button>}<button className="button secondary" onClick={createExtra}><Icon name="plus"/> Quick session</button></div></div>
-   <div className="apex-train-readout"><span className="eyebrow">TRAINING QUEUE</span><strong>{upcoming.length}</strong><small>planned sessions</small><div className="apex-queue-line"><i style={{width:`${Math.min(100,upcoming.length*12)}%`}}/></div><span>{completed} completed all-time</span></div>
+ const activeW=s.workouts.find(w=>w.status==='in_progress');
+ const focus=activeW||todayWorkout||nextWorkout;
+ const isActive=!!activeW;
+ const rows=(focus?.exercises||[]).map((we,i)=>{
+   const ex=s.exercises.find(e=>e.id===we.exerciseId);
+   if(!ex)return null;
+   const rec=recommendationFor(ex,s);
+   const load=formatLoad(ex,we.recommendedWeight??rec.weight);
+   const fit=equipmentFit(ex,s.profile?.equipment);
+   const alts=smartAlternatives(ex,s.exercises,s.profile?.equipment).length;
+   const done=we.sets.filter(x=>x.completed).length;
+   return {we,ex,i,rec,load,fit,alts,done};
+ }).filter(Boolean) as Array<{we:Workout['exercises'][number];ex:Exercise;i:number;rec:ReturnType<typeof recommendationFor>;load:string;fit:ReturnType<typeof equipmentFit>;alts:number;done:number}>;
+ const activeRow=rows.findIndex(r=>r.done<r.we.sets.length);
+ const totalSets=rows.reduce((n,r)=>n+r.we.sets.length,0);
+ const doneSets=rows.reduce((n,r)=>n+r.done,0);
+ const sessionPct=totalSets?Math.round(doneSets/totalSets*100):0;
+ const fitLabel={available:'Equipment ready',unknown:'Check equipment',unavailable:'Equipment unavailable'} as const;
+ const kicker=isActive?'In progress':todayWorkout?'Today’s session':nextWorkout?'Next session':'Train';
+ const briefRoute=focus?`brief:${focus.id}`:'plan';
+ if(!focus&&!upcoming.length&&!completed)return <div className="train-screen a3-home"><StateView kind="empty" title="No Workouts Yet" text="Your journey starts here. Create your first workout and build your momentum." primary={{label:'Start Your First Workout',onClick:()=>onNav('plan')}}/></div>;
+ return <div className="train-screen a3-home">
+  <header className="a3-greet"><span className="a3-eyebrow">Train · {completed} sessions logged</span><h1>{focus?niceName(focus.name):'Plan your next session.'}</h1></header>
+
+  <section className="a3-card a3-session">
+   <div className="a3-session-head">
+    <div><span className="a3-eyebrow a3-gold">{kicker}</span><p className="a3-meta"><Icon name="clock" size={14}/>{focus?`${focus.exercises.length} exercises${s.profile?.sessionMinutes?` · ~${s.profile.sessionMinutes} min`:''} · ${focus.scheduledDate===today()?'Today':focus.scheduledDate}`:'No session scheduled'}</p></div>
+    <div className="a3-session-pct"><strong>{sessionPct}%</strong><small>{doneSets}/{totalSets} sets</small></div>
+   </div>
+   <ApexMeter value={sessionPct}/>
+   <button className="a3-cta" onClick={()=>focus?onStart(focus):onNav('plan')}>{focus?(isActive?'Resume Workout':'Start Workout'):'Open Plan Studio'}<Icon name={focus?'play':'arrow'} size={18}/></button>
+   <div className="a3-session-actions">
+    {focus&&!isActive&&<button className="a3-link" onClick={()=>onNav(briefRoute)}>Session brief &amp; swaps <Icon name="arrow" size={14}/></button>}
+    <button className="a3-link" onClick={createExtra}>Extra session <Icon name="plus" size={14}/></button>
+   </div>
   </section>
-  <div className="apex-tool-strip"><button onClick={()=>onNav('plan')}><Icon name="calendar"/>Plan Studio</button><button onClick={()=>onNav('templates')}><Icon name="layers"/>Templates</button><button onClick={()=>onNav('library')}><Icon name="search"/>Exercise Library</button><button onClick={()=>onNav('coach')}><Icon name="spark"/>Coach</button></div>
-  <ApexSection eyebrow="QUEUE / UPCOMING" title="What happens next." action={<span className="apex-section-count">{upcoming.length} scheduled</span>}>
-   <div className="apex-queue-list">{upcoming.slice(0,8).map((w,i)=><article className="apex-queue-card" key={w.id}><div className="apex-queue-date"><b>{w.scheduledDate===today()?'NOW':i===0?'NEXT':w.scheduledDate.slice(5)}</b><small>{w.status}</small></div><button onClick={()=>onStart(w)}><span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.source} · v{w.version}{w.status==='rescheduled'?' · rescheduled':''}</small></span><Icon name="arrow"/></button><div className="apex-queue-actions"><button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button><button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button></div></article>)}{!upcoming.length&&<Empty title="Queue is clear" text="Use Plan Studio to build your next block or create a quick session."/>}</div>
-  </ApexSection>
-  <ApexSection eyebrow="EXECUTION MODEL" title="Start. Observe. Adapt."><div className="apex-principles"><div><span>01</span><Icon name="play"/><strong>Start</strong><p>Open the scheduled prescription and enter the session.</p></div><div><span>02</span><Icon name="activity"/><strong>Observe</strong><p>Record load, reps, effort, substitutions and interruptions.</p></div><div><span>03</span><Icon name="spark"/><strong>Adapt</strong><p>APEX uses the new evidence to shape future work without changing history.</p></div></div></ApexSection>
-  {extra.length>0&&<ApexSection eyebrow="EXTRA WORK" title="Unscheduled sessions"><div className="apex-recent-list">{extra.slice(-5).reverse().map(w=><button className="apex-recent-row" key={w.id} onClick={()=>onStart(w)}><span className="apex-recent-index">+</span><span><strong>{w.name}</strong><small>{w.scheduledDate} · {w.status}</small></span><Icon name="arrow"/></button>)}</div></ApexSection>}
+
+  {rows.length>0&&<section className="a3-block"><div className="a3-head"><h2>Exercises</h2><span className="a3-eyebrow">{rows.length} movements</span></div>
+   <div className="a3-list">{rows.map(r=><article className={`a3-card a3-exercise ${r.done>=r.we.sets.length?'is-done':r.i===activeRow?'is-active':''}`} key={r.we.exerciseId+r.i}>
+    <div className="a3-exthumb"><ApexImage kind={imageKindForExercise(r.ex)} alt=""/><em>{String(r.i+1).padStart(2,'0')}</em></div>
+    <div className="a3-exercise-body">
+     <strong>{r.ex.name}</strong>
+     <p>{r.we.prescribedSets} × {r.we.repRange[0]}–{r.we.repRange[1]} {r.ex.loadSemantics==='time'?'sec':'reps'}</p>
+     <dl className="a3-spec"><div><dt>Load</dt><dd>{r.load}</dd></div><div><dt>Reps</dt><dd>{r.we.repRange[0]}–{r.we.repRange[1]}</dd></div><div><dt>RIR</dt><dd>{r.rec.targetRir}</dd></div></dl>
+     <div className="a3-exercise-foot">
+      <span className={`a3-chip a3-fit-${r.fit}`}>{fitLabel[r.fit]}</span>
+      <span className={`a3-chip a3-state ${r.done>=r.we.sets.length?'is-done':r.i===activeRow?'is-active':''}`}>{r.done>=r.we.sets.length?'Done':r.i===activeRow?(isActive?'Active':'Next up'):'Up next'}</span>
+      {r.done>0&&<span className="a3-chip">{r.done}/{r.we.sets.length} sets</span>}
+      {!isActive&&r.alts>0&&<button className="a3-link" onClick={()=>onNav(briefRoute)}>{r.alts} substitute{r.alts===1?'':'s'}</button>}
+     </div>
+    </div>
+   </article>)}</div>
+  </section>}
+
+  <div className="a3-rings">
+   <div className="a3-card a3-stat"><span className="a3-eyebrow">Queue</span><strong>{upcoming.length}<small>planned</small></strong></div>
+   <div className="a3-card a3-stat"><span className="a3-eyebrow">Logged</span><strong>{completed}<small>sessions</small></strong></div>
+  </div>
+
+  <section className="a3-block"><div className="a3-head"><h2>Up next</h2><span className="a3-eyebrow">{upcoming.length} scheduled</span></div>
+   <div className="a3-list">{upcoming.slice(0,8).map((w,i)=><article className="a3-card a3-queue" key={w.id}><button className="a3-queue-main" onClick={()=>onStart(w)}><span className="a3-index">{w.scheduledDate===today()?'NOW':i===0?'NEXT':w.scheduledDate.slice(5)}</span><span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.source} · v{w.version}{w.status==='rescheduled'?' · rescheduled':''}</small></span><Icon name="arrow" size={16}/></button><div className="a3-queue-actions"><button className="mini-btn" onClick={()=>{setReschedule(w);setDate(w.scheduledDate)}}>Move</button><button className="mini-btn" onClick={()=>update(x=>({...x,workouts:x.workouts.map(q=>q.id===w.id?{...q,status:'skipped',updatedAt:new Date().toISOString()}:q)}))}>Skip</button></div></article>)}{!upcoming.length&&<Empty title="Queue is clear" text="Use Plan Studio to build your next block or create a quick session."/>}</div>
+  </section>
+
+  <div className="a3-tools"><button className="a3-card a3-tap" onClick={()=>onNav('plan')}><Icon name="calendar"/>Plan Studio</button><button className="a3-card a3-tap" onClick={()=>onNav('templates')}><Icon name="layers"/>Templates</button><button className="a3-card a3-tap" onClick={()=>onNav('library')}><Icon name="search"/>Library</button><button className="a3-card a3-tap" onClick={()=>onNav('coach')}><Icon name="spark"/>Coach</button></div>
+
+  {extra.length>0&&<section className="a3-block"><div className="a3-head"><h2>Extra work</h2></div><div className="a3-list">{extra.slice(-5).reverse().map(w=><button className="a3-card a3-row a3-tap" key={w.id} onClick={()=>onStart(w)}><span className="a3-index">+</span><div><strong>{w.name}</strong><p>{w.scheduledDate} · {w.status}</p></div><Icon name="arrow" size={16}/></button>)}</div></section>}
   {reschedule&&<Modal title="Reschedule session" close={()=>setReschedule(null)}><p className="modal-copy">The original event remains auditable as rescheduled. The replacement becomes a separate scheduled event.</p><label>New date<input type="date" value={date} min={today()} onChange={e=>setDate(e.target.value)}/></label><button className="button primary wide" onClick={commitReschedule}>Confirm new date</button></Modal>}
  </div>
 }
@@ -1487,34 +1693,34 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    onStart(updated);
  };
 
- return <div className="preworkout">
-   <button className="icon-btn" onClick={onBack} aria-label="Back"><Icon name="back"/></button>
+ return <div className="a3-home a3-brief">
+   <button className="a3-iconbtn" onClick={onBack} aria-label="Back"><Icon name="back"/></button>
 
-   <span className="eyebrow">TODAY</span>
+   <span className="a3-eyebrow">TODAY</span>
    <h1>{w.name}</h1>
-   <p className="muted">{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.prescribedSets,0)} planned sets</p>
-  <ApexImage kind={contextImage} alt="Training context for today's planned session." className="preworkout-context-image" caption="SESSION / CONTEXT"/>
+   <p className="a3-muted">{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.prescribedSets,0)} planned sets</p>
+  <ApexImage kind={contextImage} alt="Training context for today's planned session." className="a3-banner" caption="SESSION / CONTEXT"/>
 
-   <section className="brief-card session-plan-card">
-     <div className="section-head">
+   <section className="a3-card a3-stack">
+     <div className="a3-head">
        <div>
-         <span className="eyebrow">TODAY'S SESSION</span>
+         <span className="a3-eyebrow">TODAY'S SESSION</span>
          <h2>{w.name}</h2>
        </div>
      </div>
-     <div className="session-summary">
+     <div className="a3-stats">
        <div><strong>{w.exercises.length}</strong><small>exercises</small></div>
        <div><strong>{w.exercises.reduce((a,e)=>a+e.prescribedSets,0)}</strong><small>planned sets</small></div>
      </div>
-     <div className="session-exercise-list">
+     <div className="a3-list">
        {validEntries.map(({we,index,ex})=>
-         <div className="session-exercise-row" key={`${we.exerciseId}-${index}`}>
-           <span className="day-no">{String(index+1).padStart(2,'0')}</span>
+         <div className="a3-card a3-row" key={`${we.exerciseId}-${index}`}>
+           <span className="a3-index">{String(index+1).padStart(2,'0')}</span>
            <div><strong>{ex.name}</strong><small>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]} reps</small></div>
          </div>
        )}
        {validEntries.length<w.exercises.length&&
-         <div className="callout">
+         <div className="a3-card a3-callout">
            <Icon name="settings"/>
            <div><strong>Some exercise data is unavailable.</strong><p>APEX will preserve the workout entry and prevent missing data from crashing the session.</p></div>
          </div>
@@ -1522,56 +1728,56 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
      </div>
    </section>
 
-   <section className="brief-card equipment-prep-card">
-     <span className="eyebrow">EQUIPMENT FOR TODAY</span>
+   <section className="a3-card a3-stack">
+     <span className="a3-eyebrow">EQUIPMENT FOR TODAY</span>
      <h2>Confirm your training floor.</h2>
      <p>Availability is tracked for each exercise requirement. A decision for one movement never marks unrelated exercises available.</p>
 
      {requirements.length===0
-       ?<div className="callout"><Icon name="check"/><div><strong>No dedicated equipment required.</strong><p>This session can be started without equipment verification.</p></div></div>
-       :<div className="equipment-check-list">
+       ?<div className="a3-card a3-callout"><Icon name="check"/><div><strong>No dedicated equipment required.</strong><p>This session can be started without equipment verification.</p></div></div>
+       :<div className="a3-list">
          {requirements.map(({exerciseId,exerciseName,item,key})=>{
            const status=statusFor(exerciseId,item);
            const affected=affectedExercises(exerciseId);
            const confirmed=status==='confirmed';
            const unavailableNow=status==='unavailable';
            return <div className={`equipment-check-block equipment-confirm-motion ${confirmed?'confirmed':''} ${unavailableNow?'unavailable':''}`} key={key} data-equipment-state={status||'unconfirmed'} data-exercise-id={exerciseId} data-equipment-item={item}>
-             <div className="equipment-check-main">
-               <div>
-                 <span className="eyebrow">{exerciseName}</span>
+             <div className="a3-equip-main">
+               <div className="a3-copy">
+                 <span className="a3-eyebrow">{exerciseName}</span>
                  <strong>{label(item)} · {confirmed?'CONFIRMED FOR TODAY':unavailableNow?'NOT AVAILABLE':'AVAILABILITY'}</strong>
                  <small>Required equipment for {exerciseName}.</small>
                </div>
-               <div className="equipment-check-actions">
-                 {!confirmed&&<button className="button primary" onClick={()=>confirmEquipment(exerciseId,item,'confirmed')}>Confirm available</button>}
-                 {!unavailableNow&&<button className="button ghost" onClick={()=>confirmEquipment(exerciseId,item,'unavailable')}>Not available</button>}
-                 {confirmed&&<button className="mini-btn" onClick={()=>confirmEquipment(exerciseId,item,'unavailable')}>Change</button>}
-                 {unavailableNow&&<button className="mini-btn" onClick={()=>confirmEquipment(exerciseId,item,'confirmed')}>Mark available</button>}
+               <div className="a3-actions">
+                 {!confirmed&&<button className="a3-cta" onClick={()=>confirmEquipment(exerciseId,item,'confirmed')}>Confirm available</button>}
+                 {!unavailableNow&&<button className="a3-cta a3-cta-ghost" onClick={()=>confirmEquipment(exerciseId,item,'unavailable')}>Not available</button>}
+                 {confirmed&&<button className="a3-pill" onClick={()=>confirmEquipment(exerciseId,item,'unavailable')}>Change</button>}
+                 {unavailableNow&&<button className="a3-pill" onClick={()=>confirmEquipment(exerciseId,item,'confirmed')}>Mark available</button>}
                </div>
              </div>
 
              {unavailableNow&&
-               <div className="equipment-unavailable">
+               <div className="a3-warn">
                  <strong>Equipment unavailable — APEX found alternatives.</strong>
                  {affected.map(({we,ex})=>{
                    const options=getAlternatives(ex,3);
-                   return <div className="replacement-group" key={we.exerciseId}>
-                     <div className="replacement-source">
-                       <span className="eyebrow">PLANNED</span>
+                   return <div className="a3-stack" key={we.exerciseId}>
+                     <div className="a3-copy">
+                       <span className="a3-eyebrow">PLANNED</span>
                        <strong>{ex.name}</strong>
                        <small>Unavailable today · your permanent program stays unchanged</small>
                      </div>
 
-                     <div className="replacement-options">
+                     <div className="a3-list">
                        {options.map((candidate,index)=>{
                          const consequence=alternativeConsequence(ex,candidate);
                          return <button
-                           className="replacement-option"
+                           className="a3-card a3-row a3-tap"
                            key={candidate.id}
                            onClick={()=>chooseAlternative(ex.id,candidate)}
                          >
-                           <span className="replacement-rank">{String(index+1).padStart(2,'0')}</span>
-                           <span className="replacement-copy">
+                           <span className="a3-index">{String(index+1).padStart(2,'0')}</span>
+                           <span className="a3-copy">
                              <strong>{candidate.name}</strong>
                              <small>{alternativeReason(ex,candidate)}</small>
                              <em>{consequence}</em>
@@ -1582,7 +1788,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
                      </div>
 
                      {!options.length&&
-                       <div className="callout">
+                       <div className="a3-card a3-callout">
                          <Icon name="settings"/>
                          <div>
                            <strong>No safe alternative is available from today's confirmed setup.</strong>
@@ -1591,7 +1797,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
                        </div>
                      }
 
-                     <button className="mini-btn" onClick={()=>setReplace(ex.id)}>
+                     <button className="a3-pill" onClick={()=>setReplace(ex.id)}>
                        View more alternatives
                      </button>
                    </div>;
@@ -1604,21 +1810,21 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    </section>
 
    {unavailable.length>0&&
-     <section className="brief-card">
-       <span className="eyebrow">SESSION NOT READY</span>
+     <section className="a3-card a3-stack">
+       <span className="a3-eyebrow">SESSION NOT READY</span>
        <strong>Resolve unavailable equipment first.</strong>
        <p>Replace affected exercises or mark the equipment available before starting today's session.</p>
      </section>}
 
    {adaptations.length>0&&
-     <section className="brief-card">
-       <span className="eyebrow">TODAY'S CONTEXT</span>
-       {adaptations.slice(0,3).map((a,i)=><div className="brief-line" key={i}><strong>{a.title}</strong><small>{a.detail}</small></div>)}
+     <section className="a3-card a3-stack">
+       <span className="a3-eyebrow">TODAY'S CONTEXT</span>
+       {adaptations.slice(0,3).map((a,i)=><div className="a3-line" key={i}><strong>{a.title}</strong><small>{displayText(a.detail)}</small></div>)}
      </section>}
 
    {firstEx&&
-     <section className="brief-card">
-       <span className="eyebrow">FIRST MOVEMENT</span>
+     <section className="a3-card a3-stack">
+       <span className="a3-eyebrow">FIRST MOVEMENT</span>
        <strong>{firstEx.name}</strong>
        <p>{firstEx.repRange[0]}–{firstEx.repRange[1]} reps · {firstEx.restSec}s rest · {(() => {
          const rec=recommendationFor(firstEx,s);
@@ -1626,19 +1832,19 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
        })()}</p>
      </section>}
 
-   <section className="brief-card recommendation-card">
-     <span className="eyebrow">LOAD GUIDANCE</span>
+   <section className="a3-card a3-stack">
+     <span className="a3-eyebrow">LOAD GUIDANCE</span>
      {firstEx&&(() => {
        const rec=recommendationFor(firstEx,s);
        return <>
          <strong>{rec.weight!==undefined?`Suggested start · ${formatLoad(firstEx,rec.weight)}`:'Start with a controlled calibration set'}</strong>
-         <small>{rec.reason}</small>
-         <small>{((rec as any).evidence||[]).join(' · ')} · Target RIR {rec.targetRir}</small>
+         <small>{displayText(rec.reason)}</small>
+         <small>{displayText(((rec as any).evidence||[]).join(' · '))} · Target RIR {rec.targetRir}</small>
          {(() => {
            const availability=loadAvailability(firstEx,s.profile);
            return availability.options.length
-             ?<small>Available load options · {availability.options.join(' · ')} kg</small>
-             :<small>Load availability · {availability.reason}</small>;
+             ?<small>Available load options · {availability.options.map(o=>wt(o)).join(' · ')} {weightLabel()}</small>
+             :<small>Load availability · {displayText(availability.reason)}</small>;
          })()}
          <small>{rec.kind==='calibration'?'CONFIDENCE · INITIAL':'CONFIDENCE · '+rec.confidence.toUpperCase()}</small>
        </>;
@@ -1646,36 +1852,36 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
      {!firstEx&&<small>Exercise data is unavailable, so APEX will not invent a load recommendation.</small>}
    </section>
 
-   <section className="brief-card">
-     <span className="eyebrow">OPTIONAL CHECK-IN</span>
+   <section className="a3-card a3-stack">
+     <span className="a3-eyebrow">OPTIONAL CHECK-IN</span>
      <h3>How ready do you feel?</h3>
-     <div className="energy-grid">
+     <div className="a3-energy">
        {[1,2,3,4,5].map(v=><button key={v} className={energy===v?'selected':''} onClick={()=>setEnergy(v)}><b>{v}</b><small>{v===1?'Low':v===2?'Below usual':v===3?'Normal':v===4?'Good':'Very good'}</small></button>)}
      </div>
      <label>Anything APEX should know? <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional context — sleep, schedule, technique, etc."/></label>
    </section>
 
-   <button className="button primary wide" disabled={!readyToStart} onClick={begin}>
+   <button className="a3-cta" disabled={!readyToStart} onClick={begin}>
      {readyToStart?'Session ready · Start training':unavailable.length?'Replace unavailable equipment to continue':'Confirm equipment to continue'}
      <Icon name="chev"/>
    </button>
 
    {replace&&
      <Modal title={`Replace ${replaceTarget?.name||'exercise'}`} close={()=>{setReplace(null);setRq('')}}>
-       <p className="modal-copy">
+       <p className="a3-muted">
          Choose a movement for today. This is a <strong>session-only substitution</strong>:
          the permanent program remains unchanged. APEX records Planned → Performed → Reason
          and only carries the progression baseline forward when the movement is demonstrably comparable.
        </p>
-       <div className="search"><Icon name="search"/><input autoFocus value={rq} onChange={e=>setRq(e.target.value)} placeholder="Search movement or alias…"/></div>
-       <div className="picker-list">
+       <div className="a3-search"><Icon name="search"/><input autoFocus value={rq} onChange={e=>setRq(e.target.value)} placeholder="Search movement or alias…"/></div>
+       <div className="a3-list">
          {replacementResults.map(e=>{
            const fit=equipmentFit(e,s.profile?.equipment);
            const comparable=!!replaceTarget&&
              replaceTarget.pattern===e.pattern&&
              replaceTarget.loadSemantics===e.loadSemantics&&
              e.repRange[1]-e.repRange[0]===replaceTarget.repRange[1]-replaceTarget.repRange[0];
-           return <button className="picker-row" key={e.id} onClick={()=>replaceExercise(replace!,e)}>
+           return <button className="a3-card a3-pick a3-tap" key={e.id} onClick={()=>replaceExercise(replace!,e)}>
              <span>
                <strong>{e.name}</strong>
                <small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in setup'} · {replaceTarget?alternativeReason(replaceTarget,e):'Alternative'} · {e.equipment.join(', ')}</small>
@@ -1692,7 +1898,8 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
 }
 
 function safeExercise(exercises:Exercise[],id:string){return exercises.find(e=>e.id===id);}
-function phase6LoadDisplay(ex:Exercise,set?:SetLog,fallback?:number,profile?:UserProfile):{primary:string;secondary?:string}{
+const phase6LoadDisplay=(...a:Parameters<typeof phase6LoadDisplayRaw>)=>{const r=phase6LoadDisplayRaw(...a);return {primary:displayText(r.primary),secondary:r.secondary===undefined?undefined:displayText(r.secondary)}};
+function phase6LoadDisplayRaw(ex:Exercise,set?:SetLog,fallback?:number,profile?:UserProfile):{primary:string;secondary?:string}{
  if(ex.loadSemantics==='bodyweight')return {primary:'BODYWEIGHT'};
  if(ex.loadSemantics==='none')return {primary:'NO EXTERNAL LOAD'};
  if(ex.loadSemantics==='time'){const seconds=set?.seconds??ex.repRange[0];return {primary:formatTimedDuration(seconds),secondary:`Target ${ex.repRange[0]}–${ex.repRange[1]} sec`};}
@@ -1712,6 +1919,9 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  const [history,setHistory]=useState<Workout[]>([]);
  const [safety,setSafety]=useState(false);
  const [overview,setOverview]=useState(false);
+ const [menuOpen,setMenuOpen]=useState(false);
+ const [logOpen,setLogOpen]=useState(false);
+ const [beforeTab,setBeforeTab]=useState<'details'|'history'|'modes'>('details');
  const [motionKey,setMotionKey]=useState(0);
  const previousExerciseRef=useRef<string|undefined>(undefined);
  const previousSetRef=useRef<string|undefined>(undefined);
@@ -1753,6 +1963,8 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
 
  const guided=normalizeGuided(current);
  const phase=guided.guidedSession?.phase||'prep';
+ useEffect(()=>{if(phase!=='set_active')setLogOpen(false)},[phase]);
+ useEffect(()=>{window.scrollTo(0,0)},[logOpen]);
  const exerciseIndex=guided.guidedSession?.exerciseIndex||0;
  const setIndex=guided.guidedSession?.setIndex||0;
  const activeExercise=guided.exercises[exerciseIndex];
@@ -2198,6 +2410,10 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
    ?safeExercise(s.exercises,nextExercise.exerciseId)
    :undefined;
 
+ const justDoneExercise=phase==='exercise_complete'&&nextExercise
+   ?[...current.exercises.slice(0,nextExerciseIndex)].reverse().find(e=>e.sets.some(x=>x.completed))||activeExercise
+   :activeExercise;
+ const justDoneEx=justDoneExercise?safeExercise(s.exercises,justDoneExercise.exerciseId):activeEx;
  const restProgress=restTargetSec>0
    ?Math.max(0,Math.min(1,restRemaining/restTargetSec))
    :0;
@@ -2206,65 +2422,131 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
    ?Math.max(0,Math.min(1,(assessment.completedSets+assessment.skippedSets)/assessment.plannedSets))
    :0;
 
- return <div className="workout-shell">
-   <div className="workout-top">
-     <button className="icon-btn" onClick={onExit} aria-label="Exit workout">
+const onSetType=(t:SetType)=>mutate(x=>{
+   const c=structuredClone(x);
+   const e=c.exercises.find(
+     z=>z.exerciseId===activeExercise!.exerciseId
+   );
+   const ss=e?.sets.find(z=>z.id===activeSet!.id);
+   if(!e||!ss)return x;
+   Object.assign(ss,updateSetType(ss,t,activeEx!));
+   return c;
+ });
+
+ const onSetAdd=()=>mutate(x=>addWorkoutSet(x,activeExercise!.exerciseId,s.exercises,activeSet!));
+ const onSetRemove=()=>mutate(x=>removeWorkoutSet(x,activeExercise!.exerciseId,activeSet!.id));
+
+ const logEditor=activeSet&&activeEx?<>
+           <SetEditor
+             set={activeSet}
+             ex={activeEx}
+             index={setIndex}
+             targetRir={targetRir}
+             focused
+             loadProfile={s.profile}
+             onChange={p=>mutate(x=>{
+               const c=structuredClone(x);
+               const e=c.exercises.find(
+                 z=>z.exerciseId===activeExercise.exerciseId
+               );
+               const ss=e?.sets.find(z=>z.id===activeSet.id);
+               if(!e||!ss)return x;
+               Object.assign(ss,p);
+               return c;
+             })}
+             onType={onSetType}
+             onComplete={completeGuidedSet}
+             onAdd={onSetAdd}
+             onRemove={onSetRemove}
+             hideOptions={activeEx.loadSemantics!=='time'}
+           />
+
+           {activeEx.loadSemantics==='time'&&<div className="a3-reco">
+             <span className="a3-eyebrow">WORK TIMER</span>
+             <strong aria-live="polite">{workStartedAt?formatTimedDuration(workRemaining):formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}</strong>
+             <small>{timedWorkComplete?'Work interval complete. Complete the set when ready.':'Work interval is separate from your recovery timer.'}</small>
+           </div>}
+
+           {activeEx.loadSemantics==='time'&&<button
+             className="a3-pill"
+             onClick={skipCurrentSet}
+             disabled={!!current.pausedAt}
+           >
+             Skip this set
+           </button>}
+</>:null;
+ const logFullscreen=logOpen&&phase==='set_active'&&!!activeSet&&!!activeEx&&activeEx.loadSemantics!=='time';
+ if(logFullscreen)return <div className="a3-home a3-workout a3-logscreen">
+   <div className="a3-loghead">
+     <button type="button" className="a3-iconbtn" aria-label="Back to set" onClick={()=>setLogOpen(false)}><Icon name="back"/></button>
+     <div><h2>Log Set</h2><small>{niceName(activeEx!.name)} · Set {setIndex+1} / {activeExercise.sets.length}</small></div>
+   </div>
+   {logEditor}
+ </div>;
+ return <div className="a3-home a3-workout">
+   <div className="a3-topline">
+     <button className="a3-iconbtn" onClick={onExit} aria-label="Exit workout">
        <Icon name="back"/>
      </button>
 
-     <div className="workout-top-copy">
-       <span className="eyebrow">
+     <div className="a3-topcopy">
+       <span className="a3-eyebrow">
          {phaseLabel[phase]||'WORKOUT'} · {current.scheduledDate}
        </span>
-       <h1>{current.name}</h1>
+       <h1>{niceName(current.name)}</h1>
      </div>
 
      <button
-       className="mode-button"
+       className="a3-iconbtn"
+       aria-label={overview?'Focus':'Overview'}
+       aria-pressed={overview}
        onClick={()=>setOverview(x=>!x)}
      >
-       {overview?'Focus':'Overview'}
+       <Icon name="layers"/>
      </button>
    </div>
 
-   <div className="workout-toolbar">
+   <div className="a3-toolbar">
      <span>{fmt(elapsed)} elapsed</span>
      <span
-       className="session-progress-inline"
+       className="a3-toolbar-progress"
        style={{'--apex-session-progress':`${sessionProgress*100}%`} as React.CSSProperties}
      >
        <i aria-hidden="true"/>
        {assessment.completedSets}/{assessment.plannedSets} sets
      </span>
+     <button className="a3-pill" aria-expanded={menuOpen} aria-controls="a3-session-menu" onClick={()=>setMenuOpen(x=>!x)}>{menuOpen?'Less':'More'}</button>
+   </div>
+   {menuOpen&&<div className="a3-toolbar a3-menu" id="a3-session-menu">
      <button
-       className="mini-btn"
+       className="a3-pill"
        onClick={()=>mutate(x=>({...x,notes:x.notes||''}))}
      >
        Journal
      </button>
      <button
-       className="mini-btn"
+       className="a3-pill"
        onClick={()=>setSafety(true)}
      >
        Safety
      </button>
      <button
-       className="mini-btn"
+       className="a3-pill"
        aria-label={current.pausedAt?'Resume workout':'Pause workout'}
        onClick={togglePause}
      >
        {current.pausedAt?'Resume':'Pause'}
      </button>
-   </div>
+   </div>}
 
    {current.pausedAt&&
-     <div className="rest-panel paused-session">
+     <div className="a3-card a3-paused">
        <div>
-         <span className="eyebrow">SESSION PAUSED</span>
+         <span className="a3-eyebrow">SESSION PAUSED</span>
          <strong>Take your time</strong>
          <small>Elapsed time and workout state are preserved.</small>
        </div>
-       <div className="rest-actions">
+       <div className="a3-actions">
          <button onClick={togglePause}>Resume</button>
        </div>
      </div>
@@ -2272,14 +2554,14 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
 
    {!overview&&activeExercise&&activeEx&&
      <section
-       className="guided-card focused-training-card exercise-transition"
+       className="a3-card a3-focus exercise-transition"
        key={`${activeExercise.exerciseId}-${exerciseIndex}`}
        data-motion-key={motionKey}
      >
 
-       <div className="focused-exercise-header">
+       <div className="a3-focus-head">
          <div>
-           <span className="eyebrow">
+           <span className="a3-eyebrow">
              EXERCISE {String(exerciseIndex+1).padStart(2,'0')} / {current.exercises.length}
            </span>
            <h2>{activeEx.name}</h2>
@@ -2289,7 +2571,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
          </div>
 
          <button
-           className="mini-btn"
+           className="a3-pill"
            onClick={()=>onExercise(activeEx.id)}
          >
            Details
@@ -2297,8 +2579,8 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        </div>
 
        {phase==='prep'&&
-         <div className="focused-stage">
-           <span className="eyebrow">SESSION PREP</span>
+         <div className="a3-stage">
+           <span className="a3-eyebrow">SESSION PREP</span>
            <h3>Today's training is ready.</h3>
            <p>
              APEX has prepared the session from your local training record.
@@ -2306,7 +2588,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
              movement and one set at a time.
            </p>
            <button
-             className="button primary wide"
+             className="a3-cta"
              onClick={finishPhase}
            >
              Review equipment <Icon name="chev"/>
@@ -2315,15 +2597,15 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='equipment'&&
-         <div className="focused-stage">
-           <span className="eyebrow">EQUIPMENT CHECK</span>
+         <div className="a3-stage">
+           <span className="a3-eyebrow">EQUIPMENT CHECK</span>
            <h3>Confirm today's setup.</h3>
            <p>
              This confirmation is session-specific. APEX will not repeatedly
              ask about the same confirmed category during this workout.
            </p>
 
-           <div className="equipment-check-list">
+           <div className="a3-list">
              {(activeEx.equipment||[]).length
                ?(activeEx.equipment||[]).map(item=>{
                  const status=
@@ -2365,13 +2647,13 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                    <Icon name={status==='confirmed'?'check':'chev'}/>
                  </button>;
                })
-               :<p className="muted">
+               :<p className="a3-muted">
                  No dedicated equipment is required for this movement.
                </p>}
            </div>
 
            <button
-             className="button primary wide"
+             className="a3-cta"
              onClick={finishPhase}
            >
              Continue <Icon name="chev"/>
@@ -2380,24 +2662,29 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='ready'&&
-         <div className="focused-stage">
-           <span className="eyebrow">EXERCISE READY</span>
+         <div className="a3-stage a3-stage-ready">
+           <span className="a3-eyebrow">EXERCISE READY</span>
            <h3>Set your position.</h3>
+           <div className="a3-tabs" role="tablist" aria-label="Before set">
+             {(['details','history','modes'] as const).map(t=><button key={t} role="tab" aria-selected={beforeTab===t} className={beforeTab===t?'active':''} onClick={()=>setBeforeTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}
+           </div>
+           <div className="a3-atmos a3-stagevisual"><ApexImage kind={imageKindForExercise(activeEx)} alt="" className="a3-hero-image"/></div>
+           {beforeTab==='details'&&<>
 
-           <ul className="guided-list">
+           <ul className="a3-bullets">
              {activeEx.setup.slice(0,4).map(x=>
                <li key={x}>{x}</li>
              )}
            </ul>
 
-           <div className="focus-prescription-card">
-             <span className="eyebrow">APEX RECOMMENDS</span>
+           <div className="a3-reco">
+             <span className="a3-eyebrow">APEX RECOMMENDS</span>
              <strong>
                {currentRecommendation?.weight!==undefined
                  ?formatLoad(activeEx,currentRecommendation.weight)
                  :'CONTROLLED CALIBRATION'}
              </strong>
-             <div className="focus-prescription-meta">
+             <div className="a3-chips">
                <span>
                  {activeExercise.repRange[0]}–{activeExercise.repRange[1]} reps
                </span>
@@ -2405,14 +2692,35 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                <span>{fmt(restSeconds)} rest</span>
              </div>
              <small>
-               {currentRecommendation?.reason||
-                 'Use a controlled first set to establish a personal baseline.'}
+               {displayText(currentRecommendation?.reason||
+                 'Use a controlled first set to establish a personal baseline.')}
              </small>
            </div>
 
+           </>}
+           {beforeTab==='history'&&(()=>{
+             const past=s.workouts.filter(w=>w.status==='completed'&&w.id!==current.id).flatMap(w=>w.exercises.filter(e=>e.exerciseId===activeEx.id).map(e=>({w,e}))).slice(-5).reverse();
+             if(!past.length)return <Empty title="No history for this exercise yet" text="Completed sets for this movement will appear here."/>;
+             return <div className="a3-list">{past.map(({w,e})=>{
+               const done=e.sets.filter(x=>x.completed&&x.type!=='warmup');
+               const best=Math.max(0,...done.map(x=>x.weight||x.assistance||0));
+               const reps=Math.max(0,...done.map(x=>x.reps||0));
+               const rirs=done.map(x=>x.rir).filter((x):x is number=>x!==undefined);
+               return <div className="a3-card a3-row" key={w.id}><span className="a3-index">{w.scheduledDate.slice(5)}</span><div><strong>{best?formatLoad(activeEx,best):'Bodyweight / time'}</strong><p>{done.length} working sets · best {reps||'—'} reps{rirs.length?` · RIR ${(rirs.reduce((a,b)=>a+b,0)/rirs.length).toFixed(1)}`:''}</p></div></div>})}</div>
+           })()}
+           {beforeTab==='modes'&&<div className="a3-stack">
+             {activeSet&&<>
+               <span className="a3-eyebrow">SET MODE · NEXT SET</span>
+               <div className="a3-chips">{SET_TYPES.map(t=><button key={t} className={`a3-pill ${activeSet.type===t?'selected':''}`} aria-pressed={activeSet.type===t} onClick={()=>mutate(x=>{const c=structuredClone(x);const e=c.exercises.find(z=>z.exerciseId===activeExercise.exerciseId);const ss=e?.sets.find(z=>z.id===activeSet.id);if(!e||!ss)return x;Object.assign(ss,updateSetType(ss,t,activeEx));return c})}>{t.replace('_',' ')}</button>)}</div>
+             </>}
+             <span className="a3-eyebrow">SUBSTITUTIONS</span>
+             {smartAlternatives(activeEx,s.exercises,s.profile?.equipment).slice(0,3).map(({exercise,fit})=><div className="a3-card a3-row" key={exercise.id}><span className="a3-rowicon"><Icon name="layers"/></span><span><strong>{exercise.name}</strong><small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in current setup'}</small></span></div>)}
+             <button className="a3-cta a3-cta-ghost" onClick={()=>setReplace(activeExercise.exerciseId)}>Replace exercise…</button>
+           </div>}
+
            <button
-             className="button primary wide focus-primary-action"
-             onClick={finishPhase}
+             className="a3-cta"
+             onClick={()=>{setBeforeTab('details');finishPhase()}}
            >
              START SET <Icon name="play"/>
            </button>
@@ -2420,21 +2728,21 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='set_ready'&&activeSet&&
-         <div className="focused-stage">
-           <div className="set-context">
+         <div className="a3-stage">
+           <div className="a3-setline">
              <span
-               className="eyebrow set-counter-motion"
+               className="a3-eyebrow set-counter-motion"
                key={`set-counter-${activeExercise.exerciseId}-${setIndex}`}
                aria-live="polite"
              >
                SET {setIndex+1} / {activeExercise.sets.length}
              </span>
-             <span className="set-progress-label">
+             <span className="a3-muted">
                {completedForExercise} / {activeExercise.sets.length} complete
              </span>
            </div>
 
-           <div className="focus-set-title">
+           <div className="a3-settitle">
              <h3>{activeSet.type.replace('_',' ')} set</h3>
              <p>
                {activeExercise.repRange[0]}–{activeExercise.repRange[1]} REPS
@@ -2443,8 +2751,8 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
              </p>
            </div>
 
-           <div className="focus-recommendation">
-             <span className="eyebrow">APEX RECOMMENDS</span>
+           <div className="a3-reco">
+             <span className="a3-eyebrow">APEX RECOMMENDS</span>
              <strong>{phase6LoadDisplay(activeEx,activeSet,guided.guidedSession?.workingLoads?.[activeEx.id]??currentRecommendation?.weight,s.profile).primary}</strong>
              <small>{phase6LoadDisplay(activeEx,activeSet,guided.guidedSession?.workingLoads?.[activeEx.id]??currentRecommendation?.weight,s.profile).secondary}</small>
              <small>
@@ -2456,7 +2764,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
              </small>
            </div>
 
-           <div className="focus-set-summary">
+           <div className="a3-spec2">
              <div>
                <small>{activeEx.loadSemantics==='time'?'WORK':'REPS'}</small>
                <strong>{activeEx.loadSemantics==='time'?formatTimedDuration(activeSet.seconds??activeEx.repRange[0]):`${activeExercise.repRange[0]}–${activeExercise.repRange[1]}`}</strong>
@@ -2472,7 +2780,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
            </div>
 
            <button
-             className="button primary wide focus-primary-action"
+             className="a3-cta"
              onClick={finishPhase}
              disabled={!!current.pausedAt}
            >
@@ -2482,101 +2790,66 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='set_active'&&activeSet&&
-         <div className="focused-stage active-set-stage">
-           <div className="set-context">
+         <div className="a3-stage">
+           <div className="a3-setline">
              <span
-               className="eyebrow set-counter-motion"
+               className="a3-eyebrow set-counter-motion"
                key={`set-counter-${activeExercise.exerciseId}-${setIndex}`}
                aria-live="polite"
              >
                SET {setIndex+1} / {activeExercise.sets.length}
              </span>
-             <span className="set-progress-label">
+             <span className="a3-muted">
                {completedForExercise} / {activeExercise.sets.length} complete
              </span>
            </div>
 
-           <div className="active-set-hero">
-             <span className="eyebrow">SET ACTIVE</span>
-             <strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong>
-             <small>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).secondary??(activeEx.loadSemantics==='time'?`Work ${formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}`:`Target ${activeExercise.repRange[0]}–${activeExercise.repRange[1]} reps · RIR ${targetRir}`)}</small>
+           <>
+           <div className="a3-bighero a3-ringhero">
+             <svg className="a3-bigring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54"/><circle cx="60" cy="60" r="54" className="a3-ring-fill" strokeDasharray={339.29} strokeDashoffset={339.29*(1-(activeEx.loadSemantics==='time'?0:Math.min(1,(Number(activeSet.reps)||0)/Math.max(1,activeExercise.repRange[1]))))}/></svg>
+             <div className="a3-bigring-copy">
+               {activeEx.loadSemantics==='time'?<>
+                 <span className="a3-eyebrow">SET ACTIVE</span>
+                 <strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong>
+                 <small>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).secondary??`Work ${formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}`}</small>
+               </>:<>
+                 <span className="a3-eyebrow">REPS</span>
+                 <strong className="a3-bigrep"><Num value={activeSet.reps??0}/></strong>
+                 <small>/ {activeExercise.repRange[1]} · target {activeExercise.repRange[0]}–{activeExercise.repRange[1]}</small>
+               </>}
+             </div>
            </div>
-
-           <SetEditor
-             set={activeSet}
-             ex={activeEx}
-             index={setIndex}
-             targetRir={targetRir}
-             focused
-             loadProfile={s.profile}
-             onChange={p=>mutate(x=>{
-               const c=structuredClone(x);
-               const e=c.exercises.find(
-                 z=>z.exerciseId===activeExercise.exerciseId
-               );
-               const ss=e?.sets.find(z=>z.id===activeSet.id);
-               if(!e||!ss)return x;
-               Object.assign(ss,p);
-               return c;
-             })}
-             onType={t=>mutate(x=>{
-               const c=structuredClone(x);
-               const e=c.exercises.find(
-                 z=>z.exerciseId===activeExercise.exerciseId
-               );
-               const ss=e?.sets.find(z=>z.id===activeSet.id);
-               if(!e||!ss)return x;
-               Object.assign(ss,updateSetType(ss,t,activeEx));
-               return c;
-             })}
-             onComplete={completeGuidedSet}
-             onAdd={()=>mutate(x=>
-               addWorkoutSet(
-                 x,
-                 activeExercise.exerciseId,
-                 s.exercises,
-                 activeSet
-               )
-             )}
-             onRemove={()=>mutate(x=>
-               removeWorkoutSet(
-                 x,
-                 activeExercise.exerciseId,
-                 activeSet.id
-               )
-             )}
-           />
-
-           {activeEx.loadSemantics==='time'&&<div className="timed-work-panel">
-             <span className="eyebrow">WORK TIMER</span>
-             <strong aria-live="polite">{workStartedAt?formatTimedDuration(workRemaining):formatTimedDuration(activeSet.seconds??activeEx.repRange[0])}</strong>
-             <small>{timedWorkComplete?'Work interval complete. Complete the set when ready.':'Work interval is separate from your recovery timer.'}</small>
+           {activeEx.loadSemantics!=='time'&&<div className="a3-duo">
+             <div className="a3-card a3-stat"><span className="a3-eyebrow">Weight</span><strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong></div>
+             <div className="a3-card a3-stat"><span className="a3-eyebrow">RIR</span><strong>{targetRir}</strong></div>
            </div>}
 
-           <p className="muted focus-helper">
-             Actual reps, RIR and load are optional corrections.
-             APEX uses them with your feedback to decide the next set.
-           </p>
-
-           <button
-             className="mini-btn"
-             onClick={skipCurrentSet}
-             disabled={!!current.pausedAt}
-           >
-             Skip this set
-           </button>
+           {activeEx.loadSemantics!=='time'&&<div className="a3-roundrow">
+             <button type="button" className="a3-roundbtn" aria-label={current.pausedAt?'Resume workout':'Pause workout'} onClick={togglePause}><Icon name="pause" size={26}/></button>
+             <button type="button" className="a3-roundbtn a3-roundbtn-gold" aria-label="Log set" disabled={!!current.pausedAt} onClick={()=>setLogOpen(true)}><Icon name="check" size={30}/></button>
+           </div>}
+           </>
+           {activeEx.loadSemantics!=='time'&&<details className="a3-more a3-setoptions"><summary>Set options</summary>
+             <div className="a3-actions">
+               <select value={activeSet.type} onChange={e=>onSetType(e.target.value as SetType)} aria-label="Set type">{SET_TYPES.map(x=><option value={x} key={x}>{x.replace('_',' ')}</option>)}</select>
+               <button className="a3-pill" onClick={onSetAdd}>+ Add set</button>
+               <button className="a3-pill" onClick={onSetRemove}>− Remove</button>
+               <button className="a3-pill" onClick={skipCurrentSet} disabled={!!current.pausedAt}>Skip this set</button>
+             </div>
+           </details>}
+           {activeEx.loadSemantics==='time'&&logEditor}
          </div>
        }
 
        {phase==='feedback'&&activeSet&&
          <div
-           className="focused-stage feedback-stage set-completion-reveal"
+           className="a3-stage set-completion-reveal"
            key={`feedback-${activeExercise.exerciseId}-${activeSet.id}`}
          >
-           <span className="eyebrow">SET {setIndex+1} COMPLETE <span className="animated-check" aria-hidden="true">✓</span></span>
+           <span className="a3-eyebrow">SET {setIndex+1} COMPLETE <span className="animated-check" aria-hidden="true">✓</span></span>
            <h3>How did that feel?</h3>
 
-           <div className="completed-performance">
+           <div className="a3-reco">
              <strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong>
              <span>
                {activeSet.reps!==undefined
@@ -2595,7 +2868,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
              It will adjust the next set only when the evidence supports it.
            </p>
 
-           <div className="feedback-actions focused-feedback-actions">
+           <div className="a3-choices">
              <button onClick={()=>applyFeedback('heavy')}>
                <strong>TOO HEAVY</strong>
                <small>Conservative reduction</small>
@@ -2615,23 +2888,17 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='rest'&&
-         <div className="focused-stage rest-stage">
-           <span className="eyebrow">RECOVER</span>
+         <div className="a3-stage">
+           <span className="a3-eyebrow">RECOVER</span>
 
            <div
-             className={`rest-countdown rest-timer-visual ${restRemaining<=0?'rest-complete':''}`}
-             style={{'--apex-rest-progress':`${restProgress*100}%`} as React.CSSProperties}
+             className={`a3-rest ${restRemaining<=0?'is-done':restTargetSec>0&&restRemaining<=restTargetSec*0.25?'is-low':''}`}
              aria-live="polite"
              role="timer"
            >
-             <div className="rest-timer-progress" aria-hidden="true">
-               <i/>
-             </div>
-             <strong>
-               {restRemaining>0
-                 ?fmt(restRemaining)
-                 :'READY'}
-             </strong>
+             <svg className="a3-rest-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54"/><circle cx="60" cy="60" r="54" className="a3-ring-fill" strokeDasharray={339.29} strokeDashoffset={339.29*(1-restProgress)}/></svg>
+             <strong><Num value={restRemaining>0?fmt(restRemaining):'READY'}/></strong>
+             <span className="a3-rest-pct">{Math.round(restProgress*100)}% remaining</span>
            </div>
 
            {(() => {
@@ -2648,7 +2915,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
              return upcomingSet&&activeExercise
                ?<>
                  <strong>NEXT · SET {setIndex+2}</strong>
-                 <div className="next-prescription">
+                 <div className="a3-reco">
                    <b>{phase6LoadDisplay(activeEx,upcomingSet,guided.guidedSession?.workingLoads?.[activeEx.id],s.profile).primary}</b>
                    <span>
                      {activeExercise.repRange[0]}–{activeExercise.repRange[1]} reps
@@ -2658,7 +2925,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                :upcomingExercise
                  ?<>
                    <strong>NEXT UP</strong>
-                   <div className="next-prescription">
+                   <div className="a3-reco">
                      <b>{upcomingExercise.name}</b>
                      <span>{upcomingExercise.loadSemantics==='time'?`${formatTimedDuration(upcomingExercise.repRange[0])} work`:`${upcomingExercise.repRange[0]}–${upcomingExercise.repRange[1]} reps`} · {fmt(upcomingExercise.restSec)} rest</span>
                    </div>
@@ -2672,7 +2939,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                :'Recovery interval complete.'}
            </p>
 
-           <div className="rest-actions focused-rest-actions">
+           <div className="a3-actions">
              {restRemaining>0&&
                <button onClick={skipRest}>
                  SKIP REST
@@ -2705,7 +2972,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
 
              {restRemaining<=0&&
                <button
-                 className="button primary"
+                 className="a3-cta"
                  onClick={continueAfterRest}
                >
                  CONTINUE <Icon name="chev"/>
@@ -2716,20 +2983,16 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='exercise_complete'&&
-         <div className="focused-stage exercise-complete-stage">
-           <span className="eyebrow">
-             {activeEx.name.toUpperCase()}
+         <div className="a3-stage a3-stage-done">
+           <span className="a3-eyebrow">
+             {(justDoneEx||activeEx).name.toUpperCase()}
            </span>
-           <div className="completion-mark animated-completion-mark" aria-hidden="true">✓</div>
-           <h3>COMPLETE</h3>
-           <strong>
-             {completedForExercise} / {activeExercise.sets.length} SETS
-           </strong>
+           <StateView kind="success" title="Exercise complete" detail={`${justDoneExercise?justDoneExercise.sets.filter(x=>x.completed).length:completedForExercise} / ${(justDoneExercise||activeExercise).sets.length} sets`}/>
 
            {nextEx
              ?<>
-               <span className="eyebrow next-up-label">NEXT UP</span>
-               <div className="next-exercise-card">
+               <span className="a3-eyebrow">NEXT UP</span>
+               <div className="a3-reco">
                  <strong>{nextEx.name}</strong>
                  <small>
                    {nextExercise?.repRange[0]}–
@@ -2738,14 +3001,14 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                  </small>
                </div>
                <button
-                 className="button primary wide focus-primary-action"
+                 className="a3-cta"
                  onClick={advanceToNextExercise}
                >
                  CONTINUE <Icon name="chev"/>
                </button>
              </>
              :<button
-               className="button primary wide focus-primary-action"
+               className="a3-cta"
                onClick={()=>setGuided({phase:'complete'})}
              >
                REVIEW SESSION <Icon name="chev"/>
@@ -2755,16 +3018,24 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        }
 
        {phase==='complete'&&
-         <div className="focused-stage">
-           <span className="eyebrow">SESSION COMPLETE</span>
-           <div className="completion-mark animated-completion-mark" aria-hidden="true">✓</div>
+         <div className="a3-stage a3-stage-done">
+           <ApexImage kind="training-floor" alt="" className="a3-hero-image"/><ApexRidge/>
+           <span className="a3-eyebrow">SESSION COMPLETE</span>
+           <div className="a3-donemark animated-completion-mark" aria-hidden="true">✓</div>
            <h3>Every planned movement is accounted for.</h3>
            <p>
              Review your session and let APEX record the evidence for future
              training.
            </p>
+           {assessment.achievements.length>0&&<StateView kind="pr" title="New Personal Record!" detail={displayText(assessment.achievements[0].label)} text={assessment.achievements.length>1?`+${assessment.achievements.length-1} more this session`:assessment.achievements[0].unit}/>}
+           <div className="a3-stats">
+             <ApexStat label="Volume" value={vol(assessment.volume).toLocaleString()} unit={volLabel()}/>
+             <ApexStat label="Elapsed" value={fmt(elapsed)} unit="time"/>
+             <ApexStat label="Sets" value={`${assessment.completedSets}/${assessment.plannedSets}`} unit="done"/>
+             {assessment.achievements.length>0&&<div className="a3-card a3-stat a3-pr"><span className="a3-eyebrow">PRs</span><strong>{assessment.achievements.length}</strong><small>this session</small></div>}
+           </div>
            <button
-             className="button primary wide focus-primary-action"
+             className="a3-cta"
              onClick={()=>onDone(current)}
            >
              FINISH SESSION <Icon name="chev"/>
@@ -2775,26 +3046,26 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
    }
 
    {overview&&
-     <section className="section workout-overview-section">
-       <div className="section-head">
+     <section className="a3-block">
+       <div className="a3-head">
          <div>
-           <span className="eyebrow">OVERVIEW</span>
+           <span className="a3-eyebrow">OVERVIEW</span>
            <h2>Full session.</h2>
            <p>Use this when you need to edit, reorder, replace or inspect the whole workout.</p>
          </div>
        </div>
 
-       <div className="exercise-stack">
+       <div className="a3-list">
          {current.exercises.map((we,i)=>{
            const ex=safeExercise(s.exercises,we.exerciseId);
 
            return <article
-             className={`exercise-card ${we.status==='skipped'?'exercise-skipped':''}`}
+             className={`a3-card a3-stack ${we.status==='skipped'?'a3-skipped':''}`}
              key={`${we.exerciseId}-${i}`}
            >
-             <div className="exercise-title-row">
+             <div className="a3-exhead">
                <button
-                 className="exercise-title"
+                 className="a3-rowbtn"
                  onClick={()=>ex&&onExercise(ex.id)}
                >
                  <span>
@@ -2813,16 +3084,16 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                  <Icon name="chev"/>
                </button>
 
-               <div className="exercise-actions">
+               <div className="a3-actions">
                  <button
-                   className="mini-btn"
+                   className="a3-pill"
                    onClick={()=>setReplace(we.exerciseId)}
                  >
                    Replace
                  </button>
 
                  <button
-                   className="mini-btn"
+                   className="a3-pill"
                    onClick={()=>
                      mutate(x=>
                        reorderWorkoutExercise(
@@ -2838,7 +3109,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                  </button>
 
                  <button
-                   className="mini-btn"
+                   className="a3-pill"
                    onClick={()=>
                      mutate(x=>
                        reorderWorkoutExercise(
@@ -2859,10 +3130,10 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
              </div>
 
              {we.status==='skipped'
-               ?<div className="skipped-message">
+               ?<div className="a3-reco">
                  Skipped — no sets are counted as performed.
                  <button
-                   className="mini-btn"
+                   className="a3-pill"
                    onClick={()=>
                      mutate(x=>
                        markWorkoutExerciseSkipped(
@@ -2981,7 +3252,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                        }
                      />
                      :<div
-                       className="skipped-message"
+                       className="a3-reco"
                        key={set.id}
                      >
                        Exercise data unavailable.
@@ -2989,11 +3260,11 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                      </div>
                  )}
 
-                 <div className="set-skip-row">
+                 <div className="a3-actions">
                    {we.sets.map(set=>
                      !set.completed&&set.disposition!=='skipped'
                        ?<button
-                           className="mini-btn"
+                           className="a3-pill"
                            key={`skip-${set.id}`}
                            onClick={()=>
                              mutate(x=>
@@ -3011,9 +3282,9 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                    )}
                  </div>
 
-                 <div className="set-add">
+                 <div className="a3-actions">
                    <button
-                     className="mini-btn"
+                     className="a3-pill"
                      onClick={()=>
                        mutate(x=>
                          addWorkoutSet(
@@ -3028,7 +3299,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
                    </button>
 
                    <button
-                     className="mini-btn"
+                     className="a3-pill"
                      onClick={()=>
                        mutate(x=>
                          markWorkoutExerciseSkipped(
@@ -3049,7 +3320,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
    }
 
    {phase!=='complete'&&
-     <div className="workout-note">
+     <div className="a3-stack">
        <textarea
          aria-label="Workout notes"
          value={current.notes||''}
@@ -3064,9 +3335,9 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
      </div>
    }
 
-   <div className="workout-footer safe-action-area">
+   <div className="a3-footer">
      <button
-       className="button secondary wide"
+       className="a3-cta a3-cta-ghost"
        onClick={()=>setOverview(x=>!x)}
      >
        {overview?'Return to focused training':'Open workout overview'}
@@ -3074,12 +3345,12 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
    </div>
 
    {adapt.length>0&&
-     <div className="callout">
+     <div className="a3-card a3-callout">
        <Icon name="bolt"/>
        <div>
          <strong>Next-session evidence</strong>
          {adapt.slice(0,2).map((a,i)=>
-           <p key={i}>{a.title}: {a.detail}</p>
+           <p key={i}>{a.title}: {displayText(a.detail)}</p>
          )}
        </div>
      </div>
@@ -3090,13 +3361,13 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
        title="Training safety check"
        close={()=>setSafety(false)}
      >
-       <p className="modal-copy">
+       <p className="a3-muted">
          If something feels unsafe or unexpectedly wrong, APEX does not try
          to diagnose it. Record the context, stop the movement if needed,
          and use your own judgement about whether to continue.
        </p>
 
-       <div className="choice-grid feedback safety-grid">
+       <div className="a3-choices">
          {[
            ['discomfort','Unusual discomfort','Record it and review the movement.'],
            ['sharp','Sharp or worsening pain','Stop this movement and do not push through it.'],
@@ -3144,7 +3415,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
          )}
        </div>
 
-       <div className="callout">
+       <div className="a3-card a3-callout">
          <Icon name="settings"/>
          <div>
            <strong>APEX guardrail</strong>
@@ -3165,13 +3436,13 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
          setRq('');
        }}
      >
-       <p className="modal-copy">
+       <p className="a3-muted">
          History stays attached to the original canonical exercise.
          The replacement starts a fresh baseline unless the engine proves
          comparable semantics.
        </p>
 
-       <div className="search">
+       <div className="a3-search">
          <Icon name="search"/>
          <input
            autoFocus
@@ -3181,7 +3452,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
          />
        </div>
 
-       <div className="picker-list">
+       <div className="a3-list">
          {filtered.map(e=>{
            const fit=equipmentFit(
              e,
@@ -3197,7 +3468,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
 
            return <button
              key={e.id}
-             className="picker-row"
+             className="a3-card a3-pick a3-tap"
              onClick={()=>{
                const reason=oldEx
                  ?`${oldEx.name} replaced during workout`
@@ -3241,7 +3512,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  </div>;
 }
 
-function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,loadProfile}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;loadProfile?:UserProfile}){
+function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,hideOptions=false,loadProfile}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;hideOptions?:boolean;loadProfile?:UserProfile}){
  const timed=set.type==='timed'||ex.loadSemantics==='time';
  const assist=set.type==='assisted'||ex.loadSemantics==='assistance';
  const loadable=
@@ -3280,38 +3551,14 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
  };
 
  if(focused){
-   return <div className={`set-editor focused-set-editor premium-set-editor ${set.completed?'done':''}`}>
-     <div className="set-log-header">
-       <div>
-         <span className="eyebrow">SET {String(index+1).padStart(2,'0')}</span>
-         <strong>{set.completed?'SET SAVED':'READY TO LOG'}</strong>
-       </div>
-       <span className="set-log-status">{set.completed?'COMPLETE':'ACTIVE'}</span>
-     </div>
-
-     <div className="set-log-target">
-       <div>
-         <small>TARGET</small>
-         <strong>{timed ? `${ex.repRange[0]}–${ex.repRange[1]} sec` : `${ex.repRange[0]}–${ex.repRange[1]} reps`}</strong>
-       </div>
-       <div>
-         <small>RIR</small>
-         <strong>{targetRir}</strong>
-       </div>
-       <div>
-         <small>LOAD</small>
-         <strong>{displayLoad}</strong>
-       </div>
-     </div>
-
-     <div className="set-log-grid">
-       <div className="set-log-section-label">ACTUAL PERFORMANCE</div>
-       <div className="focused-set-fields">
+   return <div className={`a3-stack a3-seteditor a3-logform ${set.completed?'done':''}`}>
+     <div className="a3-stack">
+       <div className="a3-fields">
 
        {loadable&&
-         <div className="focused-control">
-           <small>LOAD</small>
-           <div className="stepper">
+         <div className="a3-control">
+           <small>Weight ({weightLabel()})</small>
+           <div className="a3-stepper">
              <button
                type="button"
                onClick={()=>stepValue('weight',-1)}
@@ -3319,7 +3566,16 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              >
                −
              </button>
-             <strong>{displayLoad}</strong>
+             <BumpInput
+             className="a3-input a3-stepper-input"
+             type="number"
+             step={getUnits()==='imperial'?0.5:ex.incrementKg||1}
+             inputMode="decimal"
+             value={wtInput(set.weight)}
+             placeholder={`Actual ${weightLabel()}`}
+             onChange={e=>onChange({weight:e.target.value===''?undefined:Math.round(fromWt(Number(e.target.value))*1000)/1000})}
+             onBlur={e=>{if(e.target.value==='')return;const raw=fromWt(Number(e.target.value));const snapped=snapToAvailableLoad(ex,raw,loadProfile);onChange({weight:snapped??raw,loadDetail:loadDetailForSet(ex,snapped??raw,set.loadDetail)});}}
+           />
              <button
                type="button"
                onClick={()=>stepValue('weight',1)}
@@ -3328,35 +3584,22 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
                +
              </button>
            </div>
-           <input
-             className="direct-input"
-             type="number"
-             step={ex.incrementKg||1}
-             inputMode="decimal"
-             value={set.weight??''}
-             placeholder="Actual kg"
-             onChange={e=>onChange({weight:e.target.value===''?undefined:Number(e.target.value)})}
-             onBlur={e=>{if(e.target.value==='')return;const raw=Number(e.target.value);const snapped=snapToAvailableLoad(ex,raw,loadProfile);onChange({weight:snapped??raw,loadDetail:loadDetailForSet(ex,snapped??raw,set.loadDetail)});}}
-           />
          </div>
        }
 
        {assist&&
-         <div className="focused-control">
+         <div className="a3-control">
            <small>ASSISTANCE</small>
            <input
-             className="large-direct-input"
+             className="a3-input"
              type="number"
-             step={ex.incrementKg||1}
+             step={getUnits()==='imperial'?0.5:ex.incrementKg||1}
              inputMode="decimal"
-             value={set.assistance??''}
-             placeholder="kg"
+             value={wtInput(set.assistance)}
+             placeholder={weightLabel()}
              onChange={e=>
                onChange({
-                 assistance:
-                   e.target.value===''
-                     ?undefined
-                     :Number(e.target.value)
+                 assistance:e.target.value===''?undefined:Math.round(fromWt(Number(e.target.value))*1000)/1000
                })
              }
            />
@@ -3364,10 +3607,10 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
        }
 
        {timed
-         ?<div className="focused-control">
+         ?<div className="a3-control">
            <small>SECONDS</small>
            <input
-             className="large-direct-input"
+             className="a3-input"
              type="number"
              min="1"
              inputMode="numeric"
@@ -3383,9 +3626,9 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              }
            />
          </div>
-         :<div className="focused-control">
-           <small>ACTUAL REPS</small>
-           <div className="stepper">
+         :<div className="a3-control">
+           <small>Reps</small>
+           <div className="a3-stepper">
              <button
                type="button"
                onClick={()=>stepValue('reps',-1)}
@@ -3393,17 +3636,8 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              >
                −
              </button>
-             <strong>{set.reps??'—'}</strong>
-             <button
-               type="button"
-               onClick={()=>stepValue('reps',1)}
-               aria-label="Increase reps"
-             >
-               +
-             </button>
-           </div>
-           <input
-             className="direct-input"
+             <input
+             className="a3-input a3-stepper-input"
              type="number"
              inputMode="numeric"
              value={set.reps??''}
@@ -3417,12 +3651,20 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
                })
              }
            />
+             <button
+               type="button"
+               onClick={()=>stepValue('reps',1)}
+               aria-label="Increase reps"
+             >
+               +
+             </button>
+           </div>
          </div>
        }
 
-       <div className="focused-control">
-         <small>ACTUAL RIR</small>
-         <div className="stepper">
+       <div className="a3-control">
+         <small>RIR</small>
+         <div className="a3-stepper">
            <button
              type="button"
              onClick={()=>stepValue('rir',-1)}
@@ -3430,17 +3672,8 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
            >
              −
            </button>
-           <strong>{set.rir??targetRir}</strong>
-           <button
-             type="button"
-             onClick={()=>stepValue('rir',1)}
-             aria-label="Increase RIR"
-           >
-             +
-           </button>
-         </div>
-         <input
-           className="direct-input"
+           <input
+           className="a3-input a3-stepper-input"
            type="number"
            min="0"
            max="5"
@@ -3461,30 +3694,46 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              })
            }
          />
+           <button
+             type="button"
+             onClick={()=>stepValue('rir',1)}
+             aria-label="Increase RIR"
+           >
+             +
+           </button>
+         </div>
        </div>
      </div>
      </div>
 
-     <div className="set-log-helper">
-       <span>Log what actually happened.</span>
-       <small>Prescription stays separate from your recorded performance.</small>
-     </div>
+     <label className="a3-control a3-notes">
+       <small>Notes (optional)</small>
+       <textarea
+         className="a3-input"
+         rows={2}
+         aria-label="Set notes"
+         value={set.note??''}
+         placeholder="Felt good, tempo, grip…"
+         onChange={e=>onChange({note:e.target.value||undefined})}
+       />
+     </label>
 
-     <div className="focused-set-actions">
+     <div className="a3-actions">
        <button
-         className={`complete-set focused-complete-button premium-complete-button ${set.completed?'completed':''}`}
+         className={`a3-cta a3-complete ${set.completed?'completed':''}`}
          onClick={onComplete}
-         aria-label={set.completed?'Undo set':'Complete set'}
+         aria-label={set.completed?'Undo set':'Save Set'}
        >
          <Icon name="check"/>
          <span>
-           {set.completed?'SET COMPLETE ✓':'COMPLETE SET'}
+           {set.completed?'SET SAVED ✓':'SAVE SET'}
          </span>
        </button>
      </div>
 
-     <div className="set-secondary-actions">
-       <span className="set-secondary-label">SET OPTIONS</span>
+     {!hideOptions&&<details className="a3-more"><summary>More options</summary>
+     <div className="a3-actions">
+       <span className="a3-eyebrow">SET OPTIONS</span>
        <select
          value={set.type}
          onChange={e=>
@@ -3500,24 +3749,25 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
        </select>
 
        <button
-         className="mini-btn"
+         className="a3-pill"
          onClick={onAdd}
        >
          + Add set
        </button>
 
        <button
-         className="mini-btn"
+         className="a3-pill"
          onClick={onRemove}
        >
          − Remove
        </button>
      </div>
+     </details>}
    </div>;
  }
 
- return <div className={`set-editor ${set.completed?'done':''}`}>
-   <div className="set-meta">
+ return <div className={`a3-card a3-stack a3-seteditor ${set.completed?'done':''}`}>
+   <div className="a3-actions">
      <span>{String(index+1).padStart(2,'0')}</span>
      <select
        value={set.type}
@@ -3534,22 +3784,19 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
      </select>
    </div>
 
-   <div className="set-inputs">
+   <div className="a3-fields">
      {loadable&&
        <label>
          LOAD
          <input
            type="number"
-           step={ex.incrementKg}
+           step={getUnits()==='imperial'?0.5:ex.incrementKg}
            inputMode="decimal"
-           value={set.weight??''}
-           placeholder="kg"
+           value={wtInput(set.weight)}
+           placeholder={weightLabel()}
            onChange={e=>
              onChange({
-               weight:
-                 e.target.value===''
-                   ?undefined
-                   :+e.target.value
+               weight:e.target.value===''?undefined:Math.round(fromWt(+e.target.value)*1000)/1000
              })
            }
          />
@@ -3561,15 +3808,12 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
          ASSIST
          <input
            type="number"
-           step={ex.incrementKg}
-           value={set.assistance??''}
-           placeholder="kg"
+           step={getUnits()==='imperial'?0.5:ex.incrementKg}
+           value={wtInput(set.assistance)}
+           placeholder={weightLabel()}
            onChange={e=>
              onChange({
-               assistance:
-                 e.target.value===''
-                   ?undefined
-                   :+e.target.value
+               assistance:e.target.value===''?undefined:Math.round(fromWt(+e.target.value)*1000)/1000
              })
            }
          />
@@ -3629,9 +3873,9 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
      </label>
    </div>
 
-   <div className="set-actions">
+   <div className="a3-actions">
      <button
-       className="complete-set"
+       className="a3-cta"
        onClick={onComplete}
        aria-label={set.completed?'Undo set':'Complete set'}
      >
@@ -3639,14 +3883,14 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
      </button>
 
      <button
-       className="mini-btn"
+       className="a3-pill"
        onClick={onAdd}
      >
        +
      </button>
 
      <button
-       className="mini-btn"
+       className="a3-pill"
        onClick={onRemove}
      >
        −
@@ -3655,22 +3899,37 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
  </div>;
 }
 function SessionReview({s,id,onNav,update}:{s:AppState;id:string;onNav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
- const w=s.workouts.find(x=>x.id===id); const [feel,setFeel]=useState<'easy'|'right'|'hard'|'rough'|''>('');
+ const w=s.workouts.find(x=>x.id===id); const [feel,setFeel]=useState<'easy'|'right'|'hard'|'rough'|''>(''); const [showDetails,setShowDetails]=useState(false);
  if(!w)return <Empty title="Session not found" text="The historical record is still local, but this view no longer has the session reference."/>
  const a=sessionAssessment(w,s.exercises,s.workouts.filter(x=>x.status==='completed'&&x.id!==w.id));
  const saveFeel=()=>{if(!feel)return;const text=`Session feel: ${feel}.`;const already=s.journal.some(j=>j.scope==='workout'&&j.refId===w.id&&j.text===text);if(!already) {const next={id:uid('journal'),date:today(),scope:'workout' as const,refId:w.id,text,tags:['session-feedback']};update(x=>({...x,journal:[...x.journal,next],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'session_feedback',timestamp:new Date().toISOString(),payload:{workoutId:w.id,feel}}]}));}onNav('home')};
- return <><PageTitle eyebrow="SESSION COMPLETE" title={w.name} sub={`${a.completedSets} completed sets · ${Math.round(a.volume).toLocaleString()} kg·reps · ${a.skipped} skipped`}/>
- <div className="session-review-metrics metric-strip"><Metric label="Completion" value={`${Math.round(a.completion*100)}%`} sub={`${a.completedSets}/${a.plannedSets} sets`}/><Metric label="Volume" value={a.volume?Math.round(a.volume).toLocaleString():'—'} sub="kg·reps"/><Metric label="Achievements" value={String(a.achievements.length)} sub="this session"/></div>
- <section className="section session-feedback-panel"><div className="section-head"><div><span className="eyebrow">SESSION FEEDBACK</span><h2>How did the session feel?</h2><p>One lightweight signal helps APEX interpret performance without pretending to measure physiology.</p></div></div><div className="choice-grid feedback">{[['easy','Too easy'],['right','About right'],['hard','Hard but productive'],['rough','Rough / unusually difficult']].map(([id,label])=><button className={feel===id?'selected':''} key={id} onClick={()=>setFeel(id as any)}><strong>{label}</strong><small>{feel===id?'Selected':'Optional'}</small></button>)}</div></section>
- <section className="section"><div className="list-card">{a.achievements.map((x,i)=><ListRow key={i} title={x.label} sub={x.unit} icon="bolt" click={()=>{}}/>)}{!a.achievements.length&&<Empty title="No new achievement" text="A normal session is still useful evidence."/>}</div></section>
- <section className="section"><div className="callout"><Icon name="bolt"/><div><strong>Next step</strong><p>Keep the current structure unless new evidence supports a meaningful change. APEX adapts future prescription from actual performance, context and your feedback.</p></div></div></section>
- <button className="button primary wide" disabled={!feel} onClick={saveFeel}>{feel?'Save feedback & return home':'Select how it felt'}</button></>}
+ const minutes=w.startedAt&&w.completedAt?Math.max(1,Math.round((new Date(w.completedAt).getTime()-new Date(w.startedAt).getTime())/60000)):undefined;
+ return <div className="a3-home a3-complete-screen"><header className="a3-completehead"><span className="a3-state-icon" aria-hidden="true"><Icon name="check" size={36}/></span><span className="a3-eyebrow">SESSION COMPLETE</span><h1>Workout Complete</h1><p>{niceName(w.name)} · {a.completedSets} completed sets · {a.skipped} skipped</p></header>
+ <div className="a3-stats session-review-metrics"><Metric label="Volume" value={a.volume?vol(a.volume).toLocaleString():'—'} sub={volLabel()}/><Metric label="Time" value={minutes===undefined?'—':String(minutes)} sub="min"/><Metric label="Sets" value={String(a.completedSets)} sub={`of ${a.plannedSets}`}/></div>
+ {a.achievements.length>0&&<div className="a3-card a3-row a3-pr-row"><span className="a3-rowicon"><Icon name="crown"/></span><span><strong>{a.achievements.length} PR{a.achievements.length===1?'':'s'}</strong><small>Great work today!</small></span></div>}
+ <section className="a3-block"><div className="a3-head"><div><span className="a3-eyebrow">SESSION FEEDBACK</span><h2>How did the session feel?</h2><p>One lightweight signal helps APEX interpret performance without pretending to measure physiology.</p></div></div><div className="a3-choices">{[['easy','Too easy'],['right','About right'],['hard','Hard but productive'],['rough','Rough / unusually difficult']].map(([id,label])=><button className={feel===id?'selected':''} key={id} onClick={()=>setFeel(id as any)}><strong>{label}</strong><small>{feel===id?'Selected':'Optional'}</small></button>)}</div></section>
+ {showDetails&&<section className="a3-block"><div className="a3-list">{a.achievements.map((x,i)=><ListRow key={i} title={displayText(x.label)} sub={displayText(x.unit)} icon="bolt" click={()=>{}}/>)}{!a.achievements.length&&<Empty title="No new achievement" text="A normal session is still useful evidence."/>}</div></section>}
+ <section className="a3-block"><div className="a3-card a3-callout"><Icon name="bolt"/><div><strong>Coach</strong><p>Keep the current structure unless new evidence supports a meaningful change. APEX adapts future prescription from actual performance, context and your feedback.</p></div></div></section>
+ <button className="a3-cta a3-cta-ghost" aria-expanded={showDetails} onClick={()=>setShowDetails(x=>!x)}>{showDetails?'Hide Details':'View Details'}</button>
+ <button className="a3-cta" disabled={!feel} onClick={saveFeel}>{feel?'Save feedback & return home':'Select how it felt'}</button></div>}
 function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const done=s.workouts.filter(w=>w.status==='completed').sort((a,b)=>(a.completedAt||a.scheduledDate).localeCompare(b.completedAt||b.scheduledDate));
+ const [tab,setTab]=useState<'overview'|'strength'|'body'|'prs'>('overview');
+ const [bodyRange,setBodyRange]=useState<'7D'|'30D'|'3M'|'1Y'>('30D');
  const [exerciseId,setExerciseId]=useState<string>('');
+ const [exRange,setExRange]=useState<'1M'|'3M'|'6M'|'1Y'|'All'>('3M');
  const exerciseOptions=useMemo(()=>{const ids=new Set(done.flatMap(w=>w.exercises.map(e=>e.exerciseId)));return s.exercises.filter(e=>ids.has(e.id));},[done,s.exercises]);
  const selected=exerciseOptions.find(e=>e.id===exerciseId)||exerciseOptions[0];
- const history=selected?done.flatMap(w=>w.exercises.filter(e=>e.exerciseId===selected.id).map(e=>({w,e}))).slice(-8):[];
+ const historyAll=selected?done.flatMap(w=>w.exercises.filter(e=>e.exerciseId===selected.id).map(e=>({w,e}))):[];
+ const rangeDays=exRange==='1M'?30:exRange==='3M'?90:exRange==='6M'?180:exRange==='1Y'?365:Infinity;
+ const rangeCut=Number.isFinite(rangeDays)?new Date(Date.now()-rangeDays*86400000).toISOString().slice(0,10):'';
+ const historyRange=historyAll.filter(({w})=>w.scheduledDate>=rangeCut);
+ const history=historyRange.slice(-8);
+ const bestOf=(e:{sets:SetLog[]})=>Math.max(0,...e.sets.filter(x=>x.completed&&x.type!=='warmup').map(x=>x.weight||x.assistance||0));
+ const evidenceSeries=historyRange.map(({e})=>bestOf(e)).filter(v=>v>0);
+ const evidenceChange=evidenceSeries.length>1?Math.round((evidenceSeries[evidenceSeries.length-1]-evidenceSeries[0])/evidenceSeries[0]*1000)/10:undefined;
+ const evidenceBest=evidenceSeries.length?Math.max(...evidenceSeries):0;
+ const bestReps=historyRange.flatMap(({e})=>e.sets.filter(x=>x.completed&&x.type!=='warmup'&&(x.weight||x.assistance||0)===evidenceBest)).reduce((m,x)=>Math.max(m,x.reps||0),0);
  const total=done.reduce((a,w)=>a+volumeForWorkout(w,s.exercises),0);
  const muscle=useMemo(()=>{const m:Record<string,number>={};done.slice(-8).forEach(w=>w.exercises.forEach(we=>{const e=s.exercises.find(x=>x.id===we.exerciseId);e?.primaryMuscles.forEach(x=>m[x]=(m[x]||0)+we.sets.filter(z=>z.completed&&z.type!=='warmup').length)}));return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10)},[done,s.exercises]);
  const top=s.achievements.slice(-5).reverse();
@@ -3685,75 +3944,87 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const latestBodyEntry=bodyEntries[bodyEntries.length-1];
  const previousBodyEntry=bodyEntries.length>1?bodyEntries[bodyEntries.length-2]:undefined;
  const bodyWeightChange=latestBodyEntry&&previousBodyEntry?latestBodyEntry.weightKg!-previousBodyEntry.weightKg!:undefined;
- return <div className="apex-system-screen apex-progress-v4">
-   <section className="apex-page-hero">
-    <div><span className="eyebrow">PROGRESS / EVIDENCE</span><h1>What is changing?</h1><p>Your training record, translated into signals you can actually inspect. Facts stay separate from interpretation.</p></div>
-    <div className="apex-hero-stamp"><span>RECORD</span><strong>{done.length}</strong><small>completed sessions</small></div>
-   </section>
+ const bodyDays=bodyRange==='7D'?7:bodyRange==='30D'?30:bodyRange==='3M'?90:365;
+ const bodyCut=new Date(Date.now()-bodyDays*86400000).toISOString().slice(0,10);
+ const bodyRangeEntries=bodyEntries.filter(x=>x.date>=bodyCut);
+ const bodySeries=bodyRangeEntries.map(x=>wt(x.weightKg as number));
+ const shortDate=(d:string)=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+ return <div className="a3-home a3-progress">
+   <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">Progress · {done.length} sessions</span><h1>Progress</h1></header>
+   <SegBar label="Progress sections" value={tab} onChange={setTab} items={[['overview','Overview'],['strength','Strength'],['body','Body'],['prs','PRs']]}/>
+   {(tab==='overview'||tab==='body')&&<>
+   <div className="a3-card a3-stack a3-bodycard apex-body-shortcut">
+    <div className="a3-bodyhead"><div><span className="a3-eyebrow">Body weight</span><strong className="a3-bodyvalue">{latestBodyEntry?<>{wt(latestBodyEntry.weightKg as number)}<small>{weightLabel()}</small></>:'Start a recorded-weight history'}</strong></div>{bodyWeightChange!==undefined&&<span className="a3-delta">{bodyWeightChange>=0?'↑':'↓'} {Math.abs(wt(bodyWeightChange)).toFixed(1)} {weightLabel()}<small>since previous</small></span>}</div>
+    {bodySeries.length>1&&<ApexSpark values={bodySeries} label="Body weight trend" xLabels={[shortDate(bodyRangeEntries[0].date),shortDate(bodyRangeEntries[bodyRangeEntries.length-1].date)]}/>}
+    <div className="a3-choices a3-ranges" role="group" aria-label="Body weight range">{(['7D','30D','3M','1Y'] as const).map(p=><button key={p} aria-pressed={bodyRange===p} className={bodyRange===p?'selected':''} onClick={()=>setBodyRange(p)}>{p}</button>)}</div>
+    <button className="a3-link" onClick={()=>onNav('measurements')}>Open Body / Weight <Icon name="arrow" size={14}/></button>
+   </div>
+   </>}
 
-   <section className="apex-stat-board">
-    <article><span>SESSIONS</span><strong>{done.length}</strong><small>completed</small></article>
-    <article><span>VOLUME</span><strong>{total?Math.round(total).toLocaleString():'—'}</strong><small>kg·reps</small></article>
-    <article><span>ACHIEVEMENTS</span><strong>{s.achievements.length}</strong><small>recorded</small></article>
-   </section>
+   {tab==='overview'&&<>
+   <div className="a3-stats">
+    <ApexStat label="Sessions" value={String(done.length)} unit="done"/>
+    <ApexStat label="Volume" value={total?vol(total).toLocaleString():'—'} unit={volLabel()}/>
+    <ApexStat label="Awards" value={String(s.achievements.length)} unit="PRs"/>
+   </div>
 
-    <section className="apex-body-shortcut">
-     <div><span className="eyebrow">BODY / WEIGHT</span><strong>{latestBodyEntry?`${latestBodyEntry.weightKg} kg`:'Start a recorded-weight history'}</strong><small>{bodyWeightChange===undefined?'Dated measurements · no estimated values':`${bodyWeightChange>=0?'+':''}${bodyWeightChange.toFixed(1)} kg since previous weigh-in`}</small></div>
-     <button className="mini-btn" onClick={()=>onNav('measurements')}>Open Body / Weight <Icon name="arrow" size={14}/></button>
-    </section>
-
-   <section className="apex-panel-section">
-    <div className="apex-section-heading"><div><span className="eyebrow">01 / CONSISTENCY</span><h2>Show up, then look at the trend.</h2></div><span className="apex-heading-note">LAST 30 DAYS</span></div>
-    <div className="apex-signal-grid">
-      <article><span>ADHERENCE</span><strong>{consistency.rate}%</strong><small>{consistency.completed}/{consistency.planned||'—'} scheduled</small><div className="apex-mini-track"><i style={{width:`${Math.min(100,Math.max(0,consistency.rate))}%`}}/></div></article>
-      <article><span>STREAK</span><strong>{consistency.streak}</strong><small>recent sessions</small></article>
-      <article><span>RECENT VOLUME</span><strong>{loadSummary.recentAverageVolume?Math.round(loadSummary.recentAverageVolume).toLocaleString():'—'}</strong><small>4-session average kg·reps</small></article>
+   <section className="a3-block">
+    <div className="a3-head"><h2>Consistency</h2><span className="a3-eyebrow">Last 30 days</span></div>
+    <div className="a3-rings">
+     <ApexRing value={Math.min(100,Math.max(0,consistency.rate))} label="Adherence" sub={`${consistency.completed}/${consistency.planned||'—'} scheduled`}/>
+     <div className="a3-stats a3-stats-2"><ApexStat label="Streak" value={String(consistency.streak)} unit="sessions"/><ApexStat label="Avg volume" value={loadSummary.recentAverageVolume?vol(loadSummary.recentAverageVolume).toLocaleString():'—'} unit="4-session"/></div>
     </div>
    </section>
 
-   <section className="apex-panel-section">
-    <div className="apex-section-heading"><div><span className="eyebrow">02 / WORKLOAD</span><h2>Recent training rhythm.</h2></div><span className="apex-heading-note">LAST {trend.length||0} SESSIONS</span></div>
-    <div className="apex-trend-panel">
-      {trend.length>0?trend.map((x,i)=><div className="apex-trend-bar" key={`${x.date}-${i}`}><div className="apex-trend-value">{x.volume?Math.round(x.volume).toLocaleString():'—'}</div><i><b style={{height:`${Math.max(8,Math.round((x.volume/maxTrend)*100))}%`}}/></i><span>{x.date.slice(5)}</span></div>):<Empty title="Not enough history yet" text="Complete more sessions and APEX will build the workload record."/>}
+   <section className="a3-block">
+    <div className="a3-head"><h2>Workload</h2><span className="a3-eyebrow">Last {trend.length||0} sessions</span></div>
+    <div className="a3-card">
+     {trend.length>0
+      ?<div className="a3-bars">{trend.map((x,i)=><div className="a3-bar-col" key={`${x.date}-${i}`}><small>{x.volume?vol(x.volume).toLocaleString():'—'}</small><i><b style={{height:`${Math.max(8,Math.round((x.volume/maxTrend)*100))}%`}}/></i><span>{x.date.slice(5)}</span></div>)}</div>
+      :<Empty title="Not enough history yet" text="Complete more sessions and APEX will build the workload record."/>}
     </div>
-    <div className="apex-two-readouts"><div><span>30-DAY WORKING SETS</span><strong>{loadSummary.workingSets30}</strong></div><div><span>30-DAY SESSIONS</span><strong>{loadSummary.consistency30}</strong></div><div><span>PR / ACHIEVEMENTS</span><strong>{s.achievements.length}</strong></div></div>
+    <div className="a3-stats"><ApexStat label="Working sets" value={String(loadSummary.workingSets30)} unit="30d"/><ApexStat label="Sessions" value={String(loadSummary.consistency30)} unit="30d"/><ApexStat label="Awards" value={String(s.achievements.length)} unit="PRs"/></div>
    </section>
 
-   <section className="apex-panel-section">
-    <div className="apex-section-heading"><div><span className="eyebrow">03 / INTERPRETATION</span><h2>Evidence before conclusions.</h2></div><span className="apex-heading-note">CONTEXT ONLY</span></div>
-    <div className="apex-interpret-grid">
-      <article><span>MOMENTUM</span><strong>{momentum.direction==='insufficient'?'—':momentum.direction==='up'?'↑':momentum.direction==='down'?'↓':'→'}</strong><small>{momentum.direction==='insufficient'?'More data needed':`${momentum.changePct>=0?'+':''}${momentum.changePct}% volume`}</small></article>
-      <article><span>HIGHEST EXPOSURE</span><strong>{balance.highest?balance.highest[1]:'—'}</strong><small>{balance.highest?balance.highest[0]:'working sets'}</small></article>
-      <article><span>EXPOSURE SPREAD</span><strong>{balance.spread||'—'}</strong><small>sets between highest / lowest</small></article>
+   <section className="a3-block">
+    <div className="a3-head"><h2>Interpretation</h2><span className="a3-eyebrow">Context only</span></div>
+    <div className="a3-stats">
+     <ApexStat label="Momentum" value={momentum.direction==='insufficient'?'—':momentum.direction==='up'?'↑':momentum.direction==='down'?'↓':'→'} unit={momentum.direction==='insufficient'?'more data':`${momentum.changePct>=0?'+':''}${momentum.changePct}%`}/>
+     <ApexStat label="Top exposure" value={balance.highest?String(balance.highest[1]):'—'} unit={balance.highest?String(balance.highest[0]):'sets'}/>
+     <ApexStat label="Spread" value={String(balance.spread||'—')} unit="sets"/>
     </div>
-    <div className="apex-evidence-note"><Icon name="shield" size={16}/><p>{momentum.detail}{balance.highest&&balance.lowest?` Highest recent primary-muscle exposure: ${balance.highest[0]} (${balance.highest[1]} sets); lowest: ${balance.lowest[0]} (${balance.lowest[1]}).`:''}</p></div>
+    <div className="a3-card a3-callout"><Icon name="shield" size={16}/><div><p>{momentum.detail}{balance.highest&&balance.lowest?` Highest recent primary-muscle exposure: ${balance.highest[0]} (${balance.highest[1]} sets); lowest: ${balance.lowest[0]} (${balance.lowest[1]}).`:''}</p></div></div>
    </section>
 
-   {activeGoals.length>0&&<section className="apex-panel-section">
-    <div className="apex-section-heading"><div><span className="eyebrow">04 / GOALS</span><h2>Progress toward what you chose.</h2></div><button className="mini-btn" onClick={()=>onNav('goals')}>Open goals <Icon name="arrow" size={14}/></button></div>
-    <div className="apex-goal-grid">{activeGoals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <article className="apex-goal-v4" key={g.id}><div className="apex-goal-percent">{gp.percent===null?'—':`${gp.percent}%`}</div><div><span className="eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="apex-mini-track"><i style={{width:`${gp.percent}%`}}/></div>}{ms.length>0&&<div className="apex-milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}</div></article>})}</div>
+   {activeGoals.length>0&&<section className="a3-block">
+    <div className="a3-head"><h2>Goals</h2><button className="a3-link" onClick={()=>onNav('goals')}>Open goals <Icon name="arrow" size={14}/></button></div>
+    <div className="a3-rings">{activeGoals.map(g=>{const gp=goalProgress(s,g);return <ApexRing key={g.id} value={gp.percent} label={g.title} sub={g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet'} onClick={()=>onNav('goals')}/>})}</div>
    </section>}
 
-   <section className="apex-panel-section">
-    <div className="apex-section-heading"><div><span className="eyebrow">05 / EXERCISE EVIDENCE</span><h2>Performance, not vanity metrics.</h2></div></div>
+   </>}
+
+   {tab==='strength'&&<>
+   <section className="a3-block">
+    <div className="a3-head"><div><span className="a3-eyebrow">Strength Progress</span><h2 className="a3-bigtitle">{selected?.name||'Exercise evidence'}</h2></div></div>
     {selected ? (
-      <div className="apex-exercise-evidence">
-        <label>EXERCISE
+      <div className="a3-stack">
+        <label className="a3-select"><span className="a3-eyebrow">Exercise</span>
           <select value={selected.id} onChange={e=>setExerciseId(e.target.value)}>
             {exerciseOptions.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}
           </select>
         </label>
-        <div className="apex-performance-list">
+        <div className="a3-choices a3-ranges" role="group" aria-label="Exercise range">{(['1M','3M','6M','1Y','All'] as const).map(p=><button key={p} aria-pressed={exRange===p} className={exRange===p?'selected':''} onClick={()=>setExRange(p)}>{p}</button>)}</div>
+        <div className="a3-card a3-analytics"><div className="a3-analytics-metric"><strong>{evidenceChange===undefined?'—':`${evidenceChange>=0?'+':''}${evidenceChange}%`}</strong><small>Strength change · {exRange==='All'?'all time':`last ${exRange}`}</small></div><ApexSpark values={evidenceSeries} label={`${selected.name} best load per session`} xLabels={historyRange.length>1?[shortDate(historyRange[0].w.scheduledDate),shortDate(historyRange[historyRange.length-1].w.scheduledDate)]:undefined}/><div className="a3-stats a3-stats-2"><ApexStat label="Best set" value={evidenceBest?formatLoad(selected,evidenceBest):'—'} unit={bestReps?`${bestReps} reps`:''}/><ApexStat label="Sessions" value={String(historyRange.length)} unit="logged"/></div></div>
+        <div className="a3-list">
           {history.map(({w,e},i)=>{
             const doneSets=e.sets.filter(x=>x.completed&&x.type!=='warmup');
             const best=Math.max(0,...doneSets.map(x=>x.weight||x.assistance||0));
             const reps=Math.max(0,...doneSets.map(x=>x.reps||0));
             const rirValues=doneSets.map(x=>x.rir).filter((x):x is number=>x!==undefined);
             const avgRir=rirValues.length?(rirValues.reduce((a,b)=>a+b,0)/rirValues.length).toFixed(1):null;
-            return <div className="apex-performance-row" key={w.id}>
-              <span>{String(i+1).padStart(2,'0')}</span>
-              <div><strong>{best?formatLoad(selected,best):'Bodyweight / time'}</strong><small>{w.scheduledDate} · {doneSets.length} working sets · best {reps||'—'} reps{avgRir?` · RIR ${avgRir}`:''}</small></div>
-              <Icon name="arrow" size={14}/>
+            return <div className="a3-card a3-row" key={w.id}>
+              <span className="a3-index">{String(i+1).padStart(2,'0')}</span>
+              <div><strong>{best?formatLoad(selected,best):'Bodyweight / time'}</strong><p>{w.scheduledDate} · {doneSets.length} working sets · best {reps||'—'} reps{avgRir?` · RIR ${avgRir}`:''}</p></div>
             </div>;
           })}
           {!history.length&&<Empty title="Complete this exercise first" text="Comparable performance evidence will appear here."/>}
@@ -3762,48 +4033,83 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
     ) : <Empty title="Complete an exercise first" text="Exercise-level trends appear after APEX has comparable performance evidence."/>}
    </section>
 
-   <section className="apex-panel-section">
-    <div className="apex-section-heading"><div><span className="eyebrow">06 / MUSCLE EXPOSURE</span><h2>Where the work is landing.</h2></div><span className="apex-heading-note">RECENT WORKING SETS</span></div>
-    <div className="apex-muscle-list">{muscle.map(([m,v])=><div className="apex-muscle-row" key={m}><span>{m}</span><div><i><b style={{width:`${Math.min(100,v*8)}%`}}/></i></div><strong>{v}</strong></div>)}{!muscle.length&&<Empty title="No performance data yet" text="Complete a workout and APEX will build the evidence layer."/>}</div>
+   <section className="a3-block">
+    <div className="a3-head"><h2>Muscle exposure</h2><span className="a3-eyebrow">Recent working sets</span></div>
+    <div className="a3-card a3-stack">{muscle.map(([m,v])=><div className="a3-meter-row" key={m}><span>{m}</span><ApexMeter value={Math.min(100,v*8)}/><strong>{v}</strong></div>)}{!muscle.length&&<Empty title="No performance data yet" text="Complete a workout and APEX will build the evidence layer."/>}</div>
    </section>
 
-   <section className="apex-panel-section apex-last-panel">
-    <div className="apex-section-heading"><div><span className="eyebrow">07 / RECORD</span><h2>Recent achievements.</h2></div><button className="mini-btn" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button></div>
-    <div className="apex-achievement-list">{top.map((a,i)=><div key={i}><span>{String(i+1).padStart(2,'0')}</span><div><strong>{a.label}</strong><small>{a.timestamp.slice(0,10)} · {a.unit}</small></div><Icon name="bolt" size={14}/></div>)}{!top.length&&<Empty title="Achievements will appear here" text="PRs are contextual to exercise and set type."/>}</div>
-   </section>
+   </>}
+
+   {tab==='prs'&&<section className="a3-block">
+    <div className="a3-head"><h2>Achievements</h2><button className="a3-link" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button></div>
+    <div className="a3-list">{top.map((a,i)=><div className="a3-card a3-row" key={i}><span className="a3-index">{String(i+1).padStart(2,'0')}</span><div><strong>{displayText(a.label)}</strong><p>{a.timestamp.slice(0,10)} · {a.unit}</p></div></div>)}{!top.length&&<Empty title="Achievements will appear here" text="PRs are contextual to exercise and set type."/>}</div>
+   </section>}
  </div>
 }
 
-function History({s,onNav}:{s:AppState;onNav:(r:string)=>void}){const [q,setQ]=useState(''),[status,setStatus]=useState('all');const rows=s.workouts.filter(w=>w.status!=='planned'&&(status==='all'||w.status===status)&&(`${w.name} ${w.scheduledDate} ${w.source}`).toLowerCase().includes(q.toLowerCase())).slice().reverse();return <><PageTitle eyebrow="HISTORY" title="Your training timeline." sub="Performed, skipped, missed, rescheduled and extra work remain distinguishable."/><div className="search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search workout, date…"/></div><div className="chip-row">{['all','completed','skipped','missed','rescheduled','extra'].map(x=><button className={`chip ${status===x?'selected-chip':''}`} key={x} onClick={()=>setStatus(x)}>{x}</button>)}</div><div className="history-list">{rows.map(w=><button className="history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="eyebrow">{w.scheduledDate} · {w.status} · {w.source}</span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {Math.round(volumeForWorkout(w,s.exercises)).toLocaleString()} kg·reps</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Nothing to show" text="Your timeline will populate as training happens."/>}</div></>}
+function History({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
+ const [q,setQ]=useState(''),[status,setStatus]=useState('all'),[monthOffset,setMonthOffset]=useState(0);
+ const rows=s.workouts.filter(w=>w.status!=='planned'&&(status==='all'||w.status===status)&&(`${w.name} ${w.scheduledDate} ${w.source}`).toLowerCase().includes(q.toLowerCase())).slice().reverse();
+ const base=new Date();
+ const first=new Date(base.getFullYear(),base.getMonth()+monthOffset,1);
+ const monthLabel=first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+ const startPad=(first.getDay()+6)%7;
+ const daysInMonth=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
+ const isoDay=(d:number)=>`${first.getFullYear()}-${String(first.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+ const marks=new Map<string,'done'|'partial'|'missed'|'planned'>();
+ s.workouts.forEach(w=>{
+  const sets=w.exercises.flatMap(e=>e.sets);
+  const doneSets=sets.filter(x=>x.completed).length;
+  const expected=sets.filter(x=>x.disposition!=='skipped').length;
+  const mark:'done'|'partial'|'missed'|'planned'=w.status==='completed'?(doneSets>=expected?'done':'partial'):(w.status==='skipped'||w.status==='missed')?'missed':'planned';
+  const prev=marks.get(w.scheduledDate);
+  if(!prev||mark==='done'||(mark==='partial'&&prev!=='done'))marks.set(w.scheduledDate,mark);
+ });
+ const todayIso=today();
+ const monthDone=Array.from({length:daysInMonth},(_,i)=>marks.get(isoDay(i+1))).filter(m=>m==='done'||m==='partial').length;
+ return <div className="a3-home"><PageTitle eyebrow="HISTORY" title="Workout History" sub="Performed, skipped, missed, rescheduled and extra work remain distinguishable."/>
+  <section className="a3-card a3-calendar" aria-label="Training calendar">
+   <div className="a3-head"><button className="a3-iconbtn" aria-label="Previous month" onClick={()=>setMonthOffset(x=>x-1)}><Icon name="back" size={18}/></button><div className="a3-cal-title"><strong>{monthLabel}</strong><small>{monthDone} session{monthDone===1?'':'s'}</small></div><button className="a3-iconbtn" aria-label="Next month" disabled={monthOffset>=0} onClick={()=>setMonthOffset(x=>Math.min(0,x+1))}><Icon name="chev" size={18}/></button></div>
+   <div className="a3-cal-grid" role="grid">
+    {['M','T','W','T','F','S','S'].map((d,i)=><span className="a3-cal-dow" key={i}>{d}</span>)}
+    {Array.from({length:startPad},(_,i)=><span key={'p'+i}/>)}
+    {Array.from({length:daysInMonth},(_,i)=>{const iso=isoDay(i+1);const mark=marks.get(iso);return <button key={iso} className={`a3-cal-day ${mark?'is-'+mark:''} ${iso===todayIso?'is-today':''} ${q===iso?'selected':''}`} aria-label={`${iso}${mark?` ${mark}`:''}`} aria-pressed={q===iso} onClick={()=>setQ(q===iso?'':iso)}>{i+1}</button>})}
+   </div>
+   <div className="a3-cal-legend"><span className="is-done">Workout</span><span className="is-partial">Partial</span><span className="is-missed">Missed</span><span className="is-planned">Planned</span></div>
+  </section>
+  <div className="a3-search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search workout, date…"/></div>
+  <div className="a3-chips">{['all','completed','skipped','missed','rescheduled','extra'].map(x=><button className={`a3-pill ${status===x?'selected':''}`} key={x} onClick={()=>setStatus(x)}>{x}</button>)}</div>
+  <div className="a3-list">{rows.map(w=><button className="a3-card a3-pick a3-tap history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="a3-eyebrow">{w.scheduledDate} · {w.status} · {w.source}</span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {vol(volumeForWorkout(w,s.exercises)).toLocaleString()} {volLabel()}</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Nothing to show" text="Your timeline will populate as training happens."/>}</div>
+ </div>}
 function Goals({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const [open,setOpen]=useState(false),[title,setTitle]=useState(''),[kind,setKind]=useState<GoalKind>('strength'),[label,setLabel]=useState('Target'),[value,setValue]=useState(''),[unit,setUnit]=useState('kg'),[targetDate,setTargetDate]=useState('');
  const add=()=>{if(!title.trim())return;const target=value.trim()?{label:label.trim()||'Target',value:Number(value),unit}:undefined;update(x=>({...x,goals:[...x.goals,{id:uid('goal'),kind,title:title.trim(),priority:x.goals.length+1,periodId:uid('period'),status:'active',target,targetDate:targetDate||undefined}]}));setTitle('');setValue('');setTargetDate('');setOpen(false)};
- return <><PageTitle eyebrow="GOALS" title="Give training a direction." sub="Multiple objectives can coexist. Targets are explicit and historical training is never rewritten."/>
- <div className="goal-stack">{s.goals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <div className="goal-card" key={g.id}><div className="goal-ring">{gp.percent===null?g.priority:`${gp.percent}%`}</div><div><span className="eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="progress-track"><i style={{width:`${gp.percent}%`}}/></div>}{ms.length>0&&<div className="milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}{gp.status==='achieved'&&<small className="achievement-note">Target evidence reached. Review the next phase rather than silently changing the goal.</small>}</div></div>})}</div>
- {open&&<section className="plan-editor"><div className="form-grid"><label>Goal title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Improve pull-up strength"/></label><label>Type<select value={kind} onChange={e=>setKind(e.target.value as GoalKind)}>{['strength','hypertrophy','fat_loss','fitness','general'].map(x=><option key={x}>{x}</option>)}</select></label><label>Target label<input value={label} onChange={e=>setLabel(e.target.value)} placeholder="e.g. Bench press"/></label><label>Target value<input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} placeholder="Optional"/></label><label>Unit<select value={unit} onChange={e=>setUnit(e.target.value)}>{['kg','reps','sessions','minutes','cm','%'].map(x=><option key={x}>{x}</option>)}</select></label><label>Target date<input type="date" value={targetDate} onChange={e=>setTargetDate(e.target.value)}/></label></div><button className="button primary" onClick={add}>Create goal</button></section>}
- <button className="button secondary" onClick={()=>setOpen(!open)}><Icon name="plus"/> {open?'Close':'Add goal'}</button></>}
-function PlanStudio({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [selected,setSelected]=useState<string|null>(null),[q,setQ]=useState('');const plan=s.plan,day=plan?.days.find(d=>d.id===selected),workout=day?.workoutId?s.workouts.find(w=>w.id===day.workoutId):day?s.workouts.find(w=>w.planId===plan?.id&&w.name===day.label&&w.status!=='completed'&&w.status!=='missed'&&w.status!=='skipped'):undefined;const results=s.exercises.filter(e=>!q||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(q.toLowerCase())).slice(0,18);const edit=(fn:(w:Workout)=>Workout,reason:string)=>{if(!workout||!plan)return;update(x=>{const p=x.plan!;const currentWorkout=x.workouts.find(w=>w.id===workout.id);if(!currentWorkout)return x;const nextW=fn(currentWorkout);const nextPlan=planWithDays(p,p.days);nextW.currentPlanVersion=nextPlan.version;return{...x,workouts:x.workouts.map(w=>w.id===nextW.id?nextW:w),plan:nextPlan,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'plan_edit',timestamp:new Date().toISOString(),payload:{reason}}]}})};const add=(id:string)=>edit(w=>{const ex=s.exercises.find(e=>e.id===id);if(!ex)return w;return{...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:[...w.exercises,{exerciseId:id,sets:Array.from({length:2},()=>makeSet('working',ex)),prescribedSets:2,repRange:ex.repRange,restSec:ex.restSec,order:w.exercises.length}]};},'add exercise');const remove=(id:string)=>edit(w=>({...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:w.exercises.filter(e=>e.exerciseId!==id).map((e,i)=>({...e,order:i}))}),'remove exercise');return <><PageTitle eyebrow="PLAN STUDIO" title="Shape the structure." sub="Future structure is editable. Historical sessions remain immutable."/><div className="plan-panel"><div className="plan-header"><div><span className="eyebrow">ACTIVE PLAN</span><h2>{plan?.name||'No plan'}</h2><small className="muted">{plan?.mode==='continuous'?'Continuous training':`${plan?.weeks||'—'} week horizon`}</small></div><span className="version">v{plan?.version||1}</span></div>{plan?.days.map((d,i)=>{const w=d.workoutId?s.workouts.find(x=>x.id===d.workoutId):!d.rest?s.workouts.find(x=>x.planId===plan?.id&&x.name===d.label&&x.status!=='completed'&&x.status!=='missed'&&x.status!=='skipped'):undefined;return <button className={`day-card ${selected===d.id?'selected-day':''}`} key={d.id} onClick={()=>setSelected(selected===d.id?null:d.id)}><span className="day-no">{String(i+1).padStart(2,'0')}</span><span><strong>{d.label}</strong><small>{d.rest?'Recovery / rest':`${w?.exercises.length||0} exercises · ${w?.scheduledDate||''}`}</small></span>{w&&<span className="mini-btn" onClick={e=>{e.stopPropagation();onStart(w)}}><Icon name="play" size={15}/></span>}</button>})}</div>{day&&workout&&<section className="plan-editor"><div className="section-head"><div><span className="eyebrow">EDITING {day.label}</span><h2>{workout.name}</h2></div><button className="button ghost" onClick={()=>setSelected(null)}>Done</button></div><div className="editor-exercises">{workout.exercises.map((we,i)=>{const e=s.exercises.find(x=>x.id===we.exerciseId);return <div className="editor-exercise" key={`${we.exerciseId}-${i}`}><span className="day-no">{String(i+1).padStart(2,'0')}</span><div><strong>{e?.name||'Exercise unavailable'}</strong><small>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</small></div>{e?<button className="mini-btn" onClick={()=>remove(e.id)}>Remove</button>:<span className="muted">Missing data</span>}</div>})}</div><div className="search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Add exercise…"/></div><div className="picker-list">{results.map(e=><button className="picker-row" key={e.id} onClick={()=>add(e.id)}><span><strong>{e.name}</strong><small>{e.pattern} · {e.primaryMuscles.join(' · ')}</small></span><Icon name="plus"/></button>)}</div></section>}<div className="callout"><Icon name="bolt"/><div><strong>Version-aware plan</strong><p>Every structural edit creates a new plan version. A completed workout never gets rewritten.</p></div></div></>}
+ return <div className="a3-home"><PageTitle eyebrow="GOALS" title="Give training a direction." sub="Multiple objectives can coexist. Targets are explicit and historical training is never rewritten."/>
+ <div className="a3-list">{s.goals.map(g=>{const gp=goalProgress(s,g),ms=goalMilestones(s,g);return <div className="a3-card goal-card" key={g.id}><div className="goal-ring">{gp.percent===null?g.priority:`${gp.percent}%`}</div><div><span className="a3-eyebrow">{g.kind.replace('_',' ')}</span><h3>{g.title}</h3><p>{g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet.'}{g.targetDate?` · by ${g.targetDate}`:''}</p>{gp.percent!==null&&<div className="a3-bar"><i style={{width:`${gp.percent}%`}}/></div>}{ms.length>0&&<div className="a3-chips milestones">{ms.map(m=><span className={m.reached?'reached':''} key={m.threshold}>{m.reached?'✓':'○'} {m.threshold}%</span>)}</div>}{gp.status==='achieved'&&<small className="a3-muted">Target evidence reached. Review the next phase rather than silently changing the goal.</small>}</div></div>})}</div>
+ {open&&<section className="a3-card a3-stack plan-editor"><div className="a3-fields"><label>Goal title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Improve pull-up strength"/></label><label>Type<select value={kind} onChange={e=>setKind(e.target.value as GoalKind)}>{['strength','hypertrophy','fat_loss','fitness','general'].map(x=><option key={x}>{x}</option>)}</select></label><label>Target label<input value={label} onChange={e=>setLabel(e.target.value)} placeholder="e.g. Bench press"/></label><label>Target value<input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} placeholder="Optional"/></label><label>Unit<select value={unit} onChange={e=>setUnit(e.target.value)}>{['kg','reps','sessions','minutes','cm','%'].map(x=><option key={x}>{x}</option>)}</select></label><label>Target date<input type="date" value={targetDate} onChange={e=>setTargetDate(e.target.value)}/></label></div><button className="a3-cta" onClick={add}>Create goal</button></section>}
+ <button className="a3-cta a3-cta-ghost" onClick={()=>setOpen(!open)}><Icon name="plus"/> {open?'Close':'Add goal'}</button></div>}
+function PlanStudio({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [selected,setSelected]=useState<string|null>(null),[q,setQ]=useState('');const plan=s.plan,day=plan?.days.find(d=>d.id===selected),workout=day?.workoutId?s.workouts.find(w=>w.id===day.workoutId):day?s.workouts.find(w=>w.planId===plan?.id&&w.name===day.label&&w.status!=='completed'&&w.status!=='missed'&&w.status!=='skipped'):undefined;const results=s.exercises.filter(e=>!q||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(q.toLowerCase())).slice(0,18);const edit=(fn:(w:Workout)=>Workout,reason:string)=>{if(!workout||!plan)return;update(x=>{const p=x.plan!;const currentWorkout=x.workouts.find(w=>w.id===workout.id);if(!currentWorkout)return x;const nextW=fn(currentWorkout);const nextPlan=planWithDays(p,p.days);nextW.currentPlanVersion=nextPlan.version;return{...x,workouts:x.workouts.map(w=>w.id===nextW.id?nextW:w),plan:nextPlan,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'plan_edit',timestamp:new Date().toISOString(),payload:{reason}}]}})};const add=(id:string)=>edit(w=>{const ex=s.exercises.find(e=>e.id===id);if(!ex)return w;return{...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:[...w.exercises,{exerciseId:id,sets:Array.from({length:2},()=>makeSet('working',ex)),prescribedSets:2,repRange:ex.repRange,restSec:ex.restSec,order:w.exercises.length}]};},'add exercise');const remove=(id:string)=>edit(w=>({...w,version:w.version+1,updatedAt:new Date().toISOString(),exercises:w.exercises.filter(e=>e.exerciseId!==id).map((e,i)=>({...e,order:i}))}),'remove exercise');return <div className="a3-home"><PageTitle eyebrow="PLAN STUDIO" title="Shape the structure." sub="Future structure is editable. Historical sessions remain immutable."/><div className="a3-card a3-stack plan-panel"><div className="a3-head plan-header"><div><span className="a3-eyebrow">ACTIVE PLAN</span><h2>{plan?.name||'No plan'}</h2><small className="a3-muted">{plan?.mode==='continuous'?'Continuous training':`${plan?.weeks||'—'} week horizon`}</small></div><span className="a3-chip version">v{plan?.version||1}</span></div>{plan?.days.map((d,i)=>{const w=d.workoutId?s.workouts.find(x=>x.id===d.workoutId):!d.rest?s.workouts.find(x=>x.planId===plan?.id&&x.name===d.label&&x.status!=='completed'&&x.status!=='missed'&&x.status!=='skipped'):undefined;return <button className={`a3-card a3-row a3-tap day-card ${selected===d.id?'selected':''}`} key={d.id} onClick={()=>setSelected(selected===d.id?null:d.id)}><span className="a3-index">{String(i+1).padStart(2,'0')}</span><span><strong>{d.label}</strong><small>{d.rest?'Recovery / rest':`${w?.exercises.length||0} exercises · ${w?.scheduledDate||''}`}</small></span>{w&&<span className="a3-pill" onClick={e=>{e.stopPropagation();onStart(w)}}><Icon name="play" size={15}/></span>}</button>})}</div>{day&&workout&&<section className="a3-card a3-stack plan-editor"><div className="a3-head"><div><span className="a3-eyebrow">EDITING {day.label}</span><h2>{workout.name}</h2></div><button className="a3-cta a3-cta-ghost" onClick={()=>setSelected(null)}>Done</button></div><div className="a3-list">{workout.exercises.map((we,i)=>{const e=s.exercises.find(x=>x.id===we.exerciseId);return <div className="a3-card a3-row editor-exercise" key={`${we.exerciseId}-${i}`}><span className="a3-index">{String(i+1).padStart(2,'0')}</span><div><strong>{e?.name||'Exercise unavailable'}</strong><small>{we.prescribedSets} sets · {we.repRange[0]}–{we.repRange[1]}</small></div>{e?<button className="a3-pill" onClick={()=>remove(e.id)}>Remove</button>:<span className="a3-muted">Missing data</span>}</div>})}</div><div className="a3-search"><Icon name="search"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Add exercise…"/></div><div className="a3-list">{results.map(e=><button className="a3-card a3-pick a3-tap" key={e.id} onClick={()=>add(e.id)}><span><strong>{e.name}</strong><small>{e.pattern} · {e.primaryMuscles.join(' · ')}</small></span><Icon name="plus"/></button>)}</div></section>}<div className="a3-card a3-callout"><Icon name="bolt"/><div><strong>Version-aware plan</strong><p>Every structural edit creates a new plan version. A completed workout never gets rewritten.</p></div></div></div>}
 function Library({s,query,setQuery,onExercise}:{s:AppState;query:string;setQuery:(x:string)=>void;onExercise:(id:string)=>void}){
  const [equipmentOnly,setEquipmentOnly]=useState(false);
  const available=s.profile?.equipment||[];
  const filtered=findExercises(query).filter(e=>s.exercises.some(x=>x.id===e.id)).filter(e=>!equipmentOnly||equipmentFit(e,available)!=='unavailable');
  const equipmentLabel=available.length?`${available.length} equipment types available`:'Equipment not set'; const report=knowledgeReport(s);
- return <><PageTitle eyebrow="EXERCISE LIBRARY" title="Find a movement." sub="Canonical identity, aliases, equipment, load semantics and alternatives."/>
- <div className="search"><Icon name="search"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Chest press, row, squat…"/></div>
- <div className="library-filters chip-row">{['','horizontal_push','horizontal_pull','vertical_pull','squat','hinge','core','arm_flexion'].map(x=><button className="chip" key={x||'all'} onClick={()=>setQuery(x)}>{x?x.replace('_',' '):'all'}</button>)}</div>
- <div className="library-toolbar"><span className="muted">{filtered.length} movements · {equipmentLabel}</span><span className="muted">Knowledge {report.healthy?'validated':`${report.errors} issues`}</span><label className="toggle-row compact-toggle"><span>Available equipment first</span><input type="checkbox" checked={equipmentOnly} onChange={e=>setEquipmentOnly(e.target.checked)}/></label></div>
- <div className="library-grid">{filtered.map(e=>{const fit=equipmentFit(e,available);return <button className="exercise-tile" key={e.id} onClick={()=>onExercise(e.id)}><span className="tile-tag">{e.loadSemantics.replace('_',' ')}</span><strong>{e.name}</strong><small>{e.primaryMuscles.join(' · ')}</small><span>{e.repRange[0]}–{e.repRange[1]} · {e.equipment.join(', ')}</span>{available.length>0&&<em className={`fit-${fit}`}>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm for today':'Not in setup'}</em>}</button>})}</div></>
+ return <div className="a3-home"><PageTitle eyebrow="EXERCISE LIBRARY" title="Find a movement." sub="Canonical identity, aliases, equipment, load semantics and alternatives."/>
+ <div className="a3-search"><Icon name="search"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Chest press, row, squat…"/></div>
+ <div className="a3-chips">{['','horizontal_push','horizontal_pull','vertical_pull','squat','hinge','core','arm_flexion'].map(x=><button className="a3-pill" key={x||'all'} onClick={()=>setQuery(x)}>{x?x.replace('_',' '):'all'}</button>)}</div>
+ <div className="a3-toolbar"><span className="a3-muted">{filtered.length} movements · {equipmentLabel}</span><span className="a3-muted">Knowledge {report.healthy?'validated':`${report.errors} issues`}</span><label className="a3-toggle"><span>Available equipment first</span><input type="checkbox" checked={equipmentOnly} onChange={e=>setEquipmentOnly(e.target.checked)}/></label></div>
+ <div className="a3-list library-grid">{filtered.map(e=>{const fit=equipmentFit(e,available);return <button className="a3-card a3-tile a3-tap exercise-tile" key={e.id} onClick={()=>onExercise(e.id)}><span className="a3-chip">{e.loadSemantics.replace('_',' ')}</span><strong>{e.name}</strong><small>{e.primaryMuscles.join(' · ')}</small><span>{e.repRange[0]}–{e.repRange[1]} · {e.equipment.join(', ')}</span>{available.length>0&&<em className={`a3-chip a3-fit-${fit}`}>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm for today':'Not in setup'}</em>}</button>})}</div></div>
 }
 function ExerciseSheet({ex,s,close,onUse,onAlternative}:{ex:Exercise;s:AppState;close:()=>void;onUse:()=>void;onAlternative:(id:string)=>void}){
  const alts=smartAlternatives(ex,s.exercises,s.profile?.equipment);
- return <Modal title={ex.name} close={close}><ApexImage kind={imageKindForExercise(ex)} alt={`Training context for ${ex.name}.`} className="exercise-detail-image" caption={`${ex.pattern.replace(/_/g,' ')} / MOVEMENT CONTEXT`}/><div className="detail-meta"><span>{ex.family}</span><span>{ex.primaryMuscles.join(' · ')}</span><span>{formatLoad(ex,undefined)}</span></div>
+ return <Modal title={ex.name} close={close}><ApexImage kind={imageKindForExercise(ex)} alt={`Training context for ${ex.name}.`} className="a3-banner" caption={`${ex.pattern.replace(/_/g,' ')} / MOVEMENT CONTEXT`}/><div className="a3-chips"><span>{ex.family}</span><span>{ex.primaryMuscles.join(' · ')}</span><span>{formatLoad(ex,undefined)}</span></div>
  <Detail title="EQUIPMENT"><p>{ex.equipment.length?ex.equipment.join(' · '):'No dedicated equipment required.'}</p></Detail>
- <Detail title="SETUP"><ul>{ex.setup.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="EXECUTION"><ol>{ex.steps.map(x=><li key={x}>{x}</li>)}</ol></Detail><Detail title="BREATHING & TEMPO"><p>{ex.breathing}{ex.tempo?` Tempo: ${ex.tempo}.`:''}</p></Detail><Detail title="CUES"><div className="tag-list">{ex.cues.map(x=><span key={x}>{x}</span>)}</div></Detail><Detail title="COMMON MISTAKES"><ul>{ex.mistakes.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="SAFETY"><ul>{ex.safety.map(x=><li key={x}>{x}</li>)}</ul></Detail>
- <Detail title="ALTERNATIVES"><div className="alt-list">{alts.map(({exercise,fit,samePattern,sameLoad})=><button key={exercise.id} onClick={()=>onAlternative(exercise.id)}><span><strong>{exercise.name}</strong><small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in current setup'}{samePattern?' · same pattern':''}{sameLoad?' · same load semantics':''}</small></span><Icon name="chev"/></button>)}</div></Detail>
- <button className="button primary wide" onClick={onUse}>Use in training</button></Modal>
+ <Detail title="SETUP"><ul>{ex.setup.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="EXECUTION"><ol>{ex.steps.map(x=><li key={x}>{x}</li>)}</ol></Detail><Detail title="BREATHING & TEMPO"><p>{ex.breathing}{ex.tempo?` Tempo: ${ex.tempo}.`:''}</p></Detail><Detail title="CUES"><div className="a3-chips">{ex.cues.map(x=><span key={x}>{x}</span>)}</div></Detail><Detail title="COMMON MISTAKES"><ul>{ex.mistakes.map(x=><li key={x}>{x}</li>)}</ul></Detail><Detail title="SAFETY"><ul>{ex.safety.map(x=><li key={x}>{x}</li>)}</ul></Detail>
+ <Detail title="ALTERNATIVES"><div className="a3-list a3-picklist">{alts.map(({exercise,fit,samePattern,sameLoad})=><button key={exercise.id} onClick={()=>onAlternative(exercise.id)}><span><strong>{exercise.name}</strong><small>{fit==='available'?'Available from your setup':fit==='unknown'?'Confirm equipment for today':'Not in current setup'}{samePattern?' · same pattern':''}{sameLoad?' · same load semantics':''}</small></span><Icon name="chev"/></button>)}</div></Detail>
+ <button className="a3-cta" onClick={onUse}>Use in training</button></Modal>
 }
-function Templates({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [name,setName]=useState('');const [selected,setSelected]=useState<string[]>([]);const toggle=(id:string)=>setSelected(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);const save=()=>{if(!name.trim()||!selected.length)return;const t:WorkoutTemplate={id:uid('tpl'),name:name.trim(),exerciseIds:selected,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};update(x=>({...x,workoutTemplates:[...(x.workoutTemplates||[]),t]}));setName('');setSelected([])};const useT=(t:WorkoutTemplate)=>{const w=cloneTemplateWorkout(t,today(),s.exercises);update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'template_used',timestamp:new Date().toISOString(),payload:{templateId:t.id,workoutId:w.id}}]}));onStart(w)};const remove=(id:string)=>update(x=>({...x,workoutTemplates:(x.workoutTemplates||[]).filter(t=>t.id!==id)}));return <><PageTitle eyebrow="TEMPLATES" title="Save the work you repeat." sub="Templates are reusable structures. Completed workouts remain separate historical events."/><section className="plan-editor"><label>Template name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Quick upper"/></label><div className="picker-list">{s.exercises.slice(0,35).map(e=><button className="picker-row" key={e.id} onClick={()=>toggle(e.id)}><span><strong>{e.name}</strong><small>{selected.includes(e.id)?'Included':'Tap to include'} · {e.pattern}</small></span>{selected.includes(e.id)?<Icon name="check"/>:<Icon name="plus"/>}</button>)}</div><button className="button primary wide" disabled={!name.trim()||!selected.length} onClick={save}>Save template</button></section><section className="section"><div className="list-card">{(s.workoutTemplates||[]).map(t=><div className="template-row" key={t.id}><ListRow title={t.name} sub={`${t.exerciseIds.length} exercises`} icon="train" click={()=>useT(t)}/><button className="mini-btn danger" onClick={()=>remove(t.id)}>Delete</button></div>)}</div></section></>}
-function Coach({s}:{s:AppState}){
+function Templates({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [name,setName]=useState('');const [selected,setSelected]=useState<string[]>([]);const toggle=(id:string)=>setSelected(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);const save=()=>{if(!name.trim()||!selected.length)return;const t:WorkoutTemplate={id:uid('tpl'),name:name.trim(),exerciseIds:selected,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};update(x=>({...x,workoutTemplates:[...(x.workoutTemplates||[]),t]}));setName('');setSelected([])};const useT=(t:WorkoutTemplate)=>{const w=cloneTemplateWorkout(t,today(),s.exercises);update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'template_used',timestamp:new Date().toISOString(),payload:{templateId:t.id,workoutId:w.id}}]}));onStart(w)};const remove=(id:string)=>update(x=>({...x,workoutTemplates:(x.workoutTemplates||[]).filter(t=>t.id!==id)}));return <div className="a3-home"><PageTitle eyebrow="TEMPLATES" title="Save the work you repeat." sub="Templates are reusable structures. Completed workouts remain separate historical events."/><section className="a3-card a3-stack plan-editor"><label>Template name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Quick upper"/></label><div className="a3-list picker-list">{s.exercises.slice(0,35).map(e=><button className="a3-card a3-pick a3-tap picker-row" key={e.id} onClick={()=>toggle(e.id)}><span><strong>{e.name}</strong><small>{selected.includes(e.id)?'Included':'Tap to include'} · {e.pattern}</small></span>{selected.includes(e.id)?<Icon name="check"/>:<Icon name="plus"/>}</button>)}</div><button className="a3-cta" disabled={!name.trim()||!selected.length} onClick={save}>Save template</button></section><section className="a3-block"><div className="a3-list">{(s.workoutTemplates||[]).map(t=><div className="a3-card a3-stack template-row" key={t.id}><ListRow title={t.name} sub={`${t.exerciseIds.length} exercises`} icon="train" click={()=>useT(t)}/><button className="a3-pill a3-danger" onClick={()=>remove(t.id)}>Delete</button></div>)}</div></section></div>}
+function Coach({s,onNav}:{s:AppState;onNav?:(r:string)=>void}){
   const [q,setQ]=useState('');
   const [messages,setMessages]=useState([{from:'apex',text:'APEX Coach is connected to your training record. Ask what to do next, why a prescription changed, or how to handle today’s session.'}]);
   const buildContext=(userInput?:string)=>{
@@ -3825,22 +4131,34 @@ function Coach({s}:{s:AppState}){
   };
   const activeWorkout=s.activeWorkoutId?s.workouts.find(w=>w.id===s.activeWorkoutId):s.workouts.find(w=>w.status==='in_progress');
   const currentSet=activeWorkout?.exercises.flatMap(x=>x.sets).find(x=>!x.completed);
-  return <div className="apex-system-screen apex-coach-v4">
-    <section className="apex-page-hero coach-hero"><div><span className="eyebrow">APEX COACH / LIVE</span><h1>Make the next decision useful.</h1><p>The Coach Core reads your current context, evidence and prescription. It explains the decision instead of hiding it behind a chat bubble.</p></div><div className="apex-coach-pulse"><i/><span>CORE ONLINE</span><small>DECISION ENGINE</small></div></section>
-    <div className="apex-coach-layout">
-      <aside className="apex-coach-rail">
-        <div className="apex-rail-block"><span className="eyebrow">CURRENT CONTEXT</span><strong>{activeWorkout?.name||'No active session'}</strong><small>{currentSet?`${currentSet.type||'working'} set · ${currentSet.reps||'—'} reps · RIR ${currentSet.rir??'—'}`:'No active set. Coach is using your latest record.'}</small></div>
-        <div className="apex-rail-block"><span className="eyebrow">DECISION</span><strong>{live.decision.action}</strong><small>{live.decision.confidence?`${live.decision.confidence} confidence`:'Context grounded'}</small></div>
-        <div className="apex-rail-block"><span className="eyebrow">COACH RULE</span><p>Evidence → confidence → prescription → your choice.</p></div>
-      </aside>
-      <main className="apex-coach-main">
-        <section className="apex-decision-card"><div className="apex-decision-top"><span className="badge">{live.decision.action}</span><span>{live.decision.confidence||'CONTEXT GROUNDED'}</span></div><h2>{live.decision.prescription?.instruction||'Continue with the current training structure when the supplied evidence supports doing so.'}</h2><p>{live.explanation}</p>{live.decision.confidenceReason&&<div className="apex-decision-reason"><Icon name="shield" size={15}/><span>{live.decision.confidenceReason}</span></div>}</section>
-        <section className="apex-conversation"><div className="apex-conversation-head"><div><span className="eyebrow">CONVERSATION</span><h2>Ask the coach.</h2></div><span>{messages.length} messages</span></div><div className="apex-message-list">{messages.map((m,i)=><article className={`apex-message ${m.from}`} key={i}><span className="apex-message-label">{m.from==='apex'?'APEX':'YOU'}</span><p>{m.text}</p></article>)}</div><div className="apex-coach-input"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask about today, your progression, recovery context, or a prescription…"/><button aria-label="Ask APEX Coach" disabled={!q.trim()} onClick={ask}><Icon name="arrow"/></button></div><div className="apex-prompt-row"><button onClick={()=>setQ('What should I do in my next session?')}>Next session</button><button onClick={()=>setQ('Why did APEX choose this prescription?')}>Why this prescription?</button><button onClick={()=>setQ('Should I change anything today?')}>Change anything?</button></div></section>
-      </main>
+  return <div className="a3-home a3-coachscreen">
+    {onNav&&<SegTabs route="coach" onNav={onNav}/>}
+    <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">Coach · live context</span><h1>APEX Coach</h1><p className="a3-muted">Your coach reads today’s session, recent evidence and the current prescription, then explains the call instead of hiding it.</p></header>
+
+    <section className="a3-card a3-decision a3-imaged">
+      <ApexImage kind="strength-session" alt="" className="a3-hero-image"/>
+      <ApexRidge/>
+      <div className="a3-decision-top"><span className="badge">{live.decision.action}</span><span className="a3-eyebrow a3-gold">{live.decision.confidence?`${live.decision.confidence} confidence`:'Context grounded'}</span></div>
+      <h2>{displayText(live.decision.prescription?.instruction||'Continue with the current training structure when the supplied evidence supports doing so.')}</h2>
+      <p>{displayText(live.explanation)}</p>
+      {live.decision.confidenceReason&&<div className="a3-decision-reason"><Icon name="shield" size={15}/><span>{displayText(live.decision.confidenceReason)}</span></div>}
+    </section>
+
+    <div className="a3-stats a3-stats-1">
+      <div className="a3-card a3-stat"><span className="a3-eyebrow">Session</span><strong>{activeWorkout?.name||'None active'}</strong><small>{currentSet?`${currentSet.type||'working'} set · ${currentSet.reps||'—'} reps · RIR ${currentSet.rir??'—'}`:'Using your latest record'}</small></div>
+      <div className="a3-card a3-stat"><span className="a3-eyebrow">Decision</span><strong>{live.decision.action}</strong><small>{live.decision.confidence?`${live.decision.confidence} confidence`:'Context grounded'}</small></div>
+      <div className="a3-card a3-stat"><span className="a3-eyebrow">Coach rule</span><strong>Evidence first</strong><small>Evidence → confidence → prescription → your choice.</small></div>
     </div>
+
+    <section className="a3-block">
+      <div className="a3-head"><h2>Ask the coach</h2><span className="a3-eyebrow">{messages.length} messages</span></div>
+      <div className="a3-messages">{messages.map((m,i)=><article className={`apex-message ${m.from}`} key={i}><span className="a3-eyebrow">{m.from==='apex'?'APEX':'YOU'}</span><p>{displayText(m.text)}</p></article>)}</div>
+      <div className="a3-coach-input"><div className="a3-search"><input aria-label="Ask APEX Coach" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Ask about today, progression, recovery or a prescription…"/></div><button aria-label="Ask APEX Coach" disabled={!q.trim()} onClick={ask}><Icon name="arrow"/></button></div>
+      <div className="a3-chips"><button className="a3-pill" onClick={()=>setQ('What should I do in my next session?')}>Next session</button><button className="a3-pill" onClick={()=>setQ('Why did APEX choose this prescription?')}>Why this prescription?</button><button className="a3-pill" onClick={()=>setQ('Should I change anything today?')}>Change anything?</button></div>
+    </section>
   </div>
 }
-function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="term-list">{terms.map(([a,b])=><div className="term" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></>}
+function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <div className="a3-home"><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="a3-list">{terms.map(([a,b])=><div className="a3-card a3-stack" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></div>}
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
  const fields=['neck','shoulders','chest','waist','abdomen','hips','arms','forearms','thighs','calves'];
  const [date,setDate]=useState(today());
@@ -3849,13 +4167,13 @@ function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>
  const [weight,setWeight]=useState('');
  useEffect(()=>{
    const existing=s.measurements.slice().reverse().find(m=>m.date===date);
-   setWeight(existing?.weightKg?.toString()||'');
-   setValues(Object.fromEntries(fields.map(k=>[k,existing?.values?.[k]?.toString()||''])));
- },[date,s.measurements]);
+   setWeight(existing?.weightKg!==undefined?String(wt(existing.weightKg)):'');
+   setValues(Object.fromEntries(fields.map(k=>[k,existing?.values?.[k]!==undefined?String(len(existing.values[k])):''])));
+ },[date,s.measurements,s.preferences.units]);
 
  const save=()=>{
-   const vals=Object.fromEntries(fields.filter(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k]))).map(k=>[k,Number(values[k])]));
-   const numericWeight=weight.trim()?Number(weight):undefined;
+   const vals=Object.fromEntries(fields.filter(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k]))).map(k=>[k,Math.round(fromLen(Number(values[k]))*100)/100]));
+   const numericWeight=weight.trim()?Math.round(fromWt(Number(weight))*100)/100:undefined;
    const hasWeight=numericWeight!==undefined&&Number.isFinite(numericWeight)&&numericWeight>0;
    if(!hasWeight&&!Object.keys(vals).length)return;
    const entry:Measurement={id:uid('measurement'),date,weightKg:hasWeight?numericWeight:undefined,values:vals};
@@ -3878,64 +4196,115 @@ function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>
  const chartMax=chartRecorded.length?Math.max(...chartRecorded.map(entry=>entry.weight)):0;
  const chartRange=Math.max(chartMax-chartMin,0.1);
  const hasInput=(weight.trim()!==''&&Number.isFinite(Number(weight))&&Number(weight)>0)||fields.some(k=>values[k].trim()!==''&&Number.isFinite(Number(values[k])));
- return <><PageTitle eyebrow="BODY DATA" title="Measure what matters." sub="Optional measurements add context to progress. APEX stores the numbers; it does not make medical or body-composition claims."/>
- <section className="plan-editor"><div className="form-grid"><label>Measurement date<input aria-label="Measurement date" type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)}/></label><label>Weight (kg)<input min="1" step="0.1" inputMode="decimal" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Optional"/></label>{fields.map(k=><label key={k}>{k[0].toUpperCase()+k.slice(1)} (cm)<input min="0" step="0.1" inputMode="decimal" value={values[k]} onChange={e=>setValues(v=>({...v,[k]:e.target.value}))} placeholder="Optional"/></label>)}</div><button className="button primary wide" disabled={!hasInput} onClick={save}>Save measurements for selected date</button></section>
- <section className="section body-weight-trend"><div className="section-head"><div><span className="eyebrow">BODY / DAILY WEIGHT</span><h2>Day-by-day record.</h2><p>Only logged weigh-ins are shown. Blank days are not estimated.</p></div><span className="apex-heading-note">{range==='All'?'ALL RECORDED DAYS':`LAST ${range}`}</span></div>
-   <div className="weight-range-control" role="group" aria-label="Weight history range">
+ return <div className="a3-home"><PageTitle eyebrow="BODY DATA" title="Measure what matters." sub="Optional measurements add context to progress. APEX stores the numbers; it does not make medical or body-composition claims."/>
+ <section className="a3-card a3-stack plan-editor"><div className="a3-fields"><label>Measurement date<input aria-label="Measurement date" type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)}/></label><label>Weight ({weightLabel()})<input min="1" step="0.1" inputMode="decimal" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Optional"/></label>{fields.map(k=><label key={k}>{k[0].toUpperCase()+k.slice(1)} ({lengthLabel()})<input min="0" step="0.1" inputMode="decimal" value={values[k]} onChange={e=>setValues(v=>({...v,[k]:e.target.value}))} placeholder="Optional"/></label>)}</div><button className="a3-cta" disabled={!hasInput} onClick={save}>Save measurements for selected date</button></section>
+ <section className="section body-weight-trend"><div className="a3-head"><div><span className="a3-eyebrow">BODY / DAILY WEIGHT</span><h2>Day-by-day record.</h2><p>Only logged weigh-ins are shown. Blank days are not estimated.</p></div><span className="a3-eyebrow">{range==='All'?'ALL RECORDED DAYS':`LAST ${range}`}</span></div>
+   <div className="a3-choices weight-range-control" role="group" aria-label="Weight history range">
     {(['7D','30D','3M','1Y','All'] as const).map(period=><button key={period} aria-label={`Show ${period} weight trend`} aria-pressed={range===period} className={range===period?'selected':''} onClick={()=>setRange(period)}>{period}</button>)}
    </div>
    {chartRecorded.length? <>
-     <div className="weight-trend-summary"><div><small>EARLIEST LOGGED</small><strong>{chartRecorded[0]?.weight.toFixed(1)} kg</strong></div><div><small>LATEST LOGGED</small><strong>{chartRecorded[chartRecorded.length-1]?.weight.toFixed(1)} kg</strong></div><div><small>CHANGE BETWEEN LOGS</small><strong>{chartRecorded[0]&&chartRecorded[chartRecorded.length-1]?`${chartRecorded[chartRecorded.length-1].weight-chartRecorded[0].weight>=0?'+':''}${(chartRecorded[chartRecorded.length-1].weight-chartRecorded[0].weight).toFixed(1)} kg`:'—'}</strong></div></div>
-     <div className="weight-trend-chart" style={{gridTemplateColumns:`repeat(${chartEntries.length},minmax(0,1fr))`}} role="img" aria-label={`Daily weight over ${range}. ${chartRecorded.map(entry=>`${entry.date}: ${entry.weight} kilograms`).join('; ')}`}>
+     <div className="a3-stats weight-trend-summary"><div><small>EARLIEST LOGGED</small><strong>{wt(chartRecorded[0].weight).toFixed(1)} {weightLabel()}</strong></div><div><small>LATEST LOGGED</small><strong>{wt(chartRecorded[chartRecorded.length-1].weight).toFixed(1)} {weightLabel()}</strong></div><div><small>CHANGE BETWEEN LOGS</small><strong>{chartRecorded[0]&&chartRecorded[chartRecorded.length-1]?`${chartRecorded[chartRecorded.length-1].weight-chartRecorded[0].weight>=0?'+':''}${wt(chartRecorded[chartRecorded.length-1].weight-chartRecorded[0].weight).toFixed(1)} ${weightLabel()}`:'—'}</strong></div></div>
+     <div className="a3-card weight-trend-chart" style={{gridTemplateColumns:`repeat(${chartEntries.length},minmax(0,1fr))`}} role="img" aria-label={`Daily weight over ${range}. ${chartRecorded.map(entry=>`${entry.date}: ${wt(entry.weight)} ${weightWord()}`).join('; ')}`}>
        {chartEntries.map(({date:day,weight:value},index)=>{
          const height=value===undefined?0:22+((value-chartMin)/chartRange)*70;
          const labelEvery=rangeLength<=30?7:rangeLength<=90?14:rangeLength<=365?30:Math.max(1,Math.ceil(rangeLength/12));
          const label=index%labelEvery===0||index===chartEntries.length-1?day.slice(5):'';
-         return <div className={`weight-trend-day ${value===undefined?'is-empty':'has-weight'}`} key={day} title={value===undefined?`${day}: no weigh-in`:`${day}: ${value} kg`}><i style={{height:`${height}%`}}/><small aria-hidden="true">{label}</small></div>;
+         return <div className={`weight-trend-day ${value===undefined?'is-empty':'has-weight'}`} key={day} title={value===undefined?`${day}: no weigh-in`:`${day}: ${wt(value)} ${weightLabel()}`}><i style={{height:`${height}%`}}/><small aria-hidden="true">{label}</small></div>;
        })}
      </div>
-     <div className="weight-trend-range"><span>{chartMin.toFixed(1)} kg</span><span>{chartMax.toFixed(1)} kg</span></div>
+     <div className="a3-toolbar weight-trend-range"><span>{wt(chartMin).toFixed(1)} {weightLabel()}</span><span>{wt(chartMax).toFixed(1)} {weightLabel()}</span></div>
    </>:<Empty title="No weight entries yet" text="Choose a date and log a weight to start the daily record."/>}
  </section>
- <section className="section"><div className="section-head"><div><span className="eyebrow">MEASUREMENT HISTORY</span><h2>Longitudinal context.</h2></div></div><div className="history-list">{s.measurements.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(m=><div className="history-item static" key={m.id}><div><span className="eyebrow">{m.date}</span><strong>{m.weightKg!==undefined?`${m.weightKg} kg`:'No weight logged'}</strong><small>{Object.entries(m.values).map(([k,v])=>`${k} ${v} cm`).join(' · ')||'No circumference measurements'}</small></div></div>)}{!s.measurements.length&&<Empty title="No measurements yet" text="Body data is optional. Add a dated snapshot whenever it is useful to you."/>}</div></section>
- <div className="callout"><Icon name="bolt"/><div><strong>Context, not judgment</strong><p>APEX can compare these measurements with your own historical training record, but it will not infer health conditions or promise a body-composition outcome.</p></div></div></>}
+ <section className="a3-block"><div className="a3-head"><div><span className="a3-eyebrow">MEASUREMENT HISTORY</span><h2>Longitudinal context.</h2></div></div><div className="a3-list">{s.measurements.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(m=><div className="a3-card a3-stack history-item" key={m.id}><div><span className="a3-eyebrow">{m.date}</span><strong>{m.weightKg!==undefined?`${wt(m.weightKg)} ${weightLabel()}`:'No weight logged'}</strong><small>{Object.entries(m.values).map(([k,v])=>`${k} ${len(v)} ${lengthLabel()}`).join(' · ')||'No circumference measurements'}</small></div></div>)}{!s.measurements.length&&<Empty title="No measurements yet" text="Body data is optional. Add a dated snapshot whenever it is useful to you."/>}</div></section>
+ <div className="a3-card a3-callout"><Icon name="bolt"/><div><strong>Context, not judgment</strong><p>APEX can compare these measurements with your own historical training record, but it will not infer health conditions or promise a body-composition outcome.</p></div></div></div>}
 function You({s,nav,update}:{s:AppState;nav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
  const notificationPreview=notificationIntents(s);
- const [editing,setEditing]=useState(false),[name,setName]=useState(s.profile?.name||''),[pass,setPass]=useState(''),[recovery,setRecovery]=useState(''),[backupBusy,setBackupBusy]=useState(false),[backupMsg,setBackupMsg]=useState('');
+ const goSection=(id:string)=>document.getElementById(id)?.scrollIntoView({behavior:s.preferences.reducedMotion?'auto':'smooth',block:'start'});
+ const themeName=({apex:'Apex',classic:'Classic Gold',steel:'Steel',aurora:'Aurora',crimson:'Crimson'} as Record<string,string>)[s.preferences.theme||'apex'];
+ const [editing,setEditing]=useState(false),[name,setName]=useState(s.profile?.name||''),[pass,setPass]=useState(''),[recovery,setRecovery]=useState(''),[backupBusy,setBackupBusy]=useState(false),[backupMsg,setBackupMsg]=useState(''),[appMsg,setAppMsg]=useState('');
+ const summaryText=()=>`APEX ${pkg.version} summary
+Completed sessions: ${s.workouts.filter(w=>w.status==='completed').length}
+Planned sessions: ${s.workouts.filter(w=>w.status==='planned'||w.status==='rescheduled').length}
+Body entries: ${s.measurements.length}
+Achievements: ${s.achievements.length}
+Units: ${s.preferences.units||'metric'}`;
+ const copySummary=async()=>{try{await navigator.clipboard.writeText(summaryText());setAppMsg('Summary copied to clipboard.')}catch{setAppMsg('Copy is unavailable here. Use Data & Export for a full backup.')}};
  const loadEquipment:string[]=Array.from(new Set((s.profile?.equipment||[]).filter(x=>!['bodyweight','bench'].includes(x))));
- const [loadInputs,setLoadInputs]=useState<Record<string,string>>(()=>Object.fromEntries(loadEquipment.map(item=>[item,(s.profile?.loadIncrementsKg?.[item]||[]).join(', ')])));
+ const [loadInputs,setLoadInputs]=useState<Record<string,string>>(()=>Object.fromEntries(loadEquipment.map(item=>[item,(s.profile?.loadIncrementsKg?.[item]||[]).map(v=>wt(v)).join(', ')])));
  const saveLoadAvailability=(item:string)=>{
-   const values=loadInputs[item]?.split(',').map(v=>Number(v.trim())).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b)||[];
+   const values=loadInputs[item]?.split(',').map(v=>Number(v.trim())).filter(v=>Number.isFinite(v)&&v>0).map(v=>Math.round(fromWt(v)*100)/100).sort((a,b)=>a-b)||[];
    update(x=>({...x,profile:x.profile?{...x.profile,loadIncrementsKg:{...(x.profile.loadIncrementsKg||{}),[item]:[...new Set(values)]}}:x.profile}));
  };
  const download=(text:string,filename:string,type='application/json')=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
  const makeBackup=async()=>{setBackupMsg('');if(!pass||pass.length<8){setBackupMsg('Enter a passphrase of at least 8 characters.');return}setBackupBusy(true);try{const key=recovery||recoveryKey();const encrypted=await encryptBackup(repository.exportJson(s),pass,key);download(encrypted,`apex-backup-${today()}.apex`);if(!recovery)setRecovery(key);setBackupMsg(recovery?'Encrypted backup created.':'Backup created. Save the recovery key shown below somewhere safe.');}catch(e){setBackupMsg(e instanceof Error?e.message:'Backup failed.')}finally{setBackupBusy(false)}};
  const importBackup=()=>{const input=document.createElement('input');input.type='file';input.accept='.apex,.json';input.onchange=()=>{const file=input.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=async()=>{setBackupMsg('');setBackupBusy(true);try{const secret=pass||recovery;if(!secret)throw new Error('Enter the backup passphrase or recovery key first.');const plain=await decryptBackup(String(reader.result),secret);const restored=repository.importJson(plain);update(()=>restored);setBackupMsg('Backup restored. APEX will now use the restored local state.');}catch(e){setBackupMsg(e instanceof Error?e.message:'Restore failed.')}finally{setBackupBusy(false)}};reader.readAsText(file)};input.click()};
- return <><PageTitle eyebrow="YOU" title={s.profile?.name||'Your training identity'} sub="Control the context APEX uses. Your data remains yours and can travel with you."/>
- <div className="profile-card"><img src="/brand/apex-symbol-light.png"/><div><strong>{s.profile?.name||'Private local profile'}</strong><small>{s.profile?.experience||'not set'} · {s.profile?.trainingDays||'—'} days/week · {s.profile?.sessionMinutes||'—'} min</small></div></div>
- {editing&&<section className="plan-editor"><label>Name<input value={name} onChange={e=>setName(e.target.value)}/></label><button className="button primary" onClick={()=>{update(x=>({...x,profile:x.profile?{...x.profile,name:name.trim()}:x.profile}));setEditing(false)}}>Save profile</button></section>}
- <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">DATA CONTROL</span><h2>Private by default.</h2></div></div><p className="muted">Core APEX data is stored locally. On Android, SQLite is the native persistence source with a browser fallback. Encrypted backups can be moved manually without an account.</p><label>Backup passphrase<input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="8+ characters" autoComplete="new-password"/></label><div className="button-row"><button className="button primary" onClick={makeBackup} disabled={backupBusy}>{backupBusy?'Working…':'Create encrypted backup'}</button><button className="button ghost" onClick={importBackup} disabled={backupBusy}>Restore backup</button></div>{recovery&&<div className="recovery-box"><span className="eyebrow">RECOVERY KEY — SAVE THIS</span><strong>{recovery}</strong><small>Use this key instead of the passphrase if you need to unlock this backup. APEX cannot reconstruct a lost recovery key.</small><button className="mini-btn" onClick={()=>navigator.clipboard?.writeText(recovery)}>Copy key</button></div>}{backupMsg&&<div className="callout"><Icon name="bolt"/><div><strong>Backup status</strong><p>{backupMsg}</p></div></div>}</section>
- <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">LOAD AVAILABILITY</span><h2>Tell APEX what loads exist.</h2></div></div><p className="muted">Equipment availability answers whether you have the machine. Load availability answers which actual loads you can select. APEX will never recommend a value outside a configured list.</p>{loadEquipment.length?loadEquipment.map(item=><div key={item} className="load-config-row"><label>{item.replace(/_/g,' ')}<input value={loadInputs[item]||''} onChange={e=>setLoadInputs(x=>({...x,[item]:e.target.value}))} placeholder="5, 7.5, 10, 12.5, 15…" inputMode="decimal"/></label><button className="mini-btn" onClick={()=>saveLoadAvailability(item)}>Save loads</button></div>):<div className="callout"><Icon name="settings"/><div><strong>No external-load equipment configured.</strong><p>Add equipment in your training profile before configuring load options.</p></div></div>}</section>
- <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">NOTIFICATIONS</span><h2>Useful, never noisy.</h2></div></div><p className="muted">APEX only prepares action-oriented reminders. You can disable any category without affecting training data.</p>
-  <label className="toggle-row"><span>Notifications enabled</span><input type="checkbox" aria-label="Notifications enabled" checked={s.preferences.notifications.enabled} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,enabled:e.target.checked}}}))}/></label>
-  <label className="toggle-row"><span>Workout reminders</span><input type="checkbox" aria-label="Workout reminders" checked={s.preferences.notifications.workoutReminders} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,workoutReminders:e.target.checked}}}))}/></label>
-  <label className="toggle-row"><span>Missed workout follow-up</span><input type="checkbox" aria-label="Missed workout follow-up" checked={s.preferences.notifications.missedWorkout} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,missedWorkout:e.target.checked}}}))}/></label>
-  <label className="toggle-row"><span>Weekly review</span><input type="checkbox" aria-label="Weekly review" checked={s.preferences.notifications.weeklyReview} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,weeklyReview:e.target.checked}}}))}/></label></section>
- <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">NOTIFICATION PLAN</span><h2>Prepared from your context.</h2></div></div><p className="muted">These are deterministic notification intents. Native scheduling and delivery stays behind the platform adapter, so training logic never depends on a notification service.</p><div className="notification-preview">{notificationPreview.map(n=><div className="history-item static" key={n.id}><div><span className="eyebrow">{n.kind}</span><strong>{n.title}</strong><small>{n.body}</small></div></div>)}{!notificationPreview.length&&<Empty title="No reminder needed" text="APEX will not create a notification unless your enabled rules and current training context call for one."/>}</div></section>
- <section className="plan-editor"><div className="section-head"><div><span className="eyebrow">ACCESSIBILITY & FEEDBACK</span><h2>Make APEX comfortable to use.</h2></div></div>
-  <label className="toggle-row"><span>Reduce motion</span><input type="checkbox" aria-label="Reduce motion" checked={s.preferences.reducedMotion} onChange={e=>update(x=>({...x,preferences:{...x.preferences,reducedMotion:e.target.checked}}))}/></label>
-  <label className="toggle-row"><span>High contrast</span><input type="checkbox" aria-label="High contrast" checked={s.preferences.highContrast} onChange={e=>update(x=>({...x,preferences:{...x.preferences,highContrast:e.target.checked}}))}/></label>
-  <label className="toggle-row"><span>Text size</span><select value={s.preferences.fontScale} onChange={e=>update(x=>({...x,preferences:{...x.preferences,fontScale:e.target.value as AppState["preferences"]["fontScale"]}}))}><option value="system">System</option><option value="large">Large</option><option value="larger">Larger</option></select></label>
-  <label className="toggle-row"><span>Haptics</span><input type="checkbox" aria-label="Haptics" checked={s.preferences.haptics} onChange={e=>update(x=>({...x,preferences:{...x.preferences,haptics:e.target.checked}}))}/></label>
-  <label className="toggle-row"><span>Workout sounds</span><input type="checkbox" aria-label="Workout sounds" checked={s.preferences.sounds} onChange={e=>update(x=>({...x,preferences:{...x.preferences,sounds:e.target.checked}}))}/></label><p className="muted">Android system font scaling and screen-reader semantics are respected where the platform provides them.</p></section>
- {(()=>{const k=knowledgeReport(s), issues=inspectState(s), errors=issues.filter(x=>x.severity==='error').length, warnings=issues.filter(x=>x.severity==='warning').length;return <section className="section"><div className="section-head"><div><span className="eyebrow">SYSTEM HEALTH</span><h2>Trust the record.</h2></div></div><div className="metric-strip"><Metric label="Canonical exercises" value={String(k.exerciseCount)} sub={k.errors===0?'knowledge valid':`${k.errors} errors`}/><Metric label="State errors" value={String(errors)} sub={warnings?`${warnings} warnings`:'no warnings'}/><Metric label="Stored events" value={String(s.eventLog?.length||0)} sub="local audit trail"/></div>{(k.warnings>0||warnings>0)&&<div className="callout"><Icon name="settings"/><div><strong>Review recommended</strong><p>{k.warnings+warnings} non-blocking integrity or knowledge warnings are present. APEX keeps them visible instead of silently rewriting your history.</p></div></div>}{errors===0&&k.errors===0&&<p className="muted load-note">No blocking data-integrity or canonical-knowledge errors detected in the current local state.</p>}</section>})()}
- <div className="list-card"><ListRow title="Goals"  sub={`${s.goals.length} active/history goals`} icon="target" click={()=>nav('goals')}/><ListRow title="Body measurements" sub={`${s.measurements.length} logged entries`} icon="chart" click={()=>nav('measurements')}/><ListRow title="Plan Studio" sub="Structure and future sessions" icon="target" click={()=>nav('plan')}/><ListRow title="Exercise Library" sub={`${s.exercises.length} canonical movements`} icon="search" click={()=>nav('library')}/><ListRow title="Templates" sub={`${s.workoutTemplates?.length||0} saved templates`} icon="train" click={()=>nav('templates')}/><ListRow title="Coach" sub="Explain local evidence" icon="bolt" click={()=>nav('coach')}/><ListRow title="Learn" sub="Glossary and training concepts" icon="chart" click={()=>nav('learn')}/><ListRow title="Edit profile" sub="Change your name or training context" icon="user" click={()=>setEditing(!editing)}/><ListRow title="Reset personal intelligence" sub={`${s.observations.length} observations · raw history preserved`} icon="settings" click={()=>update(x=>({...x,observations:[]}))}/><ListRow title="Reset app data" sub="Delete local APEX state" icon="settings" click={()=>{if(confirm('Delete all local APEX data? This cannot be undone without a backup.')){repository.reset();location.reload()}}}/></div></>}
-function Command({nav,setQuery,close}:{nav:(r:string)=>void;setQuery:(x:string)=>void;close:()=>void}){const [q,setQ]=useState('');const run=(raw=q)=>{const x=raw.toLowerCase();if(x.includes('progress'))nav('progress');else if(x.includes('history')||x.includes('last workout'))nav('history');else if(x.includes('goal'))nav('goals');else if(x.includes('measurement')||x.includes('body data'))nav('measurements');else if(x.includes('plan'))nav('plan');else if(x.includes('coach')||x.includes('why'))nav('coach');else if(x.includes('template'))nav('templates');else if(x.includes('learn')||x.includes('rir'))nav('learn');else if(x.includes('exercise')||x.includes('squat')||x.includes('press')||x.includes('row')){setQuery(raw);nav('library')}else nav('home');close()};return <Modal title="Command Center" close={close}><div className="command-box"><Icon name="search"/><input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run()} placeholder="Find, explain, navigate…"/><button onClick={()=>run()}>Go</button></div><div className="suggestions">{['Show my progress','Find chest press exercises','Open my plan','Explain RIR','Open templates'].map(x=><button key={x} onClick={()=>run(x)}>{x}<Icon name="chev"/></button>)}</div></Modal>}
-function Detail({title,children}:{title:string;children:React.ReactNode}){return <div className="detail"><span className="eyebrow">{title}</span>{children}</div>}
-function Metric({label,value,sub}:{label:string;value:string;sub:string}){return <div className="metric"><small>{label}</small><strong>{value}</strong><small>{sub}</small></div>}
-function ListRow({title,sub,icon,click}:{title:string;sub:string;icon:string;click:()=>void}){return <button className="list-row" onClick={click}><span className="row-icon"><Icon name={icon}/></span><span><strong>{title}</strong><small>{sub}</small></span><Icon name="chev"/></button>}
+ return <div className="a3-home"><PageTitle eyebrow="YOU" title={s.profile?.name||'You'} sub="Control the context APEX uses. Your data remains yours and can travel with you."/>
+ <div className="a3-card a3-profile a3-imaged"><ApexImage kind="training-floor" alt="" className="a3-hero-image"/><img src="/brand/apex-mark-gold.png" alt=""/><div><strong>{s.profile?.name||'Private local profile'}</strong><small>{s.profile?.experience||'not set'} · {s.profile?.trainingDays||'—'} days/week · {s.profile?.sessionMinutes||'—'} min</small></div></div>
+ <section className="a3-block"><div className="a3-head"><h2>Settings</h2></div><div className="a3-list"><ListRow title="Appearance" sub={themeName} icon="spark" click={()=>goSection('settings-appearance')}/><ListRow title="Notifications" sub={s.preferences.notifications.enabled?'Enabled':'Off'} icon="bolt" click={()=>goSection('settings-notifications')}/><ListRow title="Units" sub={(s.preferences.units||'metric')==='imperial'?'Imperial · lb, in':'Metric · kg, cm'} icon="target" click={()=>goSection('settings-units')}/><ListRow title="Accessibility" sub={`Text size · ${s.preferences.fontScale}`} icon="shield" click={()=>goSection('settings-accessibility')}/><ListRow title="Coach Settings" sub="RIR, progression, experience, equipment" icon="target" click={()=>goSection('settings-coach')}/><ListRow title="App & Export" sub="Version, storage, plain summary" icon="settings" click={()=>goSection('settings-app')}/><ListRow title="Data & Export" sub="Encrypted backup and restore" icon="layers" click={()=>goSection('settings-data')}/><ListRow title="Privacy" sub="Stored on this device, no account" icon="shield" click={()=>goSection('settings-data')}/><ListRow title="About" sub={`Version ${pkg.version}`} icon="bolt" click={()=>goSection('settings-app')}/></div></section>
+ {editing&&<section className="a3-card a3-stack"><label>Name<input value={name} onChange={e=>setName(e.target.value)}/></label><button className="a3-cta" onClick={()=>{update(x=>({...x,profile:x.profile?{...x.profile,name:name.trim()}:x.profile}));setEditing(false)}}>Save profile</button></section>}
+ <section id="settings-coach" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">COACH SETTINGS</span><h2>How APEX coaches you.</h2></div></div><div className="a3-list"><ListRow title="RIR system" sub="Target RIR is set per exercise; see how it works" icon="target" click={()=>nav('learn')}/><ListRow title="Progression preferences" sub="Evidence-based, decided by the training engine" icon="chart" click={()=>nav('learn')}/><ListRow title="Training experience" sub={s.profile?.experience||'Not set'} icon="user" click={()=>setEditing(true)}/><ListRow title="Equipment" sub={(s.profile?.equipment||[]).map(x=>x.replace(/_/g,' ')).join(', ')||'Not set'} icon="dumbbell" click={()=>nav('plan')}/></div></section>
+ <section id="settings-app" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">APP & EXPORT</span><h2>About this install.</h2></div></div><p className="a3-muted">Version {pkg.version}. Data stays on this device. Copy a short plain-text summary of your record; use Data & Export below for a full encrypted backup.</p><div className="a3-actions"><button className="a3-cta a3-cta-ghost" onClick={copySummary}>Copy plain summary</button></div>{appMsg&&<p className="a3-muted" role="status">{appMsg}</p>}</section>
+ <section id="settings-data" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">DATA & EXPORT</span><h2>Private by default.</h2></div></div><p className="a3-muted">Core APEX data is stored locally. On Android, SQLite is the native persistence source with a browser fallback. Encrypted backups can be moved manually without an account.</p><label>Backup passphrase<input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="8+ characters" autoComplete="new-password"/></label><div className="a3-actions"><button className="a3-cta" onClick={makeBackup} disabled={backupBusy}>{backupBusy?'Working…':'Create encrypted backup'}</button><button className="a3-cta a3-cta-ghost" onClick={importBackup} disabled={backupBusy}>Restore backup</button></div>{recovery&&<div className="a3-card a3-stack"><span className="a3-eyebrow">RECOVERY KEY — SAVE THIS</span><strong>{recovery}</strong><small>Use this key instead of the passphrase if you need to unlock this backup. APEX cannot reconstruct a lost recovery key.</small><button className="a3-pill" onClick={()=>navigator.clipboard?.writeText(recovery)}>Copy key</button></div>}{backupMsg&&<div className="a3-card a3-callout"><Icon name="bolt"/><div><strong>Backup status</strong><p>{backupMsg}</p></div></div>}</section>
+ <section className="a3-card a3-stack"><div className="a3-head"><div><span className="a3-eyebrow">LOAD AVAILABILITY</span><h2>Tell APEX what loads exist.</h2></div></div><p className="a3-muted">Equipment availability answers whether you have the machine. Load availability answers which actual loads you can select. APEX will never recommend a value outside a configured list.</p>{loadEquipment.length?loadEquipment.map(item=><div key={item} className="a3-stack"><label>{item.replace(/_/g,' ')}<input value={loadInputs[item]||''} onChange={e=>setLoadInputs(x=>({...x,[item]:e.target.value}))} placeholder="5, 7.5, 10, 12.5, 15…" inputMode="decimal"/></label><button className="a3-pill" onClick={()=>saveLoadAvailability(item)}>Save loads</button></div>):<div className="a3-card a3-callout"><Icon name="settings"/><div><strong>No external-load equipment configured.</strong><p>Add equipment in your training profile before configuring load options.</p></div></div>}</section>
+ <section id="settings-notifications" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">NOTIFICATIONS</span><h2>Useful, never noisy.</h2></div></div><p className="a3-muted">APEX only prepares action-oriented reminders. You can disable any category without affecting training data.</p>
+  <label className="a3-toggle"><span>Notifications enabled</span><input type="checkbox" aria-label="Notifications enabled" checked={s.preferences.notifications.enabled} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,enabled:e.target.checked}}}))}/></label>
+  <label className="a3-toggle"><span>Workout reminders</span><input type="checkbox" aria-label="Workout reminders" checked={s.preferences.notifications.workoutReminders} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,workoutReminders:e.target.checked}}}))}/></label>
+  <label className="a3-toggle"><span>Missed workout follow-up</span><input type="checkbox" aria-label="Missed workout follow-up" checked={s.preferences.notifications.missedWorkout} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,missedWorkout:e.target.checked}}}))}/></label>
+  <label className="a3-toggle"><span>Weekly review</span><input type="checkbox" aria-label="Weekly review" checked={s.preferences.notifications.weeklyReview} onChange={e=>update(x=>({...x,preferences:{...x.preferences,notifications:{...x.preferences.notifications,weeklyReview:e.target.checked}}}))}/></label></section>
+ <section className="a3-card a3-stack"><div className="a3-head"><div><span className="a3-eyebrow">NOTIFICATION PLAN</span><h2>Prepared from your context.</h2></div></div><p className="a3-muted">These are deterministic notification intents. Native scheduling and delivery stays behind the platform adapter, so training logic never depends on a notification service.</p><div className="a3-list">{notificationPreview.map(n=><div className="a3-card a3-row" key={n.id}><div><span className="a3-eyebrow">{n.kind}</span><strong>{n.title}</strong><small>{n.body}</small></div></div>)}{!notificationPreview.length&&<Empty title="No reminder needed" text="APEX will not create a notification unless your enabled rules and current training context call for one."/>}</div></section>
+ <section id="settings-units" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">UNITS</span><h2>Weights and lengths.</h2></div></div><p className="a3-muted">Your records are stored consistently. Units only change how loads, volume, body weight and measurements are shown and entered.</p><div className="a3-choices" role="group" aria-label="Unit system">{([['metric','Metric','kg · cm'],['imperial','Imperial','lb · in']] as const).map(([id,name,note])=><button key={id} aria-pressed={(s.preferences.units||'metric')===id} className={(s.preferences.units||'metric')===id?'selected':''} onClick={()=>update(x=>({...x,preferences:{...x.preferences,units:id}}))}><strong>{name}</strong><small>{note}</small></button>)}</div></section>
+ <section id="settings-appearance" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">APPEARANCE</span><h2>Choose your look.</h2></div></div><div className="a3-themes" role="radiogroup" aria-label="Theme">{([['apex','Apex','Cinematic. Balanced.'],['classic','Classic Gold','Warm. Timeless.'],['steel','Steel','Clean. Technical.'],['aurora','Aurora','Futuristic. Calm.'],['crimson','Crimson','Bold. Intense.']] as const).map(([id,name,note])=><button key={id} role="radio" aria-checked={(s.preferences.theme||'apex')===id} data-theme-swatch={id} className={`a3-theme ${(s.preferences.theme||'apex')===id?'selected':''}`} onClick={()=>update(x=>({...x,preferences:{...x.preferences,theme:id}}))}><i className="a3-theme-preview" aria-hidden="true"><ApexImage kind="strength-session" alt=""/><b>Aa</b><u/><s/></i><span><strong>{name}</strong><small>{note}</small></span>{(s.preferences.theme||'apex')===id&&<Icon name="check" size={16}/>}</button>)}</div></section>
+ <section id="settings-accessibility" className="a3-card a3-stack a3-settings-anchor"><div className="a3-head"><div><span className="a3-eyebrow">ACCESSIBILITY & FEEDBACK</span><h2>Make APEX comfortable to use.</h2></div></div>
+  <label className="a3-toggle"><span>Reduce motion</span><input type="checkbox" aria-label="Reduce motion" checked={s.preferences.reducedMotion} onChange={e=>update(x=>({...x,preferences:{...x.preferences,reducedMotion:e.target.checked}}))}/></label>
+  <label className="a3-toggle"><span>High contrast</span><input type="checkbox" aria-label="High contrast" checked={s.preferences.highContrast} onChange={e=>update(x=>({...x,preferences:{...x.preferences,highContrast:e.target.checked}}))}/></label>
+  <label className="a3-toggle"><span>Text size</span><select value={s.preferences.fontScale} onChange={e=>update(x=>({...x,preferences:{...x.preferences,fontScale:e.target.value as AppState["preferences"]["fontScale"]}}))}><option value="system">System</option><option value="large">Large</option><option value="larger">Larger</option></select></label>
+  <label className="a3-toggle"><span>Haptics</span><input type="checkbox" aria-label="Haptics" checked={s.preferences.haptics} onChange={e=>update(x=>({...x,preferences:{...x.preferences,haptics:e.target.checked}}))}/></label>
+  <label className="a3-toggle"><span>Workout sounds</span><input type="checkbox" aria-label="Workout sounds" checked={s.preferences.sounds} onChange={e=>update(x=>({...x,preferences:{...x.preferences,sounds:e.target.checked}}))}/></label><p className="a3-muted">Android system font scaling and screen-reader semantics are respected where the platform provides them.</p></section>
+ {(()=>{const k=knowledgeReport(s), issues=inspectState(s), errors=issues.filter(x=>x.severity==='error').length, warnings=issues.filter(x=>x.severity==='warning').length;return <section className="a3-block"><div className="a3-head"><div><span className="a3-eyebrow">SYSTEM HEALTH</span><h2>Trust the record.</h2></div></div><div className="a3-stats"><Metric label="Canonical exercises" value={String(k.exerciseCount)} sub={k.errors===0?'knowledge valid':`${k.errors} errors`}/><Metric label="State errors" value={String(errors)} sub={warnings?`${warnings} warnings`:'no warnings'}/><Metric label="Stored events" value={String(s.eventLog?.length||0)} sub="local audit trail"/></div>{(k.warnings>0||warnings>0)&&<div className="a3-card a3-callout"><Icon name="settings"/><div><strong>Review recommended</strong><p>{k.warnings+warnings} non-blocking integrity or knowledge warnings are present. APEX keeps them visible instead of silently rewriting your history.</p></div></div>}{errors===0&&k.errors===0&&<p className="a3-muted">No blocking data-integrity or canonical-knowledge errors detected in the current local state.</p>}</section>})()}
+ <div className="a3-list"><ListRow title="Today" sub="Daily overview" icon="calendar" click={()=>nav('today')}/><ListRow title="Nutrition" sub="Protein, water and meals" icon="activity" click={()=>nav('nutrition')}/><ListRow title="Goals"  sub={`${s.goals.length} active/history goals`} icon="target" click={()=>nav('goals')}/><ListRow title="Body measurements" sub={`${s.measurements.length} logged entries`} icon="chart" click={()=>nav('measurements')}/><ListRow title="Plan Studio" sub="Structure and future sessions" icon="target" click={()=>nav('plan')}/><ListRow title="Exercise Library" sub={`${s.exercises.length} canonical movements`} icon="search" click={()=>nav('library')}/><ListRow title="Templates" sub={`${s.workoutTemplates?.length||0} saved templates`} icon="train" click={()=>nav('templates')}/><ListRow title="Coach" sub="Explain local evidence" icon="bolt" click={()=>nav('coach')}/><ListRow title="Learn" sub="Glossary and training concepts" icon="chart" click={()=>nav('learn')}/><ListRow title="Edit profile" sub="Change your name or training context" icon="user" click={()=>setEditing(!editing)}/><ListRow title="Reset personal intelligence" sub={`${s.observations.length} observations · raw history preserved`} icon="settings" click={()=>update(x=>({...x,observations:[]}))}/><ListRow title="Reset app data" sub="Delete local APEX state" icon="settings" click={()=>{if(confirm('Delete all local APEX data? This cannot be undone without a backup.')){repository.reset();location.reload()}}}/></div></div>}
+function Command({nav,setQuery,close}:{nav:(r:string)=>void;setQuery:(x:string)=>void;close:()=>void}){const [q,setQ]=useState('');const run=(raw=q)=>{const x=raw.toLowerCase();if(x.includes('progress'))nav('progress');else if(x.includes('history')||x.includes('last workout'))nav('history');else if(x.includes('goal'))nav('goals');else if(x.includes('measurement')||x.includes('body data'))nav('measurements');else if(x.includes('plan'))nav('plan');else if(x.includes('coach')||x.includes('why'))nav('coach');else if(x.includes('template'))nav('templates');else if(x.includes('learn')||x.includes('rir'))nav('learn');else if(x.includes('exercise')||x.includes('squat')||x.includes('press')||x.includes('row')){setQuery(raw);nav('library')}else nav('home');close()};return <Modal title="Command Center" close={close}><div className="a3-search"><Icon name="search"/><input autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run()} placeholder="Find, explain, navigate…"/><button onClick={()=>run()}>Go</button></div><div className="a3-list a3-picklist">{['Show my progress','Find chest press exercises','Open my plan','Explain RIR','Open templates'].map(x=><button key={x} onClick={()=>run(x)}>{x}<Icon name="chev"/></button>)}</div></Modal>}
+function Detail({title,children}:{title:string;children:React.ReactNode}){return <div className="a3-card a3-stack"><span className="a3-eyebrow">{title}</span>{children}</div>}
+function Metric({label,value,sub}:{label:string;value:string;sub:string}){return <div className="a3-card a3-stat"><span className="a3-eyebrow">{label}</span><strong>{value}</strong><small>{sub}</small></div>}
+function ListRow({title,sub,icon,click}:{title:string;sub:string;icon:string;click:()=>void}){return <button className="a3-card a3-row a3-tap" onClick={click}><span className="a3-rowicon"><Icon name={icon}/></span><span><strong>{title}</strong><small>{sub}</small></span><Icon name="chev"/></button>}
 function NavItem({active,icon,label,click}:{active:boolean;icon:string;label:string;click:()=>void}){return <button aria-current={active?'page':undefined} className={`nav-item ${active?'active':''}`} onClick={click}><Icon name={icon}/><span>{label}</span></button>}
-function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <div className="page-title premium-page-title"><span className="eyebrow">{eyebrow}</span><h1><span className="page-title-accent">{title}</span></h1><p className="page-title-copy">{sub}</p></div>}
-function Empty({title,text}:{title:string;text:string}){return <div className="empty"><Icon name="bolt"/><strong>{title}</strong><p>{text}</p></div>}
-function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="modal-backdrop modal-transition premium-modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="modal premium-modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="modal-head"><h2 id="apex-modal-title">{title}</h2><button className="icon-btn" title="Close" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>}
-createRoot(document.getElementById('root')!).render(<App/>);
+function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">{eyebrow}</span><h1>{title}</h1><p className="a3-muted">{sub}</p></header>}
+/* Plan names may be generated in capitals; the reference shows editorial title case. */
+const niceName=(n:string)=>n&&n===n.toUpperCase()?n.toLowerCase().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' '):n;
+function Empty({title,text,action}:{title:string;text:string;action?:{label:string;onClick:()=>void}}){return <div className="a3-card a3-empty"><Icon name="bolt"/><strong>{title}</strong><p>{text}</p>{action&&<button className="a3-cta" onClick={action.onClick}>{action.label} <Icon name="arrow" size={16}/></button>}</div>}
+/* Changing numbers re-key on value so a short fade/slide plays; CSS disables it for reduced motion. */
+function Num({value}:{value:React.ReactNode}){return <span className="a3-num" key={String(value)}>{value}</span>}
+function BumpInput(props:React.InputHTMLAttributes<HTMLInputElement>){
+ const ref=useRef<HTMLInputElement>(null);const first=useRef(true);
+ useEffect(()=>{if(first.current){first.current=false;return}const el=ref.current;if(!el)return;el.classList.remove('a3-bump');void el.offsetWidth;el.classList.add('a3-bump')},[props.value]);
+ return <input ref={ref} {...props}/>
+}
+type StateKind='loading'|'empty'|'error'|'success'|'pr';
+/* One reusable full-panel state: loading, empty, error, success and PR celebration share layout and motion. */
+function StateView({kind,title,text,detail,progress,primary,secondary}:{kind:StateKind;title:string;text?:string;detail?:string;progress?:number;primary?:{label:string;onClick:()=>void};secondary?:{label:string;onClick:()=>void}}){
+ const icon=kind==='error'?'alert':kind==='pr'?'crown':kind==='success'?'check':kind==='empty'?'dumbbell':'bolt';
+ return <section className={`a3-stateview is-${kind}`} role={kind==='error'?'alert':'status'} aria-live={kind==='error'?'assertive':'polite'}>
+  {kind==='pr'&&<span className="a3-pr-rays" aria-hidden="true"/>}
+  <span className="a3-state-icon" aria-hidden="true">{kind==='loading'?<img src="/brand/apex-mark-gold.png" alt=""/>:<Icon name={icon} size={kind==='pr'?40:kind==='error'||kind==='empty'?56:34}/>}</span>
+  <h2>{title}</h2>
+  {detail&&<strong className="a3-state-detail">{detail}</strong>}
+  {text&&<p>{text}</p>}
+  {kind==='loading'&&<div className={`a3-state-bar ${progress===undefined?'is-indeterminate':''}`} role="progressbar" aria-label="Loading" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress===undefined?undefined:Math.round(progress)}><i style={progress===undefined?undefined:{width:`${Math.max(0,Math.min(100,progress))}%`}}/>{progress!==undefined&&<small>{Math.round(progress)}%</small>}</div>}
+  {primary&&<button className={kind==='error'?'a3-cta a3-danger':'a3-cta'} onClick={primary.onClick}>{primary.label}</button>}
+  {secondary&&<button className="a3-ghost" onClick={secondary.onClick}>{secondary.label}</button>}
+ </section>
+}
+const LoadingPanel=({progress}:{progress?:number})=><main className="a3-errorpage"><StateView kind="loading" title="Loading your workout…" text="Preparing your personalised training experience." progress={progress}/></main>;
+const ErrorPanel=({onRetry,onBack}:{onRetry:()=>void;onBack:()=>void})=><main className="a3-errorpage"><StateView kind="error" title="Something went wrong" text="We couldn't load your data. Please check your connection and try again. Your training data is stored on this device and has not been changed." primary={{label:'Try Again',onClick:onRetry}} secondary={{label:'Go Back',onClick:onBack}}/></main>;
+class ApexErrorBoundary extends React.Component<{children:React.ReactNode},{failed:boolean}>{
+ state={failed:false};
+ static getDerivedStateFromError(){return {failed:true}}
+ render(){return this.state.failed
+  ?<div className="app" data-theme="apex"><ErrorPanel onRetry={()=>this.setState({failed:false})} onBack={()=>{try{history.back()}catch{}this.setState({failed:false})}}/></div>
+  :this.props.children}
+}
+function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){
+ /* Portal to .app: screen wrappers animate with transforms, which would otherwise become the containing block for this fixed sheet. */
+ return createPortal(<div className="a3-modal-backdrop modal-transition" onMouseDown={e=>e.currentTarget===e.target&&close()}><div className="a3-modal" role="dialog" aria-modal="true" aria-labelledby="apex-modal-title"><div className="a3-modal-head"><h2 id="apex-modal-title">{title}</h2><button className="a3-iconbtn" title="Close" aria-label="Close dialog" onClick={close}>×</button></div>{children}</div></div>,document.querySelector('.app')||document.body)}
+/* Dev-only: ?apexState=loading|error renders those panels for visual review. Stripped from production builds. */
+const previewState=import.meta.env.DEV?new URLSearchParams(location.search).get('apexState'):null;
+createRoot(document.getElementById('root')!).render(<ApexErrorBoundary>{previewState==='error'?<div className="app" data-theme="apex"><ErrorPanel onRetry={()=>{}} onBack={()=>{}}/></div>:previewState==='loading'?<div className="app" data-theme="apex"><LoadingPanel progress={72}/></div>:<App/>}</ApexErrorBoundary>);

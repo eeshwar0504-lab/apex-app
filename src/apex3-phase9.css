@@ -1,31 +1,14 @@
 /* ============================================================
    APEX 3.0 — PHASE 9 / COMPLETION + SESSION REVIEW
    Refines review cards and completion states without altering logic.
-   ============================================================ */
-
-.completion,
-.transition-card,
+   ============================================================ */.completion,
 .feedback-card,
-.recover-card,
-.session-review,
-.summary-card {
+.session-review{
   border: 1px solid rgba(217,173,85,0.15);
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(15,17,19,0.96), rgba(10,12,14,0.98));
   box-shadow: 0 18px 52px rgba(0,0,0,0.26);
-}
-
-.completion strong,
-.summary-card strong,
-.session-review h2 {
+}.completion strong,
+.session-review h2{
   color: #f0c56f;
-}
-
-.summary-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.summary-card {
-  padding: 16px;
 }

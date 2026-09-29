@@ -5,18 +5,13 @@
 
 :root {
   --apex3-workout-strong: #f3d27f;
-}
-
-.workout-shell,
+}.workout-shell,
 .workout-note textarea,
 .exercise-card,
 .exercise-title,
 .set-editor,
 .set-actions .mini-btn,
-.rest-panel,
-.rest-actions button,
-.load-readout,
-.set-control input {
+.set-control input{
   border-radius: 18px;
 }
 
@@ -55,25 +50,12 @@
   margin: 12px 0 18px;
 }
 
-.rest-panel {
-  padding: 18px 18px 16px;
-  border: 1px solid rgba(217,173,85,0.2);
-  background: linear-gradient(135deg, rgba(30,24,12,0.8), rgba(14,15,16,0.94));
-}
-
-.rest-panel strong {
-  color: var(--apex3-workout-strong);
-}
-
 .set-editor {
   border: 1px solid rgba(217,173,85,0.12);
   background: rgba(16,18,20,0.96);
-}
-
-.set-actions .mini-btn,
-.rest-actions button,
+}.set-actions .mini-btn,
 .exercise-actions .mini-btn,
-.set-add .mini-btn {
+.set-add .mini-btn{
   background: rgba(15,17,18,0.96);
 }
 

@@ -1,14 +1,34 @@
 :root {
+  --apex3-header-h: 48px;
+  --apex3-header-total: calc(var(--apex3-header-h) + max(12px, var(--apex-safe-top)));
+  --apex3-nav-total: calc(76px + var(--apex-safe-bottom));
+  /* legacy --apex-* tokens resolve to the APEX 3.0 palette */
+  --apex-bg: var(--apex3-bg);
+  --apex-surface: var(--apex3-surface);
+  --apex-panel: var(--apex3-surface);
+  --apex-surface-2: var(--apex3-surface-raised);
+  --apex-surface-3: var(--apex3-surface-strong);
+  --apex-border: var(--apex3-line);
+  --apex-border-soft: var(--apex3-line-soft);
+  --apex-text: var(--apex3-text);
+  --apex-muted: var(--apex3-muted);
+  --apex-dim: var(--apex3-dim);
+  --apex-gold: var(--apex3-gold);
+  --apex-gold-strong: var(--apex3-gold-bright);
+  --apex-steel: var(--apex3-steel);
+  --apex-red: var(--apex3-signal);
   --apex3-bg: #07090a;
   --apex3-surface: #0d1011;
   --apex3-surface-raised: #141819;
   --apex3-surface-strong: #1b2021;
   --apex3-text: #f2f0e9;
   --apex3-muted: #a09f98;
-  --apex3-dim: #747671;
+  --apex3-dim: #8a8c86;
   --apex3-line: rgba(225, 218, 202, 0.12);
   --apex3-line-soft: rgba(225, 218, 202, 0.07);
   --apex3-gold: #d8ad58;
+  --apex3-gold-rgb: 216, 173, 88;
+  --apex3-glow2-rgb: 94, 121, 126;
   --apex3-gold-bright: #f1d18c;
   --apex3-steel: #91a3a6;
   --apex3-signal: #d17c72;
@@ -25,68 +45,81 @@
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 12px;
+  gap: 14px;
   overflow: hidden;
-  background: #07090a;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(var(--apex3-gold-rgb), 0.12), transparent 24rem),
+    linear-gradient(180deg, #05070a 0%, var(--apex3-bg) 100%);
   color: var(--apex3-text);
   animation: apex3-splash-out 420ms 2.85s var(--apex3-ease) forwards;
 }
 
-.apex3-splash::before,
+.a3-splash-ridge { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 58%; animation: apex3-splash-light 1.8s var(--apex3-ease) both; }
+
 .apex3-splash::after {
+  content: "";
   position: absolute;
-  content: '';
+  top: auto;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  width: min(52vw, 220px);
+  height: 2px;
   pointer-events: none;
-}
-
-.apex3-splash::before {
-  inset: -18%;
-  background:
-    linear-gradient(132deg, transparent 0 47%, rgba(221, 183, 108, 0.11) 47.15%, transparent 47.55%),
-    linear-gradient(154deg, transparent 0 58%, rgba(142, 162, 165, 0.08) 58.15%, transparent 58.55%),
-    radial-gradient(ellipse at 55% 44%, rgba(218, 174, 88, 0.13), transparent 22rem);
-  animation: apex3-splash-light 1.8s var(--apex3-ease) both;
-}
-
-.apex3-splash::after {
-  width: min(48vw, 460px);
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(241, 209, 140, 0.68), transparent);
-  animation: apex3-splash-line 1.15s 500ms var(--apex3-ease) both;
+  background: linear-gradient(90deg, transparent, rgba(var(--apex3-gold-rgb), 0.7), transparent);
+  animation: apex3-splash-line 1.15s 700ms var(--apex3-ease) both;
 }
 
 .apex3-splash img {
   position: relative;
   z-index: 1;
-  width: clamp(94px, 18vw, 132px);
-  height: clamp(94px, 18vw, 132px);
+  width: clamp(104px, 30vw, 150px);
+  height: clamp(104px, 30vw, 150px);
   object-fit: contain;
-  filter: drop-shadow(0 0 30px rgba(216, 173, 88, 0.23));
+  filter: drop-shadow(0 0 30px rgba(var(--apex3-gold-rgb), 0.3));
   animation: apex3-splash-mark 850ms var(--apex3-ease) both;
 }
 
 .apex3-splash b {
   position: relative;
   z-index: 1;
-  font: 600 18px/1 var(--apex-mono);
-  letter-spacing: 0.34em;
-  margin-left: 0.34em;
-  animation: apex3-splash-word 700ms 240ms var(--apex3-ease) both;
+  margin-left: 0.4em;
+  font-family: var(--a3-serif);
+  font-size: clamp(44px, 15vw, 72px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.4em;
+  animation: apex3-splash-word 800ms 240ms var(--apex3-ease) both;
+}
+
+.a3-splash-tag {
+  position: relative;
+  z-index: 1;
+  margin-top: 6px;
+  font-size: clamp(9px, 2.6vw, 11px);
+  font-weight: 600;
+  letter-spacing: 0.4em;
+  color: var(--apex3-text);
+  text-align: center;
+  display: grid;
+  gap: 6px;
+  line-height: 1.2;
+  margin-top: 14px;
+  animation: apex3-splash-word 600ms 520ms var(--apex3-ease) both;
 }
 
 .apex3-splash small {
   position: relative;
   z-index: 1;
-  color: var(--apex3-muted);
-  font: 600 8px/1.5 var(--apex-mono);
+  color: var(--apex3-dim);
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  animation: apex3-splash-word 550ms 420ms var(--apex3-ease) both;
+  animation: apex3-splash-word 550ms 620ms var(--apex3-ease) both;
 }
 
 @keyframes apex3-splash-light {
-  from { opacity: 0; transform: scale(1.08); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translateY(14px) scale(1.04); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes apex3-splash-line {
@@ -96,12 +129,12 @@
 
 @keyframes apex3-splash-mark {
   from { opacity: 0; transform: translateY(12px) scale(0.94); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes apex3-splash-word {
   from { opacity: 0; transform: translateY(7px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes apex3-splash-out {
@@ -110,10 +143,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .apex3-splash,
-  .apex3-splash::before,
   .apex3-splash::after,
+  .a3-splash-ridge,
   .apex3-splash img,
   .apex3-splash b,
+  .a3-splash-tag,
   .apex3-splash small {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
@@ -121,12 +155,109 @@
   }
 }
 
+/* ---------- FOUNDATION: single document scroll container ----------
+   html is the only scroller. body/#root/.app never clip vertically; the
+   header flows with content and .bottom stays fixed to the viewport. */
+html {
+  margin: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-x: none;
+  background: var(--apex3-bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: visible;
+  color: var(--apex3-text);
+  background: var(--apex3-bg);
+  font-family: Inter, var(--apex-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
 .app {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding-top: var(--apex3-header-total);
+  overflow-x: clip;
+  overflow-y: visible;
   color: var(--apex3-text);
   background:
-    radial-gradient(ellipse at 76% -14%, rgba(216, 173, 88, 0.11), transparent 34rem),
-    radial-gradient(ellipse at 10% 32%, rgba(94, 121, 126, 0.08), transparent 32rem),
+    radial-gradient(ellipse at 76% -14%, rgba(var(--apex3-gold-rgb), 0.11), transparent 34rem),
+    radial-gradient(ellipse at 10% 32%, rgba(var(--apex3-glow2-rgb), 0.08), transparent 32rem),
     linear-gradient(180deg, #080a0b 0%, var(--apex3-bg) 58%, #080a0b 100%);
+}
+
+/* Fixed chrome: header and nav sit outside the flow; .main clears both. */
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--apex3-header-total);
+  min-height: 0;
+  padding: max(12px, var(--apex-safe-top)) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+  align-items: center;
+}
+
+.main {
+  flex: 1 1 auto;
+  width: min(1180px, 100%);
+  min-width: 0;
+  margin-inline: auto;
+  box-sizing: border-box;
+  padding: 0 clamp(16px, 4vw, 52px) calc(var(--apex3-nav-total) + 24px);
+  overflow: visible;
+}
+
+.bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: var(--apex3-nav-total);
+  margin: 0;
+  transform: none;
+}
+
+.app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.2;
+  background:
+    linear-gradient(115deg, transparent 0 48%, rgba(255, 255, 255, 0.025) 49%, transparent 50%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+  background-size: 100% 100%, 72px 72px;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
 }
 
 .eyebrow,
@@ -221,14 +352,14 @@
 }
 
 .badge {
-  border-color: rgba(216, 173, 88, 0.3);
-  background: rgba(216, 173, 88, 0.08);
+  border-color: rgba(var(--apex3-gold-rgb), 0.3);
+  background: rgba(var(--apex3-gold-rgb), 0.08);
   color: var(--apex3-gold-bright);
 }
 
 .goal-ring {
   color: var(--apex3-gold-bright);
-  border-color: rgba(216, 173, 88, 0.45);
+  border-color: rgba(var(--apex3-gold-rgb), 0.45);
 }
 
 .apex-progress i,
@@ -355,8 +486,8 @@
 }
 
 .weight-range-control button.selected {
-  border-color: rgba(216, 173, 88, 0.45);
-  background: rgba(216, 173, 88, 0.1);
+  border-color: rgba(var(--apex3-gold-rgb), 0.45);
+  background: rgba(var(--apex3-gold-rgb), 0.1);
   color: var(--apex3-gold-bright);
 }
 
@@ -465,3 +596,1353 @@
     transition: none;
   }
 }
+
+/* ---------- TEXT SCALING ----------
+   System/Large/Larger reflow the layout. Only text tokens scale (--apex3-fs);
+   grids collapse, fixed-height cards grow, and display values are capped so
+   the type hierarchy holds at 360px and 412px. */
+.app { --apex3-fs: 1; }
+.app.font-large { --apex3-fs: 1.1; }
+.app.font-larger { --apex3-fs: 1.18; }
+
+.app:is(.font-large,.font-larger) {
+  line-height: 1.45;
+}
+
+/* Small labels and captions: raise the floor so they stay legible. */
+.app:is(.font-large,.font-larger) :is(.eyebrow, .badge, .chip, small, .metric span, .apex-stat-board span, .apex-signal-grid span, .apex-interpret-grid span, .apex-two-readouts span, .apex-status-chip span) {
+  font-size: calc(11px * var(--apex3-fs));
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+}
+
+.app:is(.font-large,.font-larger) .apex-quick-grid b {
+  font-size: calc(13px * var(--apex3-fs));
+}
+
+/* Display values and headings: capped so they never crowd their labels. */
+.app:is(.font-large,.font-larger) .metric strong { font-size: clamp(22px, 6.5vw, 30px); }
+.app:is(.font-large,.font-larger) .apex-stat-board strong { font-size: clamp(24px, 7vw, 34px); }
+.app:is(.font-large,.font-larger) .apex-readout-card strong { font-size: clamp(32px, 10vw, 44px); }
+.app:is(.font-large,.font-larger) .apex-command-hero h1 { font-size: clamp(34px, 10vw, 56px); line-height: 1.02; }
+.app:is(.font-large,.font-larger) .screen-page h1 { font-size: clamp(28px, 8vw, 46px); line-height: 1.08; }
+.app:is(.font-large,.font-larger) .screen-page h2 { font-size: clamp(20px, 5.5vw, 30px); line-height: 1.15; }
+.app:is(.font-large,.font-larger) .screen-page h3 { font-size: clamp(16px, 4.5vw, 22px); line-height: 1.2; }
+
+.app:is(.font-large,.font-larger) :is(.metric strong, .apex-stat-board strong, .apex-readout-card strong, h1, h2, h3, p, b, span, small, button, label) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Multi-column metric layouts reflow by available width, not column count. */
+.app:is(.font-large,.font-larger) :is(.metric-strip, .apex-stat-board, .apex-signal-grid, .apex-interpret-grid, .apex-two-readouts, .apex-insight-grid, .apex-quick-grid, .apex-tool-strip, .apex-principles, .apex-coach-rail, .profile-overview, .history-overview, .weight-trend-summary, .session-review-metrics, .focus-prescription, .focus-prescription-meta, .focus-set-summary, .quick-grid, .equipment) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+}
+
+.app:is(.font-large,.font-larger) :is(.focused-set-fields, .feedback-actions, .feedback-edit-row, .set-control, .energy-grid) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr));
+}
+
+/* Fixed-height cards grow with their text. */
+.app:is(.font-large,.font-larger) :is(.metric, .apex-stat-board article, .apex-signal-grid article, .apex-interpret-grid article, .apex-quick-grid > button, .apex-readout-card, .apex-session-card, .apex-coach-card, .apex-goal-card, .apex-insight, .apex-status-chip, .exercise-tile, .quick) {
+  height: auto;
+  min-height: 0;
+}
+
+/* Controls wrap instead of overflowing. */
+.app:is(.font-large,.font-larger) :is(button, .mini-btn, .chip, .badge) {
+  height: auto;
+  min-height: 44px;
+  white-space: normal;
+  line-height: 1.2;
+}
+
+.app:is(.font-large,.font-larger) :is(.button-row, .command-row, .apex-hero-actions, .apex-command-meta, .top-actions) {
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app:is(.font-large,.font-larger) :is(.button-row, .apex-hero-actions) > * {
+  flex: 1 1 140px;
+}
+
+/* Fixed chrome stays fixed: header drops decoration, nav labels stay one line. */
+.app:is(.font-large,.font-larger) :is(.brand-caption, .apex-top-status) {
+  display: none;
+}
+
+.app:is(.font-large,.font-larger) .bottom .nav-item {
+  min-width: 0;
+}
+
+.app:is(.font-large,.font-larger) .bottom .nav-item span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: calc(10px * var(--apex3-fs));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .app:is(.font-large,.font-larger) :is(.metric-strip, .apex-stat-board, .apex-signal-grid, .apex-interpret-grid, .apex-two-readouts, .apex-quick-grid, .apex-tool-strip) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  }
+}
+
+/* ---------- APEX 3.0 PRIMITIVES + HOME ----------
+   .a3-* are the reusable presentation primitives: eyebrow, card, stat,
+   ring, cta, link, list row. Home composes them; other screens can too. */
+:root {
+  --a3-serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --a3-gold-fill: linear-gradient(180deg, var(--apex3-gold-bright) 0%, var(--apex3-gold) 100%);
+  --a3-card-bg: linear-gradient(160deg, rgba(27, 32, 33, 0.92), rgba(13, 16, 17, 0.96));
+}
+
+.a3-eyebrow {
+  display: block;
+  font-size: calc(11px * var(--apex3-fs));
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--apex3-muted);
+}
+
+.a3-gold { color: var(--apex3-gold); }
+.a3-muted { color: var(--apex3-muted); }
+
+.a3-card {
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 16px;
+  background: var(--a3-card-bg);
+  color: var(--apex3-text);
+  box-shadow: var(--apex3-shadow-surface);
+  text-align: left;
+}
+
+.a3-tap { cursor: pointer; font: inherit; }
+
+.a3-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 6px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--apex3-gold);
+  font: inherit;
+  font-size: calc(13px * var(--apex3-fs));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.a3-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 18px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--a3-gold-fill);
+  color: #15110a;
+  font: inherit;
+  font-size: calc(15px * var(--apex3-fs));
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(var(--apex3-gold-rgb), 0.22);
+}
+
+.a3-home {
+  display: grid;
+  gap: 18px;
+  padding-top: 20px;
+  min-width: 0;
+}
+
+.a3-greet h1 {
+  margin: 6px 0 0;
+  font-family: var(--a3-serif);
+  font-size: clamp(28px, 8vw, 40px);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--apex3-text);
+}
+
+.a3-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 300px;
+  display: flex;
+  align-items: flex-end;
+  border: 1px solid rgba(var(--apex3-gold-rgb), 0.28);
+  border-radius: 20px;
+  background: var(--apex3-surface);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+.a3-hero-image,
+.a3-hero-image img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  object-fit: cover;
+}
+
+.a3-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 80% 0%, rgba(var(--apex3-gold-rgb), 0.22), transparent 55%),
+    linear-gradient(180deg, rgba(7, 9, 10, 0.25) 0%, rgba(7, 9, 10, 0.78) 55%, rgba(7, 9, 10, 0.97) 100%);
+}
+
+.a3-hero-body {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 20px;
+}
+
+.a3-hero-body h2 {
+  margin: 8px 0 4px;
+  font-family: var(--a3-serif);
+  font-size: clamp(30px, 9vw, 42px);
+  font-weight: 500;
+  line-height: 1.05;
+  color: var(--apex3-text);
+}
+
+.a3-hero-body p { margin: 4px 0 0; font-size: calc(14px * var(--apex3-fs)); }
+
+.a3-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--apex3-muted);
+}
+
+.a3-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr));
+  gap: 10px;
+}
+
+.a3-stat { display: grid; gap: 8px; padding: 14px; }
+
+.a3-stat strong {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: clamp(22px, 6.5vw, 28px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--apex3-text);
+}
+
+.a3-stat small { font-size: calc(12px * var(--apex3-fs)); font-weight: 500; color: var(--apex3-muted); }
+
+.a3-coach {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  border-color: rgba(var(--apex3-gold-rgb), 0.26);
+}
+
+.a3-coach-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(var(--apex3-gold-rgb), 0.45);
+  border-radius: 12px;
+  color: var(--apex3-gold);
+  background: rgba(var(--apex3-gold-rgb), 0.08);
+}
+
+.a3-coach h3 { margin: 6px 0 4px; font-size: calc(17px * var(--apex3-fs)); font-weight: 600; line-height: 1.25; }
+.a3-coach p { margin: 0 0 6px; color: var(--apex3-text); font-size: calc(14px * var(--apex3-fs)); }
+.a3-coach small { display: block; margin-bottom: 8px; color: var(--apex3-muted); font-size: calc(12px * var(--apex3-fs)); line-height: 1.4; }
+
+.a3-rings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 10px;
+}
+
+.a3-ring-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.a3-ring { width: 64px; height: 64px; transform: rotate(-90deg); }
+.a3-ring circle { fill: none; stroke: rgba(225, 218, 202, 0.1); stroke-width: 6; }
+.a3-ring .a3-ring-fill { stroke: var(--apex3-gold); stroke-linecap: round; transition: stroke-dashoffset 600ms var(--apex3-ease); }
+
+.a3-ring-value {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 64px;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: calc(14px * var(--apex3-fs));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.a3-ring-copy { display: grid; gap: 3px; min-width: 0; }
+.a3-ring-copy strong { font-size: calc(14px * var(--apex3-fs)); font-weight: 600; }
+.a3-ring-copy small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-block { display: grid; gap: 10px; min-width: 0; }
+
+.a3-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.a3-head h2 { margin: 0; font-size: calc(18px * var(--apex3-fs)); font-weight: 600; }
+
+.a3-list { display: grid; gap: 8px; }
+
+.a3-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+}
+
+.a3-row:not(:has(> svg)) { grid-template-columns: auto minmax(0, 1fr); }
+.a3-row strong { display: block; font-size: calc(14px * var(--apex3-fs)); font-weight: 600; }
+.a3-row p { margin: 2px 0 0; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-index { font-size: calc(12px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.1em; color: var(--apex3-gold); font-variant-numeric: tabular-nums; }
+
+@media (min-width: 900px) {
+  .a3-home { gap: 22px; }
+  .a3-hero { min-height: 360px; }
+}
+
+/* ---------- TRAIN ---------- */
+.a3-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(225, 218, 202, 0.1);
+}
+
+.a3-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--a3-gold-fill);
+  transition: width 500ms var(--apex3-ease);
+}
+
+.a3-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 999px;
+  font-size: calc(11px * var(--apex3-fs));
+  font-weight: 600;
+  color: var(--apex3-muted);
+}
+
+.a3-fit-available { color: #6fcf97; border-color: rgba(111, 207, 151, 0.35); }
+.a3-fit-unknown { color: var(--apex3-gold); border-color: rgba(var(--apex3-gold-rgb), 0.35); }
+.a3-fit-unavailable { color: var(--apex3-signal); border-color: rgba(209, 124, 114, 0.4); }
+
+.a3-session { display: grid; gap: 12px; border-color: rgba(var(--apex3-gold-rgb), 0.28); }
+.a3-session .a3-cta { margin-top: 6px; }
+
+.a3-session-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.a3-session-head .a3-meta { margin: 6px 0 0; font-size: calc(13px * var(--apex3-fs)); }
+
+.a3-session-pct { text-align: right; }
+.a3-session-pct strong { display: block; font-size: clamp(22px, 6.5vw, 28px); font-variant-numeric: tabular-nums; }
+.a3-session-pct small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-session-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; }
+
+.a3-exercise {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+
+.a3-exercise-body { min-width: 0; display: grid; gap: 8px; }
+.a3-exercise-body > strong { font-size: calc(15px * var(--apex3-fs)); font-weight: 600; line-height: 1.25; }
+.a3-exercise-body > p { margin: -4px 0 0; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-spec {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 84px), 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.a3-spec > div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--apex3-line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.a3-spec dt { font-size: calc(10px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apex3-dim); }
+.a3-spec dd { margin: 3px 0 0; font-size: calc(14px * var(--apex3-fs)); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.a3-exercise-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+
+.a3-queue { display: grid; gap: 8px; padding: 12px 14px; }
+
+.a3-queue-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.a3-queue-main strong { display: block; font-size: calc(14px * var(--apex3-fs)); font-weight: 600; }
+.a3-queue-main small { display: block; margin-top: 2px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-queue-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.a3-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 10px;
+}
+
+.a3-tools > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  font-size: calc(14px * var(--apex3-fs));
+  font-weight: 600;
+}
+
+.a3-tools svg { color: var(--apex3-gold); flex: none; }
+
+/* ---------- BRIEF / WORKOUT / REST / COMPLETE / PROGRESS / YOU ---------- */
+.a3-stack { display: grid; gap: 12px; min-width: 0; }
+.a3-copy { display: grid; gap: 3px; min-width: 0; }
+.a3-copy strong, .a3-row > span > strong { font-size: calc(14px * var(--apex3-fs)); font-weight: 600; }
+.a3-copy small, .a3-row > span > small { display: block; margin-top: 2px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-copy em { font-size: calc(12px * var(--apex3-fs)); font-style: normal; color: var(--apex3-gold); }
+.a3-stack > p, .a3-stage > p { margin: 0; font-size: calc(14px * var(--apex3-fs)); line-height: 1.5; color: var(--apex3-muted); }
+.a3-stack h2, .a3-stack h3, .a3-stage h3, .a3-head h2 { margin: 0; font-weight: 600; }
+.a3-stack h2 { font-size: calc(18px * var(--apex3-fs)); }
+.a3-stack h3, .a3-stage h3 { font-size: calc(17px * var(--apex3-fs)); line-height: 1.25; }
+.a3-stack small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); line-height: 1.4; }
+.a3-stack label { display: grid; gap: 6px; font-size: calc(13px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-stack :is(input, select, textarea), .a3-select select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 10px;
+  background: var(--apex3-surface);
+  color: var(--apex3-text);
+  font: inherit;
+}
+
+.a3-select { display: grid; gap: 6px; }
+
+.a3-pill, .a3-actions > button:not([class]) {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--apex3-text);
+  font: inherit;
+  font-size: calc(12px * var(--apex3-fs));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.a3-iconbtn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 1px solid var(--apex3-line);
+  border-radius: 12px;
+  background: var(--apex3-surface);
+  color: var(--apex3-text);
+  cursor: pointer;
+}
+
+.a3-cta-ghost {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--apex3-line);
+  color: var(--apex3-text);
+  box-shadow: none;
+}
+
+.a3-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.a3-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.a3-actions .a3-cta { flex: 1 1 160px; width: auto; margin-top: 0; }
+
+.a3-callout { display: flex; align-items: flex-start; gap: 12px; }
+.a3-callout > svg { flex: none; color: var(--apex3-gold); margin-top: 2px; }
+.a3-callout strong { display: block; font-size: calc(14px * var(--apex3-fs)); }
+.a3-callout p { margin: 4px 0 0; font-size: calc(13px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-banner, .a3-banner img { width: 100%; height: 150px; margin: 0; object-fit: cover; border-radius: 16px; }
+.a3-banner { position: relative; overflow: hidden; }
+.a3-banner figcaption { display: none; }
+
+.a3-brief, .a3-workout, .a3-progress { display: grid; gap: 16px; padding-top: 16px; min-width: 0; }
+.a3-brief > h1, .a3-workout h1 { margin: 0; font-family: var(--a3-serif); font-size: clamp(28px, 8vw, 40px); font-weight: 500; line-height: 1.1; }
+
+.a3-warn { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--apex3-line); }
+.a3-equip-main { display: grid; gap: 12px; }
+.a3-line { display: grid; gap: 2px; }
+.a3-line strong { font-size: calc(14px * var(--apex3-fs)); }
+
+.a3-energy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 64px), 1fr)); gap: 8px; }
+.a3-energy > button {
+  display: grid;
+  gap: 2px;
+  place-items: center;
+  min-height: 56px;
+  padding: 8px 4px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 12px;
+  background: var(--apex3-surface);
+  color: var(--apex3-text);
+  font: inherit;
+  cursor: pointer;
+}
+.a3-energy > button.selected, .a3-choices > button.selected { border-color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.12); }
+.a3-energy small { font-size: calc(10px * var(--apex3-fs)); color: var(--apex3-muted); text-align: center; }
+
+.a3-stats > div, .a3-stats > article { min-width: 0; padding: 14px; border: 1px solid var(--apex3-line); border-radius: 16px; background: var(--a3-card-bg); display: grid; gap: 6px; }
+.a3-stats > div strong, .a3-stats > article strong { font-size: clamp(20px, 6vw, 26px); font-variant-numeric: tabular-nums; }
+.a3-stats > div small, .a3-stats > article small, .a3-stat > small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-stats-1 { grid-template-columns: 1fr; }
+.a3-stats-1 .a3-stat strong { font-family: inherit; font-size: calc(18px * var(--apex3-fs)); }
+.a3-stats-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.a3-topline { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.a3-topcopy { flex: 1 1 auto; min-width: 0; }
+.a3-topcopy h1 { margin: 4px 0 0; font-family: var(--a3-serif); font-size: clamp(22px, 6vw, 30px); font-weight: 500; line-height: 1.1; overflow-wrap: anywhere; }
+
+.a3-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-toolbar-progress { display: inline-flex; align-items: center; gap: 8px; }
+.a3-toolbar-progress i { display: block; width: 56px; height: 4px; border-radius: 999px; background: linear-gradient(90deg, var(--apex3-gold) var(--apex-session-progress, 0%), rgba(225, 218, 202, 0.12) 0); }
+.a3-paused { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border-color: rgba(var(--apex3-gold-rgb), 0.4); }
+.a3-paused strong { display: block; }
+.a3-paused small { color: var(--apex3-muted); }
+
+.a3-focus { display: grid; gap: 14px; border-color: rgba(var(--apex3-gold-rgb), 0.26); }
+.a3-focus-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.a3-focus-head h2 { margin: 6px 0 4px; font-family: var(--a3-serif); font-size: clamp(22px, 6.5vw, 30px); font-weight: 500; line-height: 1.1; }
+.a3-focus-head p { margin: 0; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); text-transform: capitalize; }
+
+.a3-stage { display: grid; gap: 14px; min-width: 0; }
+.a3-stage-done { justify-items: center; text-align: center; }
+.a3-setline { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.a3-settitle h3 { text-transform: capitalize; }
+.a3-settitle p { margin: 4px 0 0; font-size: calc(12px * var(--apex3-fs)); letter-spacing: 0.08em; color: var(--apex3-muted); }
+
+.a3-reco { display: grid; gap: 6px; padding: 14px; border: 1px solid rgba(var(--apex3-gold-rgb), 0.28); border-radius: 14px; background: rgba(var(--apex3-gold-rgb), 0.06); min-width: 0; }
+.a3-reco > strong, .a3-reco > b { font-size: clamp(20px, 6vw, 28px); font-weight: 600; line-height: 1.15; overflow-wrap: anywhere; }
+.a3-reco small, .a3-reco span:not(.a3-eyebrow) { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.a3-chips > span { padding: 3px 10px; border: 1px solid var(--apex3-line); border-radius: 999px; font-size: calc(11px * var(--apex3-fs)); font-weight: 600; }
+
+.a3-spec2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 84px), 1fr)); gap: 8px; }
+.a3-spec2 > div { display: grid; gap: 3px; min-width: 0; padding: 10px; border: 1px solid var(--apex3-line-soft); border-radius: 10px; background: rgba(255, 255, 255, 0.02); }
+.a3-spec2 small { font-size: calc(10px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.12em; color: var(--apex3-dim); }
+.a3-spec2 strong { font-size: calc(15px * var(--apex3-fs)); font-variant-numeric: tabular-nums; }
+
+.a3-bullets { display: grid; gap: 6px; margin: 0; padding-left: 18px; font-size: calc(14px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-bighero { display: grid; gap: 6px; padding: 18px; border: 1px solid rgba(var(--apex3-gold-rgb), 0.35); border-radius: 16px; background: radial-gradient(ellipse at 50% 0%, rgba(var(--apex3-gold-rgb), 0.16), transparent 70%); text-align: center; }
+.a3-bighero > strong { font-size: clamp(28px, 9vw, 44px); font-weight: 600; line-height: 1.05; overflow-wrap: anywhere; }
+.a3-bighero small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-donemark { display: grid; place-items: center; width: 72px; height: 72px; border: 2px solid var(--apex3-gold); border-radius: 50%; font-size: 30px; color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.08); box-shadow: 0 0 40px rgba(var(--apex3-gold-rgb), 0.18); }
+
+.a3-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: 8px; }
+.a3-choices > button { display: grid; gap: 4px; align-content: center; min-height: 64px; padding: 10px; border: 1px solid var(--apex3-line); border-radius: 12px; background: var(--apex3-surface); color: var(--apex3-text); font: inherit; text-align: center; cursor: pointer; }
+.a3-choices small { font-size: calc(11px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-rest { position: relative; display: grid; place-items: center; width: min(240px, 70vw); aspect-ratio: 1; margin: 0 auto; }
+.a3-rest-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.a3-rest-ring circle { fill: none; stroke: rgba(225, 218, 202, 0.1); stroke-width: 7; }
+.a3-rest-ring .a3-ring-fill { stroke: var(--apex3-gold); stroke-linecap: round; transition: stroke-dashoffset 400ms linear; }
+.a3-rest > strong { font-size: clamp(36px, 12vw, 52px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.a3-rest.is-done .a3-ring-fill { stroke: #6fcf97; }
+
+.a3-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.a3-toggle input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; accent-color: var(--apex3-gold); }
+.a3-toggle select { width: auto; }
+
+.a3-profile { display: flex; align-items: center; gap: 14px; }
+.a3-profile img { width: 48px; height: 48px; object-fit: contain; }
+.a3-profile strong { display: block; font-size: calc(16px * var(--apex3-fs)); }
+.a3-profile small { color: var(--apex3-muted); font-size: calc(12px * var(--apex3-fs)); }
+
+.a3-empty { display: grid; justify-items: center; gap: 6px; text-align: center; color: var(--apex3-muted); }
+.a3-empty svg { color: var(--apex3-gold); }
+.a3-empty strong { color: var(--apex3-text); font-size: calc(14px * var(--apex3-fs)); }
+.a3-empty p { margin: 0; font-size: calc(12px * var(--apex3-fs)); }
+
+.a3-rowicon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--apex3-line); color: var(--apex3-gold); }
+
+.a3-bars { display: flex; align-items: flex-end; gap: 6px; height: 150px; }
+.a3-bar-col { flex: 1 1 0; min-width: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 4px; height: 100%; text-align: center; }
+.a3-bar-col small, .a3-bar-col span { font-size: calc(9px * var(--apex3-fs)); color: var(--apex3-muted); overflow: hidden; text-overflow: ellipsis; }
+.a3-bar-col i { display: flex; align-items: flex-end; border-radius: 6px; background: rgba(225, 218, 202, 0.05); }
+.a3-bar-col b { display: block; width: 100%; border-radius: 6px; background: var(--a3-gold-fill); }
+
+.a3-meter-row { display: grid; grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: calc(12px * var(--apex3-fs)); text-transform: capitalize; }
+.a3-meter-row strong { font-variant-numeric: tabular-nums; }
+
+/* ---------- SET EDITOR / MODALS / SHEETS / OVERVIEW ---------- */
+.a3-seteditor.done { border-color: rgba(111, 207, 151, 0.4); }
+
+.a3-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr)); gap: 10px; }
+.a3-control { display: grid; gap: 8px; min-width: 0; }
+.a3-control > small { font-size: calc(10px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.12em; color: var(--apex3-dim); }
+
+.a3-stepper { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 8px; text-align: center; }
+.a3-stepper > button {
+  min-height: 48px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 12px;
+  background: var(--apex3-surface-raised);
+  color: var(--apex3-gold);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+.a3-stepper > strong { font-size: calc(16px * var(--apex3-fs)); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.a3-input, .a3-search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 10px;
+  background: var(--apex3-surface);
+  color: var(--apex3-text);
+  font: inherit;
+}
+.a3-input:focus, .a3-search input:focus { outline: 2px solid rgba(var(--apex3-gold-rgb), 0.6); outline-offset: 1px; }
+
+.a3-complete.completed { background: linear-gradient(180deg, #8fe0b0, #4fae7a); }
+
+.a3-search { display: flex; align-items: center; gap: 10px; padding: 0 12px; border: 1px solid var(--apex3-line); border-radius: 12px; background: var(--apex3-surface); }
+.a3-search > svg { flex: none; color: var(--apex3-muted); }
+.a3-search input { border: 0; background: transparent; padding-left: 0; }
+
+.a3-pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; }
+.a3-pick strong { display: block; font-size: calc(14px * var(--apex3-fs)); }
+.a3-pick small, .a3-pick em { display: block; margin-top: 2px; font-size: calc(12px * var(--apex3-fs)); font-style: normal; color: var(--apex3-muted); }
+.a3-pick em { color: var(--apex3-gold); }
+
+.a3-picklist > button:not([class]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--a3-card-bg); color: var(--apex3-text); font: inherit; text-align: left; cursor: pointer; }
+.a3-picklist strong { display: block; font-size: calc(14px * var(--apex3-fs)); }
+.a3-picklist small { display: block; margin-top: 2px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(3, 4, 5, 0.72);
+  backdrop-filter: blur(10px);
+  animation: a3-fade 220ms var(--apex3-ease) both;
+}
+
+.a3-modal {
+  box-sizing: border-box;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  width: min(100%, 640px);
+  max-height: 90dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 16px calc(24px + var(--apex-safe-bottom));
+  border: 1px solid var(--apex3-line);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  background: linear-gradient(180deg, var(--apex3-surface-raised), var(--apex3-surface));
+  color: var(--apex3-text);
+  box-shadow: 0 -24px 70px rgba(0, 0, 0, 0.5);
+  animation: a3-sheet 300ms var(--apex3-ease) both;
+}
+
+.a3-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.a3-modal-head h2 { margin: 0; font-family: var(--a3-serif); font-size: clamp(22px, 6vw, 28px); font-weight: 500; line-height: 1.15; overflow-wrap: anywhere; }
+.a3-modal ul, .a3-modal ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: calc(14px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+.a3-exhead { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.a3-rowbtn { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.a3-rowbtn em { display: block; font-size: calc(11px * var(--apex3-fs)); font-style: normal; font-weight: 600; letter-spacing: 0.12em; color: var(--apex3-gold); }
+.a3-rowbtn strong { display: block; font-size: calc(15px * var(--apex3-fs)); }
+.a3-rowbtn small { display: block; margin-top: 2px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-skipped { opacity: 0.6; }
+
+/* ---------- IMAGERY ---------- */
+.a3-imaged { position: relative; isolation: isolate; overflow: hidden; }
+.a3-imaged > .a3-hero-image, .a3-imaged > .a3-hero-image img { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; margin: 0; object-fit: cover; }
+.a3-imaged::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 10, 0.72), rgba(7, 9, 10, 0.94)); }
+
+/* ---------- APPEARANCE ---------- */
+.a3-themes { display: grid; gap: 8px; }
+.a3-theme {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--apex3-line);
+  border-radius: 14px;
+  background: var(--apex3-surface);
+  color: var(--apex3-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.a3-theme.selected { border-color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.08); }
+.a3-theme strong { display: block; font-size: calc(14px * var(--apex3-fs)); }
+.a3-theme small { display: block; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+
+/* ---------- MOTION ---------- */
+@keyframes a3-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes a3-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes a3-sheet { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes a3-pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+
+.a3-home > *, .a3-workout > *, .a3-progress > * { animation: a3-rise 420ms var(--apex3-ease) both; }
+.a3-home > *:nth-child(2) { animation-delay: 40ms; }
+.a3-home > *:nth-child(3) { animation-delay: 80ms; }
+.a3-home > *:nth-child(4) { animation-delay: 120ms; }
+.a3-home > *:nth-child(n + 5) { animation-delay: 160ms; }
+
+.a3-cta, .a3-pill, .a3-tap, .a3-stepper > button, .a3-choices > button, .a3-energy > button, .a3-theme { transition: transform 140ms var(--apex3-ease), box-shadow 200ms var(--apex3-ease), border-color 200ms var(--apex3-ease), background-color 200ms var(--apex3-ease); }
+.a3-cta:active, .a3-pill:active, .a3-tap:active, .a3-stepper > button:active, .a3-choices > button:active, .a3-energy > button:active, .a3-theme:active { transform: scale(0.97); }
+.a3-cta:hover:not(:disabled) { box-shadow: 0 12px 34px rgba(var(--apex3-gold-rgb), 0.34); }
+.a3-tap:hover { border-color: rgba(var(--apex3-gold-rgb), 0.4); }
+.a3-donemark { animation: a3-pop 520ms var(--apex3-ease) both; }
+.a3-complete.completed { animation: a3-pop 360ms var(--apex3-ease) both; }
+.a3-card { transition: border-color 200ms var(--apex3-ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  .a3-home > *, .a3-workout > *, .a3-progress > *, .a3-modal, .a3-modal-backdrop, .a3-donemark, .a3-complete.completed { animation: none !important; }
+  .a3-cta, .a3-pill, .a3-tap, .a3-theme, .a3-bar i, .a3-ring .a3-ring-fill, .a3-rest-ring .a3-ring-fill { transition: none !important; }
+}
+.app.reduce-motion :is(.a3-home > *, .a3-workout > *, .a3-progress > *, .a3-modal, .a3-modal-backdrop, .a3-donemark) { animation: none !important; }
+
+/* ---------- QA FIXES: chips, footer, set logger ---------- */
+.a3-chips > .a3-pill { flex: 0 1 auto; max-width: 100%; text-transform: capitalize; }
+.a3-pill.selected { border-color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.12); color: var(--apex3-gold-bright); }
+.a3-footer { display: grid; gap: 8px; }
+.a3-footer .a3-cta { margin-top: 0; }
+.a3-setline > div { display: grid; gap: 2px; }
+.a3-copy > span:not(.a3-eyebrow) { font-size: calc(14px * var(--apex3-fs)); font-weight: 600; }
+.a3-copy > small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+/* ---------- SHELL: header, brand, navigation, screen transition ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--apex3-line-soft);
+  background: linear-gradient(180deg, rgba(5, 6, 7, 0.96), rgba(5, 6, 7, 0.78));
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--apex3-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  cursor: pointer;
+}
+.brand img { width: 26px; height: 26px; object-fit: contain; }
+
+.brand-caption { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: 9px; font-weight: 600; letter-spacing: 0.2em; color: var(--apex3-dim); }
+.apex-top-status { display: inline-flex; align-items: center; gap: 8px; font-size: 9px; font-weight: 600; letter-spacing: 0.16em; color: var(--apex3-muted); white-space: nowrap; }
+.apex-top-status i { width: 6px; height: 6px; border-radius: 50%; background: #6fcf97; box-shadow: 0 0 10px rgba(111, 207, 151, 0.6); }
+.top-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.topbar .a3-iconbtn { width: 40px; height: 40px; border-radius: 12px; }
+@media (max-width: 700px) { .brand-caption, .apex-top-status { display: none; } }
+
+.bottom {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  padding: 7px max(10px, env(safe-area-inset-left, 0px)) var(--apex-safe-bottom) max(10px, env(safe-area-inset-right, 0px));
+  border-top: 1px solid var(--apex3-line);
+  background: linear-gradient(180deg, rgba(8, 10, 11, 0.9), rgba(5, 6, 7, 0.98));
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.32);
+}
+
+.nav-item {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: 56px;
+  min-width: 0;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--apex3-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: color 200ms var(--apex3-ease), background-color 200ms var(--apex3-ease), transform 140ms var(--apex3-ease);
+}
+.nav-item span { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.nav-item:active { transform: scale(0.95); }
+.nav-item.active { color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.08); }
+.nav-item.active::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; border-radius: 2px; background: var(--a3-gold-fill); }
+
+.page-transition { animation: a3-page-in 380ms var(--apex3-ease) both; }
+@keyframes a3-page-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .page-transition { animation: none; } }
+.app.reduce-motion .page-transition { animation: none; }
+
+/* ---------- ONBOARDING ---------- */
+.app:has(> .onboarding) { padding-top: max(24px, var(--apex-safe-top)); }
+.onboarding {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 8px 16px calc(24px + var(--apex-safe-bottom));
+  min-width: 0;
+}
+.onboard-progress-meta { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--apex3-muted); }
+.onboard-progress-meta strong { font-variant-numeric: tabular-nums; color: var(--apex3-gold); }
+.onboard-brand { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 500; letter-spacing: 0.4em; }
+.onboard-brand img { width: 36px; height: 36px; object-fit: contain; }
+.progress-line { height: 4px; overflow: hidden; border-radius: 999px; background: rgba(225, 218, 202, 0.1); }
+.progress-line i { display: block; height: 100%; border-radius: inherit; background: var(--a3-gold-fill); transition: width 400ms var(--apex3-ease); }
+.a3-onb-bg, .a3-onb-bg img { position: absolute; inset: 0 0 auto 0; z-index: -2; width: 100%; height: 380px; margin: 0; object-fit: cover; opacity: 0.85; mask-image: linear-gradient(180deg, #000 20%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent); }
+.onboard-body { display: grid; gap: 14px; align-content: start; min-width: 0; animation: a3-rise 420ms var(--apex3-ease) both; }
+.onboard-body h1 { margin: 0; font-family: var(--a3-serif); font-size: clamp(28px, 8vw, 40px); font-weight: 500; line-height: 1.1; }
+.onboard-body h2 { margin: 0; font-family: var(--a3-serif); font-size: clamp(24px, 7vw, 32px); font-weight: 500; line-height: 1.15; }
+.onboard-body > p { margin: 0; font-size: calc(15px * var(--apex3-fs)); line-height: 1.55; color: var(--apex3-muted); }
+.feature-list { display: grid; gap: 10px; }
+.feature-list > b { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--a3-card-bg); font-size: calc(12px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.12em; color: var(--apex3-gold); }
+.feature-list > b > span { font-size: calc(15px * var(--apex3-fs)); font-weight: 500; letter-spacing: 0; color: var(--apex3-text); }
+.choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
+.choice-grid > button { display: grid; gap: 4px; align-content: center; min-height: 64px; padding: 12px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--a3-card-bg); color: var(--apex3-text); font: inherit; text-align: left; cursor: pointer; transition: border-color 200ms var(--apex3-ease), transform 140ms var(--apex3-ease); }
+.choice-grid > button:active { transform: scale(0.98); }
+.choice-grid > button.selected { border-color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.1); }
+.choice-grid > button strong { font-size: calc(15px * var(--apex3-fs)); text-transform: capitalize; }
+.choice-grid > button small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.choice-grid.compact { grid-template-columns: repeat(auto-fit, minmax(min(100%, 72px), 1fr)); }
+.onboard-footer { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; padding-top: 8px; }
+.onboard-footer .a3-cta { flex: 1 1 140px; width: auto; margin-top: 0; }
+.a3-error { border-color: rgba(209, 124, 114, 0.5); }
+.a3-error > svg { color: var(--apex3-signal); }
+
+/* ---------- COACH ---------- */
+.a3-coachscreen { display: grid; gap: 16px; padding-top: 16px; min-width: 0; }
+.a3-decision { display: grid; gap: 10px; }
+.a3-decision h2 { margin: 0; font-family: var(--a3-serif); font-size: clamp(22px, 6.5vw, 30px); font-weight: 500; line-height: 1.15; }
+.a3-decision p { margin: 0; font-size: calc(14px * var(--apex3-fs)); line-height: 1.55; color: var(--apex3-muted); }
+.a3-decision-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.a3-decision-reason { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--apex3-line-soft); border-radius: 12px; background: rgba(255, 255, 255, 0.02); font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-decision-reason svg { flex: none; color: var(--apex3-gold); }
+.a3-messages { display: grid; gap: 10px; }
+.apex-message { display: grid; gap: 4px; max-width: 92%; padding: 12px 14px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--apex3-surface); white-space: pre-line; }
+.apex-message.apex { justify-self: start; border-top-left-radius: 4px; }
+.apex-message.user { justify-self: end; border-top-right-radius: 4px; border-color: rgba(var(--apex3-gold-rgb), 0.4); background: rgba(var(--apex3-gold-rgb), 0.08); }
+.apex-message p { margin: 0; font-size: calc(14px * var(--apex3-fs)); line-height: 1.5; overflow-wrap: anywhere; }
+.a3-coach-input { display: flex; align-items: center; gap: 8px; }
+.a3-coach-input > .a3-search { flex: 1 1 auto; min-width: 0; }
+.a3-coach-input > button { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border: 0; border-radius: 12px; background: var(--a3-gold-fill); color: #15110a; cursor: pointer; }
+.a3-coach-input > button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- SECONDARY SCREENS ---------- */
+.a3-home > .a3-greet { padding-top: 4px; }
+.a3-greet p { margin: 8px 0 0; font-size: calc(14px * var(--apex3-fs)); line-height: 1.5; }
+.a3-head p { margin: 4px 0 0; font-size: calc(13px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-danger { color: var(--apex3-signal); border-color: rgba(209, 124, 114, 0.4); }
+
+.goal-card { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: start; }
+.goal-ring { display: grid; place-items: center; width: 64px; height: 64px; border: 3px solid var(--apex3-gold); border-radius: 50%; font-size: calc(14px * var(--apex3-fs)); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--apex3-gold-bright); }
+.goal-card h3 { margin: 4px 0; font-size: calc(17px * var(--apex3-fs)); font-weight: 600; }
+.goal-card p { margin: 0 0 8px; font-size: calc(13px * var(--apex3-fs)); color: var(--apex3-muted); }
+.milestones > span { padding: 3px 10px; border: 1px solid var(--apex3-line); border-radius: 999px; font-size: calc(11px * var(--apex3-fs)); color: var(--apex3-muted); }
+.milestones > span.reached { color: var(--apex3-gold); border-color: rgba(var(--apex3-gold-rgb), 0.4); }
+
+.a3-row.day-card { grid-template-columns: auto minmax(0, 1fr) auto; }
+.day-card.selected { border-color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.08); }
+.day-card strong, .editor-exercise strong { display: block; font-size: calc(14px * var(--apex3-fs)); }
+.day-card small, .editor-exercise small { display: block; margin-top: 2px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-row.editor-exercise { grid-template-columns: auto minmax(0, 1fr) auto; }
+.version { font-variant-numeric: tabular-nums; }
+
+.a3-toolbar { justify-content: space-between; }
+.library-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.a3-tile { display: grid; gap: 6px; align-content: start; width: 100%; padding: 14px; font: inherit; }
+.a3-tile strong { font-size: calc(15px * var(--apex3-fs)); font-weight: 600; }
+.a3-tile small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); text-transform: capitalize; }
+.a3-tile > span:not(.a3-chip) { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-dim); }
+.a3-tile .a3-chip { justify-self: start; text-transform: capitalize; }
+.a3-tile em { font-style: normal; }
+.history-item strong { display: block; font-size: calc(15px * var(--apex3-fs)); }
+.history-item small { display: block; margin-top: 3px; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.template-row { align-items: stretch; }
+.a3-card.a3-stack.template-row { padding: 0; border: 0; background: none; box-shadow: none; }
+
+.a3-fields > label { display: grid; gap: 6px; font-size: calc(13px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-fields input, .a3-fields select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--apex3-line); border-radius: 10px; background: var(--apex3-surface); color: var(--apex3-text); font: inherit; }
+
+.weight-trend-chart { display: grid; align-items: end; gap: 2px; height: 150px; padding: 12px 8px 8px; }
+.weight-trend-day { display: grid; grid-template-rows: 1fr auto; height: 100%; min-width: 0; align-items: end; }
+.weight-trend-day > i { display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--a3-gold-fill); }
+.weight-trend-day.is-empty > i { background: rgba(225, 218, 202, 0.08); height: 2px !important; }
+.weight-trend-day > small { height: 12px; font-size: 8px; text-align: center; white-space: nowrap; color: var(--apex3-muted); overflow: visible; }
+.a3-choices.weight-range-control { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.weight-range-control > button { min-height: 44px; }
+.a3-stats.weight-trend-summary > div small { letter-spacing: 0.08em; text-transform: uppercase; font-size: calc(10px * var(--apex3-fs)); }
+
+.a3-search > button { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--a3-gold-fill); color: #15110a; font: inherit; font-weight: 700; cursor: pointer; }
+
+/* ---------- TYPE: technical values use tabular sans/mono ---------- */
+.a3-rest > strong, .a3-spec dd, .a3-spec2 strong, .a3-stat strong, .a3-session-pct strong, .a3-stepper > strong, .a3-bighero > strong { font-family: inherit; font-variant-numeric: tabular-nums; }
+
+/* ---------- TOUCH TARGETS + PROGRESS BODY ROW ---------- */
+.brand { min-height: 44px; }
+.a3-queue-main { min-height: 44px; }
+.a3-row.apex-body-shortcut { grid-template-columns: auto minmax(0, 1fr); }
+.apex-body-shortcut .a3-link { grid-column: 1 / -1; min-height: 32px; }
+.apex-body-shortcut strong { display: block; }
+.apex-body-shortcut p { margin: 2px 0 0; font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+
+/* ---------- THEMES: full token sets ---------- */
+.app[data-theme="classic"] { --apex3-bg: #0a0907; --apex3-surface: #12100c; --apex3-surface-raised: #1a1712; --apex3-surface-strong: #221e17; --apex3-line: rgba(235, 220, 190, 0.13); --apex3-line-soft: rgba(235, 220, 190, 0.07); --apex3-text: #f4eee0; --apex3-muted: #ada595; --apex3-dim: #918978; --apex3-gold: #e6c36a; --apex3-gold-bright: #f7e2a3; --apex3-gold-rgb: 230, 195, 106; --apex3-steel: #9a8c72; --apex3-glow2-rgb: 130, 110, 80; }
+.app[data-theme="steel"] { --apex3-bg: #07090b; --apex3-surface: #0d1113; --apex3-surface-raised: #141a1d; --apex3-surface-strong: #1b2327; --apex3-line: rgba(200, 215, 230, 0.13); --apex3-line-soft: rgba(200, 215, 230, 0.07); --apex3-text: #eef2f5; --apex3-muted: #9fadb8; --apex3-dim: #86929c; --apex3-gold: #9fb4c7; --apex3-gold-bright: #d3e0ec; --apex3-gold-rgb: 159, 180, 199; --apex3-steel: #6f8aa3; --apex3-glow2-rgb: 90, 120, 150; }
+.app[data-theme="aurora"] { --apex3-bg: #06090b; --apex3-surface: #0b1315; --apex3-surface-raised: #111d20; --apex3-surface-strong: #18272b; --apex3-line: rgba(190, 235, 230, 0.13); --apex3-line-soft: rgba(190, 235, 230, 0.07); --apex3-text: #eef7f6; --apex3-muted: #9db3b1; --apex3-dim: #86999a; --apex3-gold: #5fd0c0; --apex3-gold-bright: #a6f0e3; --apex3-gold-rgb: 95, 208, 192; --apex3-steel: #6c8fd8; --apex3-glow2-rgb: 60, 110, 160; }
+.app[data-theme="crimson"] { --apex3-bg: #0a0708; --apex3-surface: #130d0e; --apex3-surface-raised: #1c1213; --apex3-surface-strong: #251819; --apex3-line: rgba(240, 200, 200, 0.13); --apex3-line-soft: rgba(240, 200, 200, 0.07); --apex3-text: #f6eeee; --apex3-muted: #b09a9b; --apex3-dim: #94807f; --apex3-gold: #e0605a; --apex3-gold-bright: #f5a19c; --apex3-gold-rgb: 224, 96, 90; --apex3-steel: #a0787c; --apex3-glow2-rgb: 130, 70, 72; }
+.app[data-theme] { --a3-gold-fill: linear-gradient(180deg, var(--apex3-gold-bright) 0%, var(--apex3-gold) 100%); --a3-card-bg: linear-gradient(160deg, color-mix(in srgb, var(--apex3-surface-strong) 92%, transparent), color-mix(in srgb, var(--apex3-surface) 96%, transparent)); }
+html:has(.app[data-theme="classic"]) { background: #0a0907; }
+html:has(.app[data-theme="steel"]) { background: #07090b; }
+html:has(.app[data-theme="aurora"]) { background: #06090b; }
+html:has(.app[data-theme="crimson"]) { background: #0a0708; }
+body:has(.app[data-theme="classic"]) { background: #0a0907; }
+body:has(.app[data-theme="steel"]) { background: #07090b; }
+body:has(.app[data-theme="aurora"]) { background: #06090b; }
+body:has(.app[data-theme="crimson"]) { background: #0a0708; }
+
+/* ---------- ATMOSPHERE ---------- */
+.a3-ridge { position: absolute; left: 0; right: 0; bottom: 0; z-index: -1; width: 100%; height: 78%; pointer-events: none; }
+.a3-ridge-snow { fill: none; stroke: var(--apex3-gold-bright); stroke-width: 1.2; stroke-linecap: round; opacity: 0.5; }
+.a3-hero > .a3-ridge, .a3-session > .a3-ridge, .a3-decision > .a3-ridge, .a3-atmos > .a3-ridge { opacity: 0.92; }
+.a3-atmos { position: relative; isolation: isolate; overflow: hidden; }
+.onboarding > .a3-onb-ridge { position: absolute; inset: auto 0 0 0; width: 100%; height: 46%; opacity: 0.7; }
+
+/* ---------- GOAL CARDS ---------- */
+.choice-grid > .a3-goalcard { grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; }
+.a3-goalicon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid rgba(var(--apex3-gold-rgb), 0.4); border-radius: 12px; background: rgba(var(--apex3-gold-rgb), 0.08); color: var(--apex3-gold); }
+.a3-goaltext { display: grid; gap: 3px; min-width: 0; }
+.choice-grid > .a3-goalcard.selected .a3-goalicon { background: var(--a3-gold-fill); color: #15110a; }
+
+/* ---------- HOME: WEEK STRIP ---------- */
+.a3-week { display: grid; gap: 12px; }
+.a3-week-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; text-align: center; }
+.a3-week-days > span { display: grid; gap: 6px; justify-items: center; font-size: calc(10px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.1em; color: var(--apex3-dim); }
+.a3-week-days > span > i { width: 28px; height: 28px; border: 1px solid var(--apex3-line); border-radius: 50%; }
+.a3-week-days > span.on > i { border-color: var(--apex3-gold); background: var(--a3-gold-fill); box-shadow: 0 0 14px rgba(var(--apex3-gold-rgb), 0.35); }
+.a3-week-days > span.today { color: var(--apex3-text); }
+.a3-week-days > span.today > i { border-color: var(--apex3-gold); }
+
+/* ---------- WORKOUT: LARGE SET RING, REST %, COMPLETE ---------- */
+.a3-ringhero { position: relative; display: grid; place-items: center; width: min(260px, 74vw); aspect-ratio: 1; margin: 0 auto; padding: 0; border: 0; background: none; }
+.a3-bigring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.a3-bigring circle { fill: none; stroke: rgba(225, 218, 202, 0.1); stroke-width: 6; }
+.a3-bigring .a3-ring-fill { stroke: var(--apex3-gold); stroke-linecap: round; transition: stroke-dashoffset 500ms var(--apex3-ease); filter: drop-shadow(0 0 8px rgba(var(--apex3-gold-rgb), 0.45)); }
+.a3-bigring-copy { position: relative; display: grid; gap: 4px; justify-items: center; max-width: 68%; text-align: center; }
+.a3-bigring-copy > strong { font-size: clamp(22px, 8vw, 34px); font-weight: 600; line-height: 1.05; overflow-wrap: anywhere; }
+.a3-bigring-copy > small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-rest-pct { position: absolute; bottom: 22%; font-size: calc(11px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--apex3-muted); }
+.a3-stage-done { position: relative; isolation: isolate; overflow: hidden; padding-bottom: 8px; }
+.a3-stage-done > .a3-ridge { height: 55%; opacity: 0.6; }
+.a3-stage-done .a3-stats { width: 100%; }
+.a3-pr { border-color: rgba(var(--apex3-gold-rgb), 0.6); box-shadow: 0 0 28px rgba(var(--apex3-gold-rgb), 0.22); animation: a3-pop 520ms var(--apex3-ease) both; }
+.a3-pr strong { color: var(--apex3-gold-bright); }
+
+/* ---------- COACH / TODAY SEGMENT ---------- */
+.a3-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--apex3-surface); }
+.a3-seg > button { min-height: 44px; border: 0; border-radius: 10px; background: none; color: var(--apex3-muted); font: inherit; font-size: calc(14px * var(--apex3-fs)); font-weight: 600; cursor: pointer; transition: background-color 200ms var(--apex3-ease), color 200ms var(--apex3-ease); }
+.a3-seg > button.active { background: rgba(var(--apex3-gold-rgb), 0.14); color: var(--apex3-gold-bright); box-shadow: inset 0 0 0 1px rgba(var(--apex3-gold-rgb), 0.4); }
+.a3-today-hero { min-height: 280px; }
+.a3-nut-hero { display: grid; gap: 14px; }
+
+/* ---------- CALENDAR ---------- */
+.a3-calendar { display: grid; gap: 12px; }
+.a3-calendar > .a3-head { flex-wrap: nowrap; }
+.a3-cal-title { display: grid; gap: 2px; text-align: center; }
+.a3-cal-title strong { font-family: var(--a3-serif); font-size: calc(18px * var(--apex3-fs)); font-weight: 500; }
+.a3-cal-title small { font-size: calc(11px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.a3-cal-dow { text-align: center; font-size: calc(10px * var(--apex3-fs)); font-weight: 600; letter-spacing: 0.1em; color: var(--apex3-dim); }
+.a3-cal-day { position: relative; aspect-ratio: 1; min-height: 40px; padding: 0; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--apex3-muted); font: inherit; font-size: calc(13px * var(--apex3-fs)); font-variant-numeric: tabular-nums; cursor: pointer; }
+.a3-cal-day.is-today { border-color: var(--apex3-line); color: var(--apex3-text); }
+.a3-cal-day.is-done { background: var(--a3-gold-fill); color: #15110a; font-weight: 700; }
+.a3-cal-day.is-partial { background: rgba(var(--apex3-gold-rgb), 0.18); border-color: rgba(var(--apex3-gold-rgb), 0.5); color: var(--apex3-gold-bright); }
+.a3-cal-day.is-missed { border-color: rgba(209, 124, 114, 0.5); color: var(--apex3-signal); }
+.a3-cal-day.is-planned { border-color: var(--apex3-line); border-style: dashed; color: var(--apex3-text); }
+.a3-cal-day.selected { outline: 2px solid var(--apex3-gold-bright); outline-offset: 1px; }
+.a3-cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: calc(11px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-cal-legend > span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; border: 1px solid var(--apex3-line); vertical-align: -1px; }
+.a3-cal-legend .is-done::before { background: var(--apex3-gold); border-color: var(--apex3-gold); }
+.a3-cal-legend .is-partial::before { background: rgba(var(--apex3-gold-rgb), 0.3); border-color: var(--apex3-gold); }
+.a3-cal-legend .is-missed::before { border-color: var(--apex3-signal); }
+.a3-cal-legend .is-planned::before { border-style: dashed; }
+
+/* ---------- CHARTS ---------- */
+.a3-spark { display: block; width: 100%; height: auto; }
+.a3-spark-line { fill: none; stroke: var(--apex3-gold); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 6px rgba(var(--apex3-gold-rgb), 0.4)); }
+.a3-spark-dot { fill: var(--apex3-gold-bright); stroke: var(--apex3-bg); stroke-width: 2; }
+.a3-note { margin: 0; font-size: calc(12px * var(--apex3-fs)); }
+.a3-analytics { display: grid; gap: 12px; }
+.a3-analytics-metric { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.a3-analytics-metric strong { font-family: var(--a3-serif); font-size: clamp(28px, 9vw, 40px); font-weight: 500; line-height: 1; color: var(--apex3-gold-bright); }
+.a3-analytics-metric small { font-size: calc(12px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-choices.a3-ranges { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.a3-choices.a3-ranges > button { min-height: 44px; }
+
+/* ---------- SETTINGS INDEX ---------- */
+.a3-settings-anchor { scroll-margin-top: calc(var(--apex3-header-total) + 12px); }
+
+/* ---------- WORKOUT QUEUE: thumbnails + states ---------- */
+.a3-exthumb { position: relative; width: 64px; height: 64px; overflow: hidden; border: 1px solid var(--apex3-line); border-radius: 12px; background: var(--apex3-surface-raised); }
+.a3-exthumb > figure, .a3-exthumb img { width: 100%; height: 100%; margin: 0; object-fit: cover; }
+.a3-exthumb::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 9, 10, 0.2), rgba(7, 9, 10, 0.78)); }
+.a3-exthumb > em { position: absolute; left: 6px; bottom: 4px; z-index: 1; font-size: 12px; font-style: normal; font-weight: 700; letter-spacing: 0.08em; color: var(--apex3-gold-bright); font-variant-numeric: tabular-nums; }
+.a3-exercise.is-active { border-color: rgba(var(--apex3-gold-rgb), 0.55); box-shadow: 0 0 0 1px rgba(var(--apex3-gold-rgb), 0.18), var(--apex3-shadow-surface); }
+.a3-exercise.is-done { opacity: 0.72; }
+.a3-state.is-active { color: var(--apex3-gold-bright); border-color: rgba(var(--apex3-gold-rgb), 0.5); background: rgba(var(--apex3-gold-rgb), 0.1); }
+.a3-state.is-done { color: #6fcf97; border-color: rgba(111, 207, 151, 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  .a3-pr, .onboard-body, .a3-bigring .a3-ring-fill, .nav-item { animation: none !important; transition: none !important; }
+}
+.app.reduce-motion :is(.a3-pr, .onboard-body) { animation: none !important; }
+.app.reduce-motion :is(.a3-bigring .a3-ring-fill, .nav-item, .a3-seg > button) { transition: none !important; }
+
+.a3-stagevisual { height: 150px; border: 1px solid var(--apex3-line); border-radius: 16px; background: var(--apex3-surface); }
+.a3-stagevisual::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 10, 0.35), rgba(7, 9, 10, 0.85)); }
+
+/* ---------- BEFORE SET TABS + LOG SET NOTES ---------- */
+.a3-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--apex3-line); }
+.a3-tabs > button { position: relative; flex: 1 1 0; min-height: 44px; border: 0; background: none; color: var(--apex3-muted); font: inherit; font-size: calc(14px * var(--apex3-fs)); font-weight: 600; cursor: pointer; transition: color 200ms var(--apex3-ease); }
+.a3-tabs > button.active { color: var(--apex3-gold-bright); }
+.a3-tabs > button.active::after { content: ""; position: absolute; left: 14%; right: 14%; bottom: -1px; height: 2px; border-radius: 2px; background: var(--a3-gold-fill); }
+.a3-notes textarea { min-height: 64px; resize: vertical; }
+@media (prefers-reduced-motion: reduce) { .a3-tabs > button { transition: none !important; } }
+
+/* ---------- SYSTEM STATES (loading / empty / error / success / PR) ---------- */
+.a3-errorpage { display: grid; min-height: 100vh; align-content: center; padding: 24px 16px; background: var(--apex3-bg); }
+.a3-stateview { position: relative; isolation: isolate; display: grid; justify-items: center; gap: 10px; padding: 22px 18px; text-align: center; border: 1px solid var(--apex3-line); border-radius: 18px; background: var(--apex3-surface); }
+.a3-stateview h2 { margin: 0; font-family: 'Playfair Display', Georgia, serif; font-weight: 500; font-size: calc(22px * var(--apex3-fs)); color: var(--apex3-text); }
+.a3-stateview p { margin: 0; color: var(--apex3-muted); font-size: calc(13px * var(--apex3-fs)); line-height: 1.45; }
+.a3-state-detail { color: var(--apex3-gold-bright); font-size: calc(18px * var(--apex3-fs)); }
+.a3-stateview > button { width: 100%; min-height: 44px; }
+.a3-stateview .a3-ghost { border: 1px solid var(--apex3-line); border-radius: 12px; background: none; color: var(--apex3-text); font: inherit; font-weight: 600; cursor: pointer; }
+.a3-state-icon { display: grid; place-items: center; width: 72px; height: 72px; border: 2px solid var(--apex3-gold); border-radius: 50%; color: var(--apex3-gold); background: rgba(var(--apex3-gold-rgb), 0.08); box-shadow: 0 0 32px rgba(var(--apex3-gold-rgb), 0.2); }
+.a3-stateview.is-empty .a3-state-icon { border-color: var(--apex3-line); color: var(--apex3-muted); box-shadow: none; background: none; }
+.a3-stateview.is-error { border-color: rgba(214, 69, 65, 0.5); }
+.a3-stateview.is-error .a3-state-icon { border-color: #d64541; color: #ff6b62; background: rgba(214, 69, 65, 0.1); box-shadow: 0 0 32px rgba(214, 69, 65, 0.25); animation: a3-shake 480ms var(--apex3-ease) both; }
+.a3-stateview.is-error .a3-cta { background: #d64541; color: #fff; }
+.a3-stateview.is-success .a3-state-icon { border-color: #6fcf97; color: #6fcf97; box-shadow: 0 0 32px rgba(111, 207, 151, 0.25); animation: a3-pop 520ms var(--apex3-ease) both; }
+.a3-stateview.is-pr { border-color: rgba(var(--apex3-gold-rgb), 0.6); overflow: hidden; box-shadow: 0 0 40px rgba(var(--apex3-gold-rgb), 0.22); animation: a3-pop 520ms var(--apex3-ease) both; }
+.a3-stateview.is-pr .a3-state-icon { animation: a3-glow 2.4s ease-in-out infinite; }
+.a3-pr-rays { position: absolute; inset: -40%; z-index: -1; background: repeating-conic-gradient(from 0deg at 50% 38%, rgba(var(--apex3-gold-rgb), 0.16) 0 6deg, transparent 6deg 18deg); -webkit-mask-image: radial-gradient(circle at 50% 38%, #000 0, transparent 60%); mask-image: radial-gradient(circle at 50% 38%, #000 0, transparent 60%); animation: a3-rays 18s linear infinite; }
+.a3-state-bar { position: relative; width: 100%; height: 6px; margin-top: 6px; border-radius: 6px; background: var(--apex3-line); }
+.a3-state-bar > i { display: block; height: 100%; border-radius: 6px; background: var(--a3-gold-fill); transition: width 400ms var(--apex3-ease); }
+.a3-state-bar > small { position: absolute; right: 0; top: 12px; color: var(--apex3-muted); font-size: calc(12px * var(--apex3-fs)); }
+.a3-stateview.is-loading .a3-state-icon { animation: a3-glow 1.8s ease-in-out infinite; }
+.a3-empty .a3-cta { width: 100%; margin-top: 8px; }
+.a3-donemark { position: relative; }
+.a3-donemark::after { content: ""; position: absolute; inset: -8px; border: 1px solid rgba(var(--apex3-gold-rgb), 0.4); border-radius: 50%; animation: a3-ping 1.6s var(--apex3-ease) 1 both; }
+.a3-tap:active, .a3-cta:active, .a3-ghost:active, .nav-item:active { transform: scale(0.97); }
+.a3-tap, .a3-cta, .nav-item { transition: transform 140ms var(--apex3-ease), color 200ms var(--apex3-ease), background-color 200ms var(--apex3-ease); }
+@keyframes a3-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 55% { transform: translateX(4px); } 80% { transform: translateX(-2px); } }
+@keyframes a3-glow { 0%, 100% { box-shadow: 0 0 20px rgba(var(--apex3-gold-rgb), 0.18); } 50% { box-shadow: 0 0 44px rgba(var(--apex3-gold-rgb), 0.42); } }
+@keyframes a3-rays { to { transform: rotate(360deg); } }
+@keyframes a3-ping { from { transform: scale(0.85); opacity: 0.9; } to { transform: scale(1.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .a3-stateview, .a3-state-icon, .a3-pr-rays, .a3-donemark::after, .a3-state-bar > i { animation: none !important; transition: none !important; } .a3-tap:active, .a3-cta:active, .a3-ghost:active, .nav-item:active { transform: none; } }
+.app.reduce-motion :is(.a3-stateview, .a3-state-icon, .a3-pr-rays, .a3-donemark::after, .a3-state-bar > i) { animation: none !important; transition: none !important; }
+.app.reduce-motion :is(.a3-tap, .a3-cta, .a3-ghost, .nav-item):active { transform: none; }
+
+/* ---------- PHOTOGRAPHIC GRADE (shared by every image surface) ---------- */
+.a3-hero-image, .a3-onb-bg, .a3-splash-photo { --a3-grade: saturate(0.5) contrast(1.12) brightness(0.72) sepia(0.32); }
+.a3-hero-image img, .a3-onb-bg img, .a3-splash-photo img { filter: var(--a3-grade); }
+.a3-hero-image::after, .a3-onb-bg::after, .a3-splash-photo::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(ellipse at 82% 6%, rgba(var(--apex3-gold-rgb), 0.38), transparent 58%), linear-gradient(200deg, rgba(var(--apex3-glow2-rgb), 0.16), transparent 50%); }
+.a3-hero-image ~ .a3-ridge, .a3-onb-bg ~ .a3-onb-ridge { opacity: 0.4; }
+.a3-atmos.a3-stagevisual > .a3-hero-image { opacity: 0.95; }
+.a3-profile.a3-imaged { min-height: 96px; }
+.a3-profile.a3-imaged > div, .a3-profile.a3-imaged > img { position: relative; z-index: 1; }
+
+/* splash: full-bleed photo, wordmark low-centre, claim above the progress line */
+.apex3-splash > .a3-splash-photo { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; margin: 0; opacity: 0; animation: apex3-splash-light 1.8s var(--apex3-ease) forwards; -webkit-mask-image: linear-gradient(180deg, #000 25%, transparent 92%); mask-image: linear-gradient(180deg, #000 25%, transparent 92%); }
+.apex3-splash > .a3-splash-photo img { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; object-fit: cover; object-position: 60% 40%; }
+.a3-splash-claim { position: absolute; left: 0; right: 0; bottom: max(36px, env(safe-area-inset-bottom)); text-align: center; font-style: normal; font-size: calc(10px * var(--apex3-fs)); letter-spacing: 0.2em; text-transform: uppercase; line-height: 1.7; color: var(--apex3-muted); opacity: 0; animation: apex3-splash-word 700ms 800ms var(--apex3-ease) forwards; }
+
+/* theme cards: each preview is a miniature of that theme (material, surface, accent, type, glow) */
+.a3-theme { --p-bg: #07090a; --p-surface: #12161a; --p-accent: #d8ad58; --p-glow: 216, 173, 88; --p-tint: sepia(0.35) saturate(0.6); --p-serif: 'Playfair Display', Georgia, serif; }
+.a3-theme[data-theme-swatch="classic"] { --p-bg: #0c0904; --p-surface: #1b140a; --p-accent: #e6c36a; --p-glow: 230, 195, 106; --p-tint: sepia(0.8) saturate(0.9) brightness(0.9); }
+.a3-theme[data-theme-swatch="steel"] { --p-bg: #080b0f; --p-surface: #131a22; --p-accent: #9fb4c7; --p-glow: 159, 180, 199; --p-tint: grayscale(0.85) contrast(1.1) hue-rotate(180deg) saturate(1.6); --p-serif: 'Inter', system-ui, sans-serif; }
+.a3-theme[data-theme-swatch="aurora"] { --p-bg: #050b0d; --p-surface: #0d1b1e; --p-accent: #5fd0c0; --p-glow: 95, 208, 192; --p-tint: hue-rotate(110deg) saturate(1.4) brightness(0.85); }
+.a3-theme[data-theme-swatch="crimson"] { --p-bg: #0d0506; --p-surface: #1c0b0d; --p-accent: #e0605a; --p-glow: 224, 96, 90; --p-tint: hue-rotate(-30deg) saturate(1.7) brightness(0.8); }
+.a3-theme-preview { position: relative; isolation: isolate; display: block; height: 64px; overflow: hidden; border: 1px solid rgba(var(--p-glow), 0.45); border-radius: 12px; background: var(--p-bg); box-shadow: 0 0 18px rgba(var(--p-glow), 0.22); }
+.a3-theme-preview .apex-image { position: absolute; inset: 0; z-index: -2; margin: 0; }
+.a3-theme-preview .apex-image img { width: 100%; height: 100%; object-fit: cover; filter: var(--p-tint) brightness(0.7); }
+.a3-theme-preview::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 85% 0%, rgba(var(--p-glow), 0.5), transparent 60%), linear-gradient(180deg, transparent 20%, var(--p-bg)); }
+.a3-theme-preview b { position: absolute; left: 8px; top: 6px; font: 500 20px/1 var(--p-serif); color: #eee6d4; text-decoration: none; }
+.a3-theme-preview u { position: absolute; left: 8px; right: 30px; bottom: 8px; height: 14px; border: 1px solid rgba(var(--p-glow), 0.35); border-radius: 5px; background: var(--p-surface); text-decoration: none; }
+.a3-theme-preview s { position: absolute; right: 8px; bottom: 8px; width: 14px; height: 14px; border-radius: 50%; background: var(--p-accent); box-shadow: 0 0 10px rgba(var(--p-glow), 0.9); }
+@media (max-width: 380px) { .a3-theme { grid-template-columns: 76px minmax(0, 1fr) auto; } }
+
+/* ---------- MOTION: loading, number change, sheets ---------- */
+.a3-state-bar.is-indeterminate > i { width: 40%; animation: a3-indet 1.3s var(--apex3-ease) infinite; }
+.a3-ring-value, .a3-stat strong, .a3-rest-time { font-variant-numeric: tabular-nums; }
+.a3-stat strong, .a3-ring-value { transition: color 200ms var(--apex3-ease); }
+@keyframes a3-indet { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) { .a3-state-bar.is-indeterminate > i { animation: none; width: 100%; opacity: 0.6; } }
+.app.reduce-motion .a3-state-bar.is-indeterminate > i { animation: none; width: 100%; opacity: 0.6; }
+
+/* number change */
+.a3-num { display: inline-block; font-variant-numeric: tabular-nums; animation: a3-num-in 220ms var(--apex3-ease) both; }
+.a3-bump { animation: a3-num-bump 220ms var(--apex3-ease); }
+@keyframes a3-num-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes a3-num-bump { from { color: var(--apex3-gold-bright); transform: translateY(3px); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .a3-num, .a3-bump { animation: none; } }
+.app.reduce-motion :is(.a3-num, .a3-bump) { animation: none; }
+
+/* splash tag lines + image-led onboarding intro (panels 1-2) */
+.a3-splash-tag > i { display: block; font-style: normal; margin-right: -0.4em; }
+.apex3-splash > .a3-splash-photo { opacity: 0.9; }
+.onboarding.is-intro { justify-content: flex-end; min-height: calc(100vh - 24px); gap: 22px; }
+.onboarding.is-intro > .onboard-progress-meta, .onboarding.is-intro > .onboard-brand, .onboarding.is-intro > .progress-line, .onboarding.is-intro > .a3-onb-ridge { display: none; }
+.onboarding.is-intro > .a3-onb-bg, .onboarding.is-intro > .a3-onb-bg img { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; opacity: 1; -webkit-mask-image: none; mask-image: none; }
+.onboarding.is-intro::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(7, 9, 10, 0.2) 0%, rgba(7, 9, 10, 0.55) 45%, var(--apex3-bg) 92%); }
+.a3-intro { gap: 12px; padding-bottom: 8px; }
+.a3-intro-mark { width: 44px; height: 44px; object-fit: contain; filter: drop-shadow(0 0 16px rgba(var(--apex3-gold-rgb), 0.4)); }
+.a3-intro h1 { font-size: clamp(32px, 9.5vw, 44px); text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.12; }
+.a3-intro > p { font-size: calc(16px * var(--apex3-fs)); line-height: 1.5; color: var(--apex3-text); }
+.a3-intro-nav { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.a3-dots { display: flex; gap: 8px; }
+.a3-dots > i { width: 7px; height: 7px; border-radius: 50%; background: var(--apex3-line); }
+.a3-dots > i.on { background: var(--apex3-gold); }
+.a3-arrowbtn { display: grid; place-items: center; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--a3-gold-fill); color: #15110a; cursor: pointer; box-shadow: 0 0 24px rgba(var(--apex3-gold-rgb), 0.35); transition: transform 140ms var(--apex3-ease); }
+.a3-arrowbtn:active { transform: scale(0.94); }
+.a3-arrowbtn:disabled { opacity: 0.4; }
+.choice-grid > .a3-goalcard { border-radius: 12px; }
+.choice-grid > .a3-goalcard .a3-goalicon { border: 0; background: none; width: 36px; }
+@media (prefers-reduced-motion: reduce) { .a3-arrowbtn { transition: none; } }
+
+/* ---------- RECONSTRUCTION FROM REFERENCE (panels 4-19) ---------- */
+/* screen titles: short serif title only, as in the reference headers */
+.a3-pagetitle { padding-top: 0; }
+.a3-pagetitle .a3-eyebrow, .a3-pagetitle p { display: none; }
+.a3-pagetitle h1 { margin: 0; font-size: clamp(24px, 6.6vw, 30px); }
+.a3-home > .a3-greet { padding-top: 0; }
+/* workout overview rows: compact numbered list */
+.a3-exercise { grid-template-columns: 56px minmax(0, 1fr); align-items: center; padding: 10px 12px; border-radius: 14px; }
+.a3-exercise .a3-exthumb { width: 56px; height: 56px; }
+.a3-exercise .a3-exercise-body { gap: 2px; }
+.a3-exercise .a3-spec, .a3-exercise .a3-exercise-foot > .a3-chip:not(.a3-state), .a3-exercise .a3-exercise-foot > .a3-link { display: none; }
+.a3-exercise-foot { gap: 6px; }
+.a3-session { padding: 14px; }
+/* during set: ring reads reps, weight and RIR sit beneath */
+.a3-bigrep { font-family: var(--a3-serif); font-size: clamp(64px, 20vw, 88px); font-weight: 500; line-height: 1; }
+.a3-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.a3-duo .a3-stat { text-align: center; }
+.a3-duo .a3-stat strong { font-size: calc(22px * var(--apex3-fs)); }
+/* rest timer reads as serif display */
+.a3-rest > strong { font-family: var(--a3-serif); font-weight: 400; letter-spacing: 0.02em; }
+/* intro screen has no Back */
+.onboarding.is-intro .onboard-footer > button:not(.a3-arrowbtn), .onboarding.is-intro .onboard-footer > .a3-cta-ghost { display: none; }
+
+/* profile header: centred avatar, name and summary (panel 19) */
+.a3-profile { flex-direction: column; justify-content: center; text-align: center; gap: 8px; padding-block: 20px; }
+.a3-profile img { width: 72px; height: 72px; padding: 14px; box-sizing: border-box; border: 2px solid var(--apex3-gold); border-radius: 50%; background: rgba(var(--apex3-gold-rgb), 0.08); box-shadow: 0 0 28px rgba(var(--apex3-gold-rgb), 0.25); object-fit: contain; }
+.a3-profile strong { font-family: var(--a3-serif); font-weight: 500; font-size: calc(22px * var(--apex3-fs)); }
+.a3-rings { grid-template-columns: 1fr; }
+.a3-rings .a3-stats-2 { grid-template-columns: 1fr 1fr; }
+
+/* before set (panel 6): tabs lead, tall photo, gold load */
+.a3-stage-ready > .a3-eyebrow, .a3-stage-ready > h3 { position: absolute; width: 1px; height: 1px; overflow: visible; clip-path: inset(50%); white-space: nowrap; }
+.a3-stage-ready > .a3-stagevisual { height: 190px; }
+.a3-stage-ready .a3-reco > strong { color: var(--apex3-gold-bright); font-size: calc(30px * var(--apex3-fs)); }
+.a3-bigring, .a3-rest-ring, .a3-ring { overflow: visible; }
+.a3-duo .a3-stat { justify-items: center; }
+
+.a3-decision h2 { font-size: clamp(20px, 5.6vw, 24px); }
+
+.a3-splash-tag > i { white-space: nowrap; }
+.onboarding.is-intro > .a3-onb-bg img { object-position: 62% 60%; }
+.a3-intro-mark { width: 52px; height: 52px; }
+
+.choice-grid.a3-goals { grid-template-columns: 1fr; }
+.onboarding:not(.is-intro) > .a3-onb-bg, .onboarding:not(.is-intro) > .a3-onb-ridge { display: none; }
+/* nutrition (panel 14): dominant protein ring, figures in the centre */
+.a3-nut-hero { --nut-ring: min(58vw, 220px); }
+.a3-nut-hero > .a3-ring-card { grid-template-columns: 1fr; justify-items: center; padding: 8px 0 0; border: 0; background: none; box-shadow: none; }
+.a3-nut-hero .a3-ring { width: var(--nut-ring); height: var(--nut-ring); filter: drop-shadow(0 0 10px rgba(var(--apex3-gold-rgb), 0.35)); }
+.a3-nut-hero .a3-ring circle { stroke-width: 5; }
+.a3-nut-hero .a3-ring-value { display: none; }
+.a3-nut-hero .a3-ring-copy { position: absolute; top: calc(8px + var(--nut-ring) / 2); left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column-reverse; align-items: center; text-align: center; }
+.a3-nut-hero .a3-ring-copy small { font-size: calc(22px * var(--apex3-fs)); font-weight: 500; color: var(--apex3-text); }
+.a3-nut-hero .a3-ring-copy strong { font-size: calc(13px * var(--apex3-fs)); color: var(--apex3-muted); font-weight: 500; }
+.a3-nut-hero > .a3-ring-card { min-height: calc(var(--nut-ring) + 16px); }
+
+/* workout complete (panel 10) */
+.a3-completehead { display: grid; justify-items: center; gap: 6px; padding-top: 8px; text-align: center; }
+.a3-completehead h1 { margin: 0; font-family: var(--a3-serif); font-weight: 500; font-size: clamp(26px, 7.4vw, 32px); }
+.a3-completehead p { margin: 0; color: var(--apex3-muted); font-size: calc(13px * var(--apex3-fs)); }
+.a3-complete-screen .a3-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.a3-complete-screen .a3-stat { text-align: center; justify-items: center; }
+.a3-pr-row { border-color: rgba(var(--apex3-gold-rgb), 0.45); }
+.a3-pr-row strong { color: var(--apex3-gold-bright); }
+
+.a3-rest > strong { font-variant-numeric: lining-nums tabular-nums; }
+.a3-rest.is-low .a3-ring-fill { stroke: #e5484d; filter: drop-shadow(0 0 6px rgba(229, 72, 77, 0.5)); }
+
+/* log set (panel 8): the typed value lives inside the stepper */
+.a3-stepper .a3-stepper-input { min-width: 0; width: 100%; height: 100%; padding: 0 4px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: center; font-size: calc(24px * var(--apex3-fs)); font-weight: 600; color: var(--apex3-text); -moz-appearance: textfield; appearance: textfield; }
+.a3-stepper .a3-stepper-input::-webkit-outer-spin-button, .a3-stepper .a3-stepper-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.a3-stepper .a3-stepper-input::placeholder { font-size: calc(12px * var(--apex3-fs)); font-weight: 500; color: var(--apex3-dim); }
+.a3-fields:has(> .a3-control) { grid-template-columns: 1fr; }
+.a3-control .a3-stepper { min-height: 56px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--apex3-surface-raised); padding: 4px; }
+
+.a3-pill, .a3-iconbtn { white-space: nowrap; flex: none; }
+
+/* full-screen system states (panels 21-23): no card, plain icon, centred */
+.a3-errorpage { max-width: 420px; margin-inline: auto; }
+.a3-stateview.is-loading, .a3-stateview.is-error, .a3-stateview.is-empty { border: 0; background: none; padding-inline: 8px; }
+.a3-stateview.is-error .a3-state-icon, .a3-stateview.is-empty .a3-state-icon { width: auto; height: auto; border: 0; background: none; box-shadow: none; }
+.a3-stateview.is-error .a3-state-icon { color: #ff5a52; filter: drop-shadow(0 0 18px rgba(214, 69, 65, 0.45)); }
+.a3-stateview.is-loading .a3-state-icon { width: 96px; height: 96px; border: 0; background: none; box-shadow: none; }
+.a3-stateview.is-loading .a3-state-icon img { width: 96px; height: 96px; object-fit: contain; filter: drop-shadow(0 0 24px rgba(var(--apex3-gold-rgb), 0.45)); }
+.a3-stateview.is-error > button.a3-cta { background: #e5382f; color: #fff; }
+.a3-stateview.is-error .a3-ghost { background: var(--apex3-surface); }
+.a3-errorpage { background: none; }
+.a3-stateview.is-loading .a3-state-icon { border-radius: 0; }
+.a3-stateview.is-loading .a3-state-icon::after, .a3-stateview.is-loading .a3-state-icon::before { display: none; }
+.a3-stateview.is-loading .a3-state-icon { animation: none; box-shadow: none; }
+.a3-stateview.is-loading .a3-state-icon img { animation: a3-mark-pulse 2.2s ease-in-out infinite; }
+@keyframes a3-mark-pulse { 0%, 100% { filter: drop-shadow(0 0 14px rgba(var(--apex3-gold-rgb), 0.3)); } 50% { filter: drop-shadow(0 0 30px rgba(var(--apex3-gold-rgb), 0.6)); } }
+@media (prefers-reduced-motion: reduce) { .a3-stateview.is-loading .a3-state-icon img { animation: none; } }
+.app.reduce-motion .a3-stateview.is-loading .a3-state-icon img { animation: none; }
+
+/* during set (panel 7) round controls + log set (panel 8) header */
+.a3-roundrow { display: flex; justify-content: center; gap: 28px; padding: 6px 0; }
+.a3-roundbtn { display: grid; place-items: center; width: 72px; height: 72px; border: 2px solid var(--apex3-gold); border-radius: 50%; background: rgba(var(--apex3-gold-rgb), 0.08); color: var(--apex3-gold-bright); cursor: pointer; transition: transform 140ms var(--apex3-ease); }
+.a3-roundbtn-gold { background: var(--a3-gold-fill); color: #15110a; box-shadow: 0 0 28px rgba(var(--apex3-gold-rgb), 0.35); }
+.a3-roundbtn:active { transform: scale(0.94); }
+.a3-roundbtn:disabled { opacity: 0.4; }
+.a3-loghead { display: flex; align-items: center; gap: 12px; }
+.a3-loghead h2 { margin: 0; font-family: var(--a3-serif); font-weight: 500; font-size: clamp(24px, 6.6vw, 30px); }
+.a3-loghead small { color: var(--apex3-muted); font-size: calc(13px * var(--apex3-fs)); }
+@media (prefers-reduced-motion: reduce) { .a3-roundbtn { transition: none; } }
+.app.reduce-motion .a3-roundbtn { transition: none; }
+
+/* progress overview + exercise analytics (panels 11-12) */
+.a3-spark-grid { stroke: rgba(225, 218, 202, 0.08); stroke-width: 1; }
+.a3-spark-axis { fill: var(--apex3-dim); font-size: 9px; font-variant-numeric: tabular-nums; }
+.a3-bodyhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.a3-bodyvalue { display: block; margin-top: 4px; font-family: var(--a3-serif); font-weight: 500; font-size: clamp(34px, 10vw, 44px); line-height: 1; }
+.a3-bodyvalue small { margin-left: 6px; font-family: inherit; font-size: 0.42em; color: var(--apex3-muted); }
+.a3-delta { display: grid; justify-items: end; color: #6fcf97; font-weight: 600; font-size: calc(15px * var(--apex3-fs)); white-space: nowrap; }
+.a3-delta small { color: var(--apex3-muted); font-size: calc(11px * var(--apex3-fs)); font-weight: 500; }
+.a3-choices.a3-ranges { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+.a3-choices.a3-ranges > button { min-height: 40px; }
+.a3-bigtitle { margin: 2px 0 0; font-family: var(--a3-serif); font-weight: 500; font-size: clamp(26px, 7.4vw, 32px); }
+.a3-bodycard .a3-bodyhead { display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.a3-bodycard .a3-bodyvalue { font-family: var(--a3-serif); font-size: clamp(34px, 10vw, 44px); font-weight: 500; line-height: 1; }
+.a3-bodycard .a3-bodyvalue small { font-size: 0.42em; }
+.a3-head .a3-bigtitle { font-family: var(--a3-serif); font-size: clamp(26px, 7.4vw, 32px); font-weight: 500; line-height: 1.1; }
+
+/* log set (panel 8): full-screen view, CTA clears the fixed nav and safe area */
+.a3-logscreen { gap: 14px; padding-top: 8px; padding-bottom: calc(var(--apex-safe-bottom, 0px) + 16px); }
+
+/* log set form (panel 8): plain labelled rows, no card */
+.a3-logform { gap: 14px; }
+.a3-logform .a3-control > small { text-transform: none; letter-spacing: 0; font-size: calc(14px * var(--apex3-fs)); color: var(--apex3-muted); }
+.a3-logform .a3-notes textarea { min-height: 72px; }
+.a3-logform .a3-more > summary { min-height: 44px; display: flex; align-items: center; color: var(--apex3-muted); font-size: calc(13px * var(--apex3-fs)); cursor: pointer; }

@@ -19,7 +19,7 @@ async function waitForOnboarding(page: Page) {
           const continueButton = Array.from(
             onboarding?.querySelectorAll('button') ?? []
           ).find((button) =>
-            /^Continue/i.test((button.textContent || '').trim())
+            /^Continue/i.test((button.getAttribute('aria-label') || button.textContent || '').trim())
           );
 
           return Boolean(onboarding && continueButton);
@@ -186,7 +186,7 @@ export async function resetApp(page: Page) {
    */
   const continueButton = await waitForOnboarding(page);
 
-  await expect(page.getByText('SETUP')).toBeVisible({
+  await expect(page.locator('.a3-intro')).toBeVisible({
     timeout: 10_000,
   });
 
@@ -199,7 +199,7 @@ export async function resetApp(page: Page) {
     const button = Array.from(
       onboarding?.querySelectorAll('button') ?? []
     ).find((candidate) =>
-      /^Continue/i.test((candidate.textContent || '').trim())
+      /^Continue/i.test((candidate.getAttribute('aria-label') || candidate.textContent || '').trim())
     );
 
     return Boolean(button);
@@ -346,7 +346,7 @@ export async function completeOnboarding(page: Page) {
     timeout: 20_000,
   });
 
-  await expect(page.getByText('Training command center')).toBeVisible({
+  await expect(page.locator('.a3-home .a3-hero, .apex-command-hero').first()).toBeVisible({
     timeout: 20_000,
   });
 }

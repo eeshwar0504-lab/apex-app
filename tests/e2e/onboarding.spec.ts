@@ -78,7 +78,7 @@ test.describe('APEX onboarding contract', () => {
     await completeOnboarding(page);
 
     await expect(
-      page.getByText('Training command center')
+      page.locator('.a3-home .a3-hero')
     ).toBeVisible();
 
     await expect(

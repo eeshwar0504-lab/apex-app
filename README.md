@@ -1,6 +1,6 @@
-# APEX 2.1.0
+# APEX 3.1.1
 
-APEX 2.1.0 is a local-first, adaptive training companion built around guided workout sessions and intelligent workout tracking.
+APEX 3.1.1 is a local-first, adaptive training companion built around guided workout sessions and intelligent workout tracking.
 
 ## Principles
 - Training and tracking first

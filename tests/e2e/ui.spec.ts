@@ -17,11 +17,11 @@ test.describe('APEX UI/UX and responsive layout', () => {
     await assertVisibleButtonsAreNotClipped(page);
 
     await expect(
-      page.locator('.apex-live-status i')
+      page.locator('.a3-home > .a3-greet')
     ).toBeVisible();
 
     await expect(
-      page.locator('.apex-hero-core')
+      page.locator('.a3-hero')
     ).toBeVisible();
   });
 
@@ -104,7 +104,7 @@ test.describe('APEX UI/UX and responsive layout', () => {
 
   test('animations are present in normal mode and collapse under reduced motion', async ({ page }) => {
     const animatedIndicator = page.locator(
-      '.apex-live-status i'
+      '.a3-home > .a3-greet'
     );
 
     /*

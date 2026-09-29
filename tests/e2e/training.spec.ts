@@ -20,7 +20,7 @@ async function openTrainRoute(page: Page) {
   });
 
   await expect(
-    page.getByText('What happens next.')
+    page.getByRole('heading', { name: 'Up next' })
   ).toBeVisible({
     timeout: 10_000,
   });
@@ -39,7 +39,7 @@ async function openScheduledSession(page: Page) {
    * when the responsive layout presents the session through its row.
    */
   const primaryStart = page.getByRole('button', {
-    name: /Start session|Preview next/i,
+    name: /Start session|Start Workout|Resume Workout|Preview next/i,
   });
 
   if (
@@ -49,7 +49,7 @@ async function openScheduledSession(page: Page) {
     await primaryStart.first().click();
   } else {
     const queueSession = page
-      .locator('.apex-queue-list .apex-queue-card')
+      .locator('.a3-queue')
       .filter({
         has: page.getByRole('button'),
       })
@@ -236,7 +236,7 @@ async function reachActiveSet(page: Page) {
 
   while (Date.now() < deadline) {
     const completeSet = page.getByRole('button', {
-      name: 'Complete set',
+      name: 'Log set',
     });
 
     if (
@@ -352,7 +352,7 @@ async function enterActiveSet(page: Page) {
    * completion control.
    */
   const completeSet = page.getByRole('button', {
-    name: 'Complete set',
+    name: 'Log set',
   });
 
   await expect(completeSet).toBeVisible({
@@ -372,7 +372,7 @@ test.describe('APEX training execution', () => {
     await openTrainRoute(page);
 
     const start = page.getByRole('button', {
-      name: /Start session|Preview next/i,
+      name: /Start session|Start Workout|Resume Workout|Preview next/i,
     });
 
     if (
@@ -382,7 +382,7 @@ test.describe('APEX training execution', () => {
       await start.first().click();
     } else {
       const queueSession = page
-        .locator('.apex-queue-list .apex-queue-card')
+        .locator('.a3-queue')
         .first();
 
       await expect(queueSession).toBeVisible({
@@ -423,7 +423,7 @@ test.describe('APEX training execution', () => {
 
     const confirmCount = await confirmButtons.count();
     const unavailableCount = await unavailableButtons.count();
-    const requirementLabels = await page.locator('.equipment-check-block .equipment-check-main .eyebrow').allTextContents();
+    const requirementLabels = await page.locator('.equipment-check-block .a3-equip-main .a3-eyebrow').allTextContents();
 
     expect(
       confirmCount + unavailableCount
@@ -473,6 +473,7 @@ test.describe('APEX training execution', () => {
 
   test('active set logger exposes load/reps/RIR controls without clipping', async ({ page }) => {
     await enterActiveSet(page);
+    await page.getByRole('button',{name:'Log set'}).click();
 
     /*
      * These are the real focused-set controls rendered by SetEditor.
@@ -503,7 +504,7 @@ test.describe('APEX training execution', () => {
 
     await expect(
       page.getByRole('button', {
-        name: 'Complete set',
+        name: 'Save Set',
       })
     ).toBeVisible();
 
@@ -613,7 +614,13 @@ test.describe('APEX training execution', () => {
     for(let step=0;step<120;step++){
       if(await page.locator('[data-apex-route^="session:"]').isVisible().catch(()=>false))break;
 
-      const complete=page.getByRole('button',{name:'Complete set'}).first();
+      const logSet=page.getByRole('button',{name:'Log set'});
+      if(await logSet.isVisible().catch(()=>false)){
+        await logSet.click();
+        continue;
+      }
+
+      const complete=page.getByRole('button',{name:'Save Set'}).first();
       if(await complete.isVisible().catch(()=>false)){
         await complete.click();
         continue;
@@ -674,6 +681,6 @@ test.describe('APEX training execution', () => {
     input=dialog.locator('input').first();
     await input.fill('Show my progress');
     await input.press('Enter');
-    await expect(page.locator('.apex-stat-board article').first()).toContainText('1');
+    await expect(page.locator('.a3-stats .a3-stat').first()).toContainText('1');
   });
 });

@@ -6,88 +6,13 @@
 :root {
   --apex3-header-height: 82px;
   --apex3-nav-height: 78px;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  min-height: 100%;
-}
-
-body {
-  overflow: visible !important;
-  overflow-x: clip !important;
-  overflow-y: visible !important;
-  overscroll-behavior-y: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
-  overflow: visible !important;
-  overflow-x: clip !important;
-  overflow-y: visible !important;
-}
-
-#root {
-  overflow-x: clip !important;
-  overflow-y: visible !important;
-}
-
-.topbar {
-  position: relative;
-  top: auto;
-  z-index: 45;
-  flex-shrink: 0;
-  transform: none !important;
-  margin-top: 0 !important;
-}
-
-.main {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible !important;
-  overflow-y: visible !important;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-  scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--apex3-header-height) + env(safe-area-inset-top, 0px));
-}
-
-.screen-page,
-.page-transition {
+}.screen-page{
   min-width: 0;
   width: 100%;
   max-width: 100%;
 }
 
-.bottom {
-  position: fixed;
-  left: 50%;
-  bottom: max(0px, env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  z-index: 60;
-  box-shadow: 0 -20px 45px rgba(0, 0, 0, 0.28);
-}
-
 .main::-webkit-scrollbar {
   width: 0;
   height: 0;
-}
-
-@media (min-width: 900px) {
-  .main {
-    scroll-padding-top: calc(var(--apex3-header-height) + 8px);
-  }
-}
-
-@media (max-width: 700px) {
-  .main {
-    scroll-padding-top: calc(var(--apex3-header-height) - 6px);
-  }
 }
