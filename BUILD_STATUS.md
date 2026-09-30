@@ -1,4 +1,8 @@
-# APEX 3.1.1 build status
+# APEX 3.1.2 build status
+
+## Release 3.1.2
+
+QA-fix release on top of 3.1.1. Android versionCode 6. Fixes `reduce` so it lowers the load; adds a documented return-to-training rule (`docs/RETURN_TO_TRAINING.md`); surfaces plateau evidence and an optional recovery check-in in the Coach as evidence only; abandons zero-set workouts instead of completing them; preserves and recovers unreadable saved data; hardens engine volume/PR helpers against invalid values. Native Capacitor SQLite and Android runtime remain unverified by the Node test harness.
 
 ## Release 3.1.1
 

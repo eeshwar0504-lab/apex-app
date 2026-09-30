@@ -2417,3 +2417,8 @@ input,select,textarea{background:#0c0e0f;border-color:var(--apex-line)!important
   animation-delay:0s !important;
   transition-duration:.01ms !important;
 }
+
+/* Horizontal overflow guard. The authoritative rule lives in apex3-design-system.css (html); this is the same declaration on the same element, so there is no visual or behavioural change. */
+html{
+  overflow-x:hidden;
+}
