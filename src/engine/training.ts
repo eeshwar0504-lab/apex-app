@@ -34,6 +34,8 @@ export interface LoadRecommendation {
   reason: string;
   evidence: string[];
   targetRir: number;
+  /** Present when the load was set by the return-to-training rule (see docs/RETURN_TO_TRAINING.md). */
+  returnToTraining?: { gapDays: number; tier: string; steps: number };
 }
 
 export interface LoadAvailability {
@@ -875,11 +877,32 @@ export function progression(
   }
 
   if (low) {
+    /*
+     * "reduce" must actually reduce: one increment less load (or one
+     * increment more assistance on assisted movements), never below the
+     * exercise's smallest meaningful load. Loads are snapped to the
+     * athlete's available loads by personalizedLoad().
+     */
+    const reduceStep =
+      ex.incrementKg > 0
+        ? ex.incrementKg
+        : 0.5;
+    const reduceJump =
+      ex.loadSemantics === 'assistance'
+        ? reduceStep
+        : -reduceStep;
+    const reducedLoad =
+      lastWeight !== undefined
+        ? sanitizeRecommendedLoad(
+            ex,
+            lastWeight + reduceJump
+          )
+        : undefined;
     return {
       action: 'reduce',
-      weight: lastWeight,
+      weight: reducedLoad ?? lastWeight,
       reason:
-        'Comparable performance has repeatedly fallen below the target range.',
+        `Comparable performance has repeatedly fallen below the target range; reduce by one ${reduceStep} kg step.`,
       confidence: 'medium',
       nextRepRange: ex.repRange,
       recommendedRest:
@@ -950,6 +973,101 @@ export function progression(
 /* ============================================================
    INITIAL LOAD INTELLIGENCE
    ============================================================ */
+
+/* ============================================================
+   RETURN TO TRAINING (layoff handling)
+   ============================================================ */
+
+/**
+ * Documented return-to-training rule (see docs/RETURN_TO_TRAINING.md).
+ *
+ * The gap is the whole days between the last completed exposure to the exact
+ * exercise and the date the load is prescribed for.
+ *
+ *   gap < 14 days      short gap        0 increments (normal progression)
+ *   14 - 27 days       about 2 weeks    1 increment below the last worked load
+ *   28 - 55 days       about 4 weeks    2 increments below the last worked load
+ *   56+ days           extended layoff  3 increments below the last worked load
+ *
+ * "Increment" is the exercise's own load increment, so the result stays
+ * compatible with the available equipment. The reduction is bounded: it never
+ * exceeds half of the last worked load and never goes below the smallest
+ * meaningful load. No increase is prescribed on the return session. The first
+ * return session is itself new history (its date resets the gap), so normal
+ * progression resumes on the following exposure. This is a conservative
+ * product rule, not a scientific threshold.
+ */
+export const RETURN_GAP_DAYS = { twoWeek: 14, fourWeek: 28, extended: 56 } as const;
+
+export type ReturnTier = 'short' | 'two_week' | 'four_week' | 'extended';
+
+export function returnTierForGap(gapDays: number | undefined): { tier: ReturnTier; steps: number } {
+  if (gapDays === undefined || !Number.isFinite(gapDays) || gapDays < RETURN_GAP_DAYS.twoWeek) return { tier: 'short', steps: 0 };
+  if (gapDays < RETURN_GAP_DAYS.fourWeek) return { tier: 'two_week', steps: 1 };
+  if (gapDays < RETURN_GAP_DAYS.extended) return { tier: 'four_week', steps: 2 };
+  return { tier: 'extended', steps: 3 };
+}
+
+function dayNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const time = new Date(String(value).length <= 10 ? `${value}T00:00:00Z` : value).getTime();
+  return Number.isFinite(time) ? Math.floor(time / 86400000) : undefined;
+}
+
+/** Whole days since the last completed exposure to this exercise; undefined without a date or history. */
+export function trainingGapDays(ex: Exercise, workouts: Workout[], asOf?: string): number | undefined {
+  const target = dayNumber(asOf);
+  if (target === undefined) return undefined;
+  let latest: number | undefined;
+  for (const workout of workouts) {
+    if (workout.status !== 'completed') continue;
+    const exposed = workout.exercises.some(entry => entry.exerciseId === ex.id && entry.sets.some(set => set.completed && meaningfulLoad(ex, set.weight)));
+    if (!exposed) continue;
+    const day = dayNumber(workout.completedAt || workout.scheduledDate);
+    if (day !== undefined && (latest === undefined || day > latest)) latest = day;
+  }
+  return latest === undefined ? undefined : Math.max(0, target - latest);
+}
+
+function returnToTrainingLoad(
+  ex: Exercise,
+  lastWorked: number | undefined,
+  progressed: number | undefined,
+  gapDays: number | undefined,
+  profile?: UserProfile
+): { applied: false } | { applied: true; weight: number; tier: ReturnTier; steps: number; step: number; reason: string } {
+  const { tier, steps } = returnTierForGap(gapDays);
+  if (!steps || lastWorked === undefined) return { applied: false };
+  const availability = loadAvailability(ex, profile);
+  const step = availability.incrementKg || (ex.incrementKg > 0 ? ex.incrementKg : 0.5);
+  const assisted = ex.loadSemantics === 'assistance';
+  let target: number | undefined;
+  if (availability.options.length) {
+    // Walk down the athlete's real load choices, one choice per step. A reduction of more than half the
+    // last worked load is never taken (assistance is bounded only by the step count).
+    const options = availability.options;
+    const nearest = snapToAvailableLoad(ex, lastWorked, profile);
+    const index = nearest === undefined ? -1 : options.indexOf(nearest);
+    if (index >= 0) {
+      for (let k = steps; k >= 0; k--) {
+        const candidate = assisted ? options[Math.min(options.length - 1, index + k)] : options[Math.max(0, index - k)];
+        if (assisted || lastWorked - candidate <= lastWorked * 0.5 + 1e-9 || k === 0) { target = candidate; break; }
+      }
+    }
+  }
+  if (target === undefined) {
+    const span = assisted ? steps * step : Math.min(steps * step, lastWorked * 0.5);
+    target = sanitizeRecommendedLoad(ex, assisted ? lastWorked + span : lastWorked - span);
+  }
+  if (target === undefined) return { applied: false };
+  // Never above the normal prescription (no increase on the return session); assistance is the mirror image.
+  const weight = progressed === undefined ? target : assisted ? Math.max(target, progressed) : Math.min(target, progressed);
+  const label = tier === 'two_week' ? 'about two weeks' : tier === 'four_week' ? 'about four weeks' : 'an extended break';
+  return {
+    applied: true, weight, tier, steps, step,
+    reason: `Return to training after ${gapDays} days (${label}): restart ${steps} load step${steps === 1 ? '' : 's'} ${assisted ? 'more assisted' : 'below'} your last worked load. Normal progression resumes after this session.`
+  };
+}
 
 /**
  * Calculates the target RIR used for first-exposure guidance.
@@ -1075,7 +1193,9 @@ export function personalizedLoad(
   ex: Exercise,
   workouts: Workout[],
   profile?: UserProfile,
-  exercises: Exercise[] = []
+  exercises: Exercise[] = [],
+  /** Date (YYYY-MM-DD or ISO) the load is being prescribed for. Enables return-to-training handling. */
+  asOf?: string
 ): LoadRecommendation {
   const targetRir = targetRirForProfile(profile);
 
@@ -1110,15 +1230,26 @@ export function personalizedLoad(
       experience: profile?.experience
     });
     const latest = latestMeaningfulLoad(ex, direct);
-    const candidate = snapToAvailableLoad(ex, result.weight ?? latest, profile);
+    const gapDays = trainingGapDays(ex, workouts, asOf);
+    const reentry = returnToTrainingLoad(ex, latest, result.weight, gapDays, profile);
+    const reducing = result.action === 'reduce' || reentry.applied;
+    const reduceDirection = ex.loadSemantics === 'assistance' ? 'up' : 'down';
+    const candidate = snapToAvailableLoad(
+      ex,
+      reentry.applied ? reentry.weight : (result.weight ?? latest),
+      profile,
+      reducing ? reduceDirection : 'nearest'
+    );
 
     if (candidate !== undefined) {
       return {
         weight: candidate,
-        confidence: result.confidence,
+        confidence: reentry.applied ? 'medium' : result.confidence,
         kind: 'baseline',
-        reason: result.reason,
+        reason: reentry.applied ? reentry.reason : result.reason,
+        ...(reentry.applied ? { returnToTraining: { gapDays: gapDays as number, tier: reentry.tier, steps: reentry.steps } } : {}),
         evidence: [
+          ...(reentry.applied ? [`Training gap: ${gapDays} days (${reentry.tier.replace('_',' ')})`, `Return-to-training: ${reentry.steps} load step${reentry.steps === 1 ? '' : 's'} below your last worked load`] : []),
           `${direct.length} completed exercise-specific set${direct.length === 1 ? '' : 's'}`,
           latest !== undefined ? `Latest personal load: ${formatLoad(ex, latest)}` : 'No previous meaningful load available',
           `Target: ${ex.repRange[0]}–${ex.repRange[1]} reps`,
@@ -1223,6 +1354,16 @@ export function personalizedLoad(
    PERFORMANCE / VOLUME
    ============================================================ */
 
+/**
+ * Set values reach the engine from the UI and from storage, both of which
+ * validate them. As a last line of defence the calculations that feed the UI
+ * (volume, PRs) treat anything that is not a finite, non-negative number as 0
+ * instead of letting NaN, Infinity or a negative value into a total.
+ */
+function safeNum(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 export function summarizeSets(
   ex: Exercise,
   sets: SetLog[]
@@ -1236,14 +1377,14 @@ export function summarizeSets(
   const reps =
     done.reduce(
       (sum, set) =>
-        sum + (set.reps || 0),
+        sum + safeNum(set.reps),
       0
     );
 
   const load =
     done.reduce(
       (sum, set) =>
-        sum + (set.weight || 0),
+        sum + safeNum(set.weight),
       0
     );
 
@@ -1270,8 +1411,8 @@ export function summarizeSets(
 
         return (
           sum +
-          (set.weight || 0) *
-            (set.reps || 0) *
+          safeNum(set.weight) *
+            safeNum(set.reps) *
             multiplier
         );
       },
@@ -1321,7 +1462,7 @@ export function summarizeSets(
         ? Math.max(
             ...done.map(
               set =>
-                set.reps || 0
+                safeNum(set.reps)
             )
           )
         : undefined,
@@ -1629,7 +1770,8 @@ export function feedbackLoad(
   profile?: UserProfile
 ) {
   if (ex.loadSemantics === 'bodyweight' || ex.loadSemantics === 'time' || ex.loadSemantics === 'none') {
-    return current;
+    const valid = current === undefined || (typeof current === 'number' && Number.isFinite(current) && current >= 0);
+    return valid ? current : sanitizeRecommendedLoad(ex, current);
   }
 
   const base = sanitizeRecommendedLoad(ex, current);
@@ -2261,7 +2403,7 @@ export function detectAchievements(
         0,
         ...completed.map(
           set =>
-            set.weight || 0
+            safeNum(set.weight)
         )
       );
 
@@ -2270,7 +2412,7 @@ export function detectAchievements(
         0,
         ...old.map(
           set =>
-            set.weight || 0
+            safeNum(set.weight)
         )
       );
 
@@ -2279,7 +2421,7 @@ export function detectAchievements(
         0,
         ...completed.map(
           set =>
-            set.reps || 0
+            safeNum(set.reps)
         )
       );
 
@@ -2288,7 +2430,7 @@ export function detectAchievements(
         0,
         ...old.map(
           set =>
-            set.reps || 0
+            safeNum(set.reps)
         )
       );
 
@@ -2366,17 +2508,16 @@ export function detectAchievements(
             .filter(
               set =>
                 set.completed &&
-                set.weight &&
-                set.reps &&
-                set.reps >= 1 &&
-                set.reps <= 10
+                safeNum(set.weight) > 0 &&
+                safeNum(set.reps) >= 1 &&
+                safeNum(set.reps) <= 10
             )
             .map(
               set =>
-                (set.weight || 0) *
+                safeNum(set.weight) *
                 (
                   1 +
-                  (set.reps || 0) /
+                  safeNum(set.reps) /
                     30
                 )
             )
@@ -2440,7 +2581,7 @@ export function detectAchievements(
           0,
           ...completed.map(
             set =>
-              set.seconds || 0
+              safeNum(set.seconds)
           )
         );
 
@@ -3414,6 +3555,19 @@ export function recoverWorkoutSession(
 /* ============================================================
    SESSION ASSESSMENT
    ============================================================ */
+
+/**
+ * A workout is only a real completed workout when at least one set was logged.
+ * A session that ended with zero logged sets is abandoned, never "completed".
+ */
+export function hasLoggedSets(workout: Workout): boolean {
+  return workout.exercises.some(entry => entry.sets.some(set => set.completed));
+}
+
+/** Mark a workout that ended without any logged set as abandoned (status "skipped"); it is not a completion. */
+export function abandonWorkout(workout: Workout, at: string): Workout {
+  return { ...workout, status: 'skipped', updatedAt: at };
+}
 
 export function sessionAssessment(
   workout: Workout,

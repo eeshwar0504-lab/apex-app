@@ -232,3 +232,14 @@ Approximately **87%** of the 26-phase plan is implemented at meaningful foundati
 
 ## Final implementation status
 The 26-phase product implementation is complete. The remaining release checklist is physical Android/device certification and cannot be honestly marked as executed from the source-only sandbox.
+
+
+## Latest continuation — longitudinal review fixes
+- Fixed `reduce` so it lowers the prescribed load (one increment, or more assistance on assisted movements).
+- Added a documented, deterministic return-to-training rule (`docs/RETURN_TO_TRAINING.md`).
+- Plateau evidence (same-load, non-zero output) now reaches the Coach as options with honest confidence; no silent plan change.
+- Added an optional Recovery check-in (sleep, sleep quality, soreness, fatigue). It is Coach evidence only and never a prescription input.
+- A workout with zero logged sets is abandoned ("End without recording"), not completed.
+- Unreadable saved data is preserved, announced and recoverable; starting fresh is an explicit, confirmed choice.
+- Engine volume/PR helpers no longer let NaN, Infinity or negative set values into totals.
+- Native Capacitor SQLite and Android runtime remain NOT VERIFIED (no emulator/device in the Node harness).

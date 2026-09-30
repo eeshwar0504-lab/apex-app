@@ -139,6 +139,9 @@ export interface CoachContext {
   /** Explicit contextual observations supplied by the application/user. */
   context?: CoachContextSignals;
 
+  /** Deterministic plateau signals (analytics.plateauCandidates). Evidence only; never a prescription change. */
+  plateaus?: PlateauSignal[];
+
   /** Current timestamp used for deterministic decision evaluation. */
   now: string;
 }
@@ -146,9 +149,18 @@ export interface CoachContext {
 /**
  * Noisy contextual signals. They are evidence, not automatic prescriptions.
  */
+/** A deterministic plateau signal: comparable sessions with no change in completed-rep output. */
+export interface PlateauSignal {
+  exerciseId: string;
+  exerciseName: string;
+  sessions: number;
+  detail: string;
+}
+
 export interface CoachContextSignals {
   sleepHours?: number;
   sleepQuality?: number;
+  fatigue?: number;
   stress?: number;
   soreness?: number;
   motivation?: number;

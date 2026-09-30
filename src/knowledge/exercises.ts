@@ -470,8 +470,7 @@ common({
   loadDescription:
     'Machine stack load. Displayed kg represents the selected stack setting.',
   alternatives:[
-    'nordic_curl',
-    'stability_ball_curl'
+    'nordic_curl'
   ]
 }),
 

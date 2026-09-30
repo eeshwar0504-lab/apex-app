@@ -16,7 +16,12 @@
     "apex:qa": "node scripts/apex-qa.mjs",
     "release:audit": "node scripts/release-audit.mjs",
     "verify": "npm test && npm run audit",
-    "verify:full": "npm test && npm run build && npm run test:e2e"
+    "verify:full": "npm test && npm run build && npm run test:e2e",
+    "test:longitudinal": "node tests/longitudinal/run.cjs --level=standard",
+    "test:longitudinal:quick": "node tests/longitudinal/run.cjs --level=quick",
+    "test:longitudinal:full": "node tests/longitudinal/run.cjs --level=full",
+    "test:longitudinal:endurance": "node tests/longitudinal/run.cjs --level=endurance",
+    "test:longitudinal:browser": "playwright test --config tests/longitudinal/browser/playwright.config.ts"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.0",

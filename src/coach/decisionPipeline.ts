@@ -20,6 +20,21 @@ const decisionId = (context: CoachContext): string =>
 
 const evidenceId = (suffix: string): string => `e_${suffix}`;
 
+/** Plateau evidence is weak with three comparable sessions and moderate with four. */
+const plateauConfidence = (sessions: number): CoachConfidence => (sessions >= 4 ? 'medium' : 'low');
+
+/** Describes the recovery values that were actually supplied. No thresholds are applied to them. */
+function describeRecovery(signals: NonNullable<CoachContext['context']>): string[] {
+  const parts: string[] = [];
+  if (typeof signals.sleepHours === 'number') parts.push(`sleep ${signals.sleepHours} h`);
+  if (typeof signals.sleepQuality === 'number') parts.push(`sleep quality ${signals.sleepQuality}/5`);
+  if (typeof signals.soreness === 'number') parts.push(`soreness ${signals.soreness}/5`);
+  if (typeof signals.fatigue === 'number') parts.push(`fatigue ${signals.fatigue}/5`);
+  if (typeof signals.stress === 'number') parts.push(`stress ${signals.stress}/5`);
+  if (typeof signals.readiness === 'number') parts.push(`readiness ${signals.readiness}/5`);
+  return parts;
+}
+
 function buildEvidence(context: CoachContext): CoachEvidence[] {
   const evidence: CoachEvidence[] = [];
 
@@ -124,6 +139,34 @@ function buildEvidence(context: CoachContext): CoachEvidence[] {
         timestamp: context.now,
       });
     }
+  }
+
+  const recoveryParts = signals ? describeRecovery(signals) : [];
+  if (recoveryParts.length) {
+    evidence.push({
+      id: evidenceId('recovery'),
+      statement: `Self-reported recovery context: ${recoveryParts.join(', ')}.`,
+      source: 'user',
+      state: 'known',
+      quality: 'low',
+      pattern: 'confounder',
+      confidence: 'low',
+      timestamp: context.now,
+    });
+  }
+
+  for (const plateau of context.plateaus || []) {
+    evidence.push({
+      id: evidenceId(`plateau_${plateau.exerciseId}`),
+      statement: `${plateau.exerciseName}: completed-rep output was identical across the last ${plateau.sessions} comparable sessions.`,
+      source: 'history',
+      state: 'probable',
+      quality: plateau.sessions >= 4 ? 'medium' : 'low',
+      pattern: 'signal',
+      confidence: plateauConfidence(plateau.sessions),
+      timestamp: context.now,
+      references: [plateau.exerciseId],
+    });
   }
 
   if (context.userInput?.trim()) {
@@ -266,7 +309,53 @@ function buildCandidates(
     ];
   }
 
+  const plateaus = context.plateaus || [];
+  const recoveryParts = context.context ? describeRecovery(context.context) : [];
+  const extra: CandidateAction[] = [];
+
+  if (plateaus.length) {
+    const names = plateaus.slice(0, 3).map((item) => item.exerciseName).join(', ');
+    extra.push({
+      id: 'review_plateau',
+      action: 'review',
+      title: `Review a possible plateau: ${names}`,
+      description:
+        `Review ${names}: completed reps have not changed across recent comparable sessions. ` +
+        'APEX has not changed your plan. Options: keep the current load and aim for one more clean rep; ' +
+        'check sleep, nutrition and recovery; check technique and range of motion; or choose a variation from the exercise alternatives. ' +
+        'Identical output can also mean you are still building repeatable performance, so this is a signal, not a diagnosis.',
+      objectiveFit: 1,
+      sustainabilityFit: 1,
+      recoveryFit: 1,
+      adherenceFit: 1,
+      preferenceFit: 1,
+      safetyStatus: 'clear',
+      reversibility: 'easy',
+      consequences: ['Nothing changes unless you choose a change; the deterministic training engine stays authoritative.'],
+      evidence,
+    });
+  }
+
+  if (recoveryParts.length) {
+    extra.push({
+      id: 'lighter_session_option',
+      action: 'modify',
+      title: 'Train lighter or shorter today (your choice)',
+      description: `Recovery context was reported (${recoveryParts.join(', ')}). It does not change today's prescription. If you feel run down you may shorten the session or use an easier load; you stay in control.`,
+      objectiveFit: 0.5,
+      sustainabilityFit: 1,
+      recoveryFit: 1,
+      adherenceFit: 0.5,
+      preferenceFit: 0.5,
+      safetyStatus: 'clear',
+      reversibility: 'easy',
+      consequences: ['Training stimulus would be temporarily lower if you choose this.'],
+      evidence,
+    });
+  }
+
   return [
+    ...extra.filter((item) => item.id === 'review_plateau'),
     {
       id: 'continue',
       action: 'continue',
@@ -297,6 +386,7 @@ function buildCandidates(
       consequences: ['The current decision is delayed while more evidence is collected.'],
       evidence,
     },
+    ...extra.filter((item) => item.id !== 'review_plateau'),
   ];
 }
 
@@ -404,8 +494,19 @@ export function runCoachDecision(request: CoachDecisionRequest): CoachResult {
   const objective = resolveObjective(context);
   const candidates = buildCandidates(context, safety, objective, evidence);
   const selected = selectCandidate(candidates);
-  const confidence = confidenceFor(context, safety, evidence);
+  let confidence = confidenceFor(context, safety, evidence);
+  if (selected.id === 'review_plateau') {
+    const weakest = Math.min(...(context.plateaus || []).map((item) => item.sessions));
+    confidence = {
+      confidence: plateauConfidence(weakest),
+      reason: `Plateau evidence rests on ${weakest} comparable session${weakest === 1 ? '' : 's'} with identical rep output; that is ${weakest >= 4 ? 'moderate' : 'weak'} evidence and is not a diagnosis.`,
+    };
+  }
   const prescription = buildPrescription(selected, context);
+  const recoveryParts = context.context ? describeRecovery(context.context) : [];
+  const recoveryNote = recoveryParts.length && safety.status === 'clear'
+    ? ` Recovery context noted (${recoveryParts.join(', ')}); it is evidence only and does not change your prescription.`
+    : '';
 
   const decision: CoachDecision = {
     id: decisionId(context),
@@ -427,7 +528,7 @@ export function runCoachDecision(request: CoachDecisionRequest): CoachResult {
     prescription,
     confidence: confidence.confidence,
     confidenceReason: confidence.reason,
-    reason: selected.description,
+    reason: selected.description + recoveryNote,
     requiresUserConfirmation:
       selected.action === 'ask' ||
       selected.action === 'stop' ||
@@ -437,7 +538,7 @@ export function runCoachDecision(request: CoachDecisionRequest): CoachResult {
   return {
     decision,
     nextAction: prescription,
-    explanation: selected.description,
+    explanation: selected.description + recoveryNote,
     evidence,
   };
 }

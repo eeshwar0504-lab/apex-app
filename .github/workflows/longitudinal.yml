@@ -1,0 +1,36 @@
+name: APEX Longitudinal Simulation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: 'quick | standard | full | endurance'
+        required: false
+        default: 'standard'
+
+permissions:
+  contents: read
+
+jobs:
+  longitudinal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Default CI profile is the cheap deterministic quick level (~5 s); manual runs choose the level.
+      - name: Run longitudinal simulation
+        run: node tests/longitudinal/run.cjs --level=${{ github.event.inputs.level || 'quick' }}
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-longitudinal-report
+          path: test-results/longitudinal*
+          if-no-files-found: ignore

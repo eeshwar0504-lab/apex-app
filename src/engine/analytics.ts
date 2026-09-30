@@ -20,8 +20,13 @@ export function plateauCandidates(s:AppState){
  for(const ex of s.exercises){
   const rows=s.workouts.filter(w=>w.status==='completed').flatMap(w=>w.exercises.filter(e=>e.exerciseId===ex.id).map(e=>({w,e}))).slice(-4);
   if(rows.length<3) continue;
-  const scores=rows.map(({e})=>e.sets.filter(x=>x.completed&&x.type!=='warmup').reduce((n,x)=>n+(x.reps||0),0));
-  if(scores.every(x=>x===scores[0])) out.push({exerciseId:ex.id,exerciseName:ex.name,sessions:rows.length,detail:'Comparable recent sessions show no change in completed-rep output. Review load, technique, recovery and exercise context before changing the plan.'});
+  const scores=rows.map(({e})=>e.sets.filter(x=>x.completed&&x.type!=='warmup').reduce((n,x)=>n+(x.reps||0)+(x.seconds||0),0));
+ 
+ // Comparable means the same working load: identical rep output at an INCREASED load is progress, not a plateau.
+ const loads=rows.map(({e})=>Math.max(0,...e.sets.filter(x=>x.completed&&x.type!=='warmup'&&typeof x.weight==='number'&&Number.isFinite(x.weight)).map(x=>x.weight as number)));
+ if(!loads.every(x=>x===loads[0])) continue;
+ // no recorded output (for example a skipped exercise) is absence of evidence, not a plateau
+ if(scores[0]>0&&scores.every(x=>x===scores[0])) out.push({exerciseId:ex.id,exerciseName:ex.name,sessions:rows.length,detail:'Comparable recent sessions show no change in completed-rep output. Review load, technique, recovery and exercise context before changing the plan.'});
  }
  return out.slice(0,6);
 }

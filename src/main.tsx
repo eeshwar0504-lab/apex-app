@@ -24,15 +24,17 @@ import {APEX_TRAINING_IMAGES,imageKindForExercise,type TrainingImageKind} from '
 import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,Measurement} from './core/types';
 import {EXERCISES,findExercises} from './knowledge/exercises';
 import {repository} from './data/repository';
+import type {RecoveryNotice} from './data/repository';
 import {encryptBackup,decryptBackup,recoveryKey} from './data/backupCrypto';
-import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad as engineFormatLoad,makeSet,recommendedRest,markMissedWorkouts,volumeForWorkout,updateSetType,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,applyWorkoutAdaptation,planWithDays,equipmentFit,smartAlternatives,personalizedLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail as engineFormatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
+import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad as engineFormatLoad,makeSet,recommendedRest,markMissedWorkouts,volumeForWorkout,updateSetType,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,hasLoggedSets,abandonWorkout,applyWorkoutAdaptation,planWithDays,equipmentFit,smartAlternatives,personalizedLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail as engineFormatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
 import {normalizeGuidedPosition,completeSet,applySetFeedback,continueAfterRest as continueGuidedAfterRest,advanceToNextExercise as advanceGuidedToNextExercise} from './engine/guidedSession';
 import {homeInsights,readiness,buildObservations,adaptationsForWorkout,goalProgress,goalMilestones,trainingLoadSummary} from './engine/intelligence';
 import {notificationIntents} from './engine/notifications';
 import {syncLocalNotifications,listenForNotificationActions} from './native/localNotifications';
 import {knowledgeReport} from './knowledge/knowledgeGraph';
 import {inspectState} from './data/integrity';
-import {coach} from './coach';
+import {coach,coachEvidenceFromState} from './coach';
+import {upsertRecoveryCheckIn,RECOVERY_SCALE_FIELDS} from './engine/recovery';
 import {consistencySummary,volumeTrend,goalMomentum,trainingBalance} from './engine/analytics';
 import {accessibilityClass,fontScaleValue} from './data/accessibility';
 import pkg from '../package.json';
@@ -215,7 +217,7 @@ function ApexMeter({value}:{value:number}){return <div className="a3-bar" role="
 
 
 function recommendationFor(ex:Exercise,s:AppState){
-  return personalizedLoad(ex,s.workouts,s.profile,s.exercises);
+  return personalizedLoad(ex,s.workouts,s.profile,s.exercises,today());
 }
 
 function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
@@ -265,8 +267,15 @@ function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
           :we.recommendedWeight)
       :we.recommendedWeight;
 
+    /*
+     * A workout created before a long break carries the load that was current then. On the FIRST hydration of the
+     * workout the return-to-training load replaces those pre-filled, uncompleted loads so the set screen and the
+     * recommendation agree. Later hydrations (resume) never overwrite what the athlete has since chosen.
+     */
+    const applyReturnLoad=isExternal&&!!(rec as any).returnToTraining&&!existing?.recommendations?.[ex.id]&&nextWeight!==undefined;
     const nextSets=we.sets.map(set=>{
       if(!isExternal||set.completed)return set;
+      if(applyReturnLoad)return {...set,weight:nextWeight,loadDetail:loadDetailForSet(ex,nextWeight,{...(set.loadDetail||{}),totalKg:undefined,stackKg:undefined,perHandKg:undefined} as any)};
       if(set.weight!==undefined&&set.weight>0)return set;
       if(nextWeight!==undefined)return {...set,weight:nextWeight};
       return set;
@@ -368,7 +377,7 @@ function completeGuidedSession(value?:Workout['guidedSession']):NonNullable<Work
 }
 
 function App(){
- const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false);
+ const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false),[recovery,setRecovery]=useState<RecoveryNotice|null>(null);
  const routeHistory=useRef<string[]>([]);
  const routeRef=useRef(route);
  useEffect(()=>{window.scrollTo({top:0,behavior:'instant'})},[route]);
@@ -490,7 +499,7 @@ function App(){
 
    void CapacitorApp.exitApp();
  };
- useEffect(()=>{let live=true;repository.loadAsync().then(next=>{if(live){setS(next);setRoute(next.activeRoute||'home');setHydrated(true)}}).catch(()=>setHydrated(true));return()=>{live=false}},[]);
+ useEffect(()=>{let live=true;repository.loadAsync().then(next=>{if(live){setS(next);setRoute(next.activeRoute||'home');setRecovery(repository.recoveryNotice());setHydrated(true)}}).catch(()=>setHydrated(true));return()=>{live=false}},[]);
  useEffect(()=>{
    let listener:{remove:()=>Promise<void>}|undefined;
 
@@ -786,6 +795,7 @@ function App(){
  const appClass=`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`;
  const appStyle={fontSize:`${fontScaleValue(s.preferences.fontScale)}em`};
  if(!hydrated&&!splash)return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} data-theme={s.preferences.theme||'apex'}><LoadingPanel/></div>;
+ if(hydrated&&recovery)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'apex'}><RecoveryGate notice={recovery} onRecovered={next=>{setS(next);setRoute(next.activeRoute||'home');setRecovery(null)}} onFresh={next=>{setS(next);setRoute('home');setRecovery(null)}}/></div>;
  if(!s.onboardingComplete)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'apex'}>{splash&&<Splash message={hydrated?'Set up your training context…':'Restoring local training data…'}/>}<Onboarding onDone={(p,g,plan)=>{const ws=makeInitialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
  return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}} data-theme={s.preferences.theme||'apex'}>{splash&&<Splash/>}
  <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-mark-gold.png"/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="apex-top-status"><i/> SYSTEM READY</div><div className="top-actions"><button className="a3-iconbtn" title="Profile" aria-label="Profile" onClick={()=>nav('you')}><Icon name="user"/></button><button className="a3-iconbtn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
@@ -794,7 +804,7 @@ function App(){
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
  {route==='train'&&<Train s={s} onStart={start} onNav={nav} update={update}/>}
  {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} update={update} onStart={(w)=>{update(x=>{const now=new Date().toISOString();const prepared=hydrateWorkoutRecommendations(ensureGuidedSession({...w,status:'in_progress',startedAt:w.startedAt||now,updatedAt:now}),x);return {...x,activeWorkoutId:w.id,activeRoute:'workout',workouts:x.workouts.map(q=>q.id===w.id?{...q,...prepared}:q)}});nav('workout')}} onBack={()=>nav('train')}/>}
- {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onDone={w=>{const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,w]):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
+ {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onDone={w=>{if(!hasLoggedSets(w)){const at=new Date().toISOString();update(x=>({...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?abandonWorkout(w,at):q),activeWorkoutId:undefined,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_abandoned',timestamp:at,payload:{workoutId:w.id,reason:'no sets logged'}}]}));nav('home');return}const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,w]):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
  {route.startsWith('session:')&&<SessionReview s={s} id={route.slice(8)} onNav={nav} update={update}/>}
  {route==='progress'&&<Progress s={s} onNav={nav}/>}
  {route==='history'&&<History s={s} onNav={nav}/>}
@@ -803,7 +813,7 @@ function App(){
  {route==='plan'&&<PlanStudio s={s} update={update} onStart={start}/>}
  {route==='library'&&<Library s={s} query={query} setQuery={setQuery} onExercise={id=>setSheet('exercise:'+id)}/>}
  {route==='you'&&<You s={s} nav={nav} update={update}/>}
- {route==='coach'&&<Coach s={s} onNav={nav}/>}
+ {route==='coach'&&<Coach s={s} update={update} onNav={nav}/>}
  {route==='today'&&<Today s={s} onNav={nav} onStart={start}/>}
  {route==='nutrition'&&<Nutrition s={s} update={update}/>}
  {route==='learn'&&<Learn/>}
@@ -1319,7 +1329,8 @@ function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Wo
  const focusEx=focusExercise?s.exercises.find(e=>e.id===focusExercise.exerciseId):undefined;
  const focusSet=focusExercise?.sets?.find(set=>!set.completed);
  const gp=goal?goalProgress(s,goal):undefined;
- const coachResult=coach({state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:focus?.id,workout:focus,exerciseId:focusEx?.id,exercise:focusEx,workoutExercise:focusExercise,setId:focusSet?.id,set:focusSet,recentWorkoutIds:recent.map(w=>w.id),recentExerciseEntryIds:[],now:new Date().toISOString()});
+ const evidence=coachEvidenceFromState(s,today());
+ const coachResult=coach({context:evidence.context,plateaus:evidence.plateaus,state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:focus?.id,workout:focus,exerciseId:focusEx?.id,exercise:focusEx,workoutExercise:focusExercise,setId:focusSet?.id,set:focusSet,recentWorkoutIds:recent.map(w=>w.id),recentExerciseEntryIds:[],now:new Date().toISOString()});
  const decision=coachResult.decision;
   const hour=new Date().getHours();
  const greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
@@ -2027,11 +2038,11 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
  const timedWorkComplete=activeEx?.loadSemantics==='time'?workRemaining<=0&&!!workStartedAt:false;
 
  const targetRir=activeEx
-   ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises).targetRir
+   ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises,today()).targetRir
    :2;
 
  const currentRecommendation=activeEx
-   ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises)
+   ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises,today())
    :undefined;
 
  const setGuided=(patch:Partial<NonNullable<Workout['guidedSession']>>,extra?:Record<string,unknown>)=>{
@@ -2119,7 +2130,7 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
 
    const recommendation=
      activeEx
-       ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises)
+       ?personalizedLoad(activeEx,s.workouts,s.profile,s.exercises,today())
        :undefined;
 
    mutate(ww=>{
@@ -3020,13 +3031,21 @@ const onSetType=(t:SetType)=>mutate(x=>{
        {phase==='complete'&&
          <div className="a3-stage a3-stage-done">
            <ApexImage kind="training-floor" alt="" className="a3-hero-image"/><ApexRidge/>
-           <span className="a3-eyebrow">SESSION COMPLETE</span>
-           <div className="a3-donemark animated-completion-mark" aria-hidden="true">✓</div>
-           <h3>Every planned movement is accounted for.</h3>
-           <p>
-             Review your session and let APEX record the evidence for future
-             training.
-           </p>
+           {assessment.completedSets===0
+             ?<>
+               <span className="a3-eyebrow">NO SETS LOGGED</span>
+               <h3>Nothing was recorded in this session.</h3>
+               <p>A session with no logged sets is not saved as a completed workout. End it without recording, or go back and log a set.</p>
+             </>
+             :<>
+               <span className="a3-eyebrow">SESSION COMPLETE</span>
+               <div className="a3-donemark animated-completion-mark" aria-hidden="true">✓</div>
+               <h3>Every planned movement is accounted for.</h3>
+               <p>
+                 Review your session and let APEX record the evidence for future
+                 training.
+               </p>
+             </>}
            {assessment.achievements.length>0&&<StateView kind="pr" title="New Personal Record!" detail={displayText(assessment.achievements[0].label)} text={assessment.achievements.length>1?`+${assessment.achievements.length-1} more this session`:assessment.achievements[0].unit}/>}
            <div className="a3-stats">
              <ApexStat label="Volume" value={vol(assessment.volume).toLocaleString()} unit={volLabel()}/>
@@ -3038,7 +3057,7 @@ const onSetType=(t:SetType)=>mutate(x=>{
              className="a3-cta"
              onClick={()=>onDone(current)}
            >
-             FINISH SESSION <Icon name="chev"/>
+             {assessment.completedSets===0?'END WITHOUT RECORDING':'FINISH SESSION'} <Icon name="chev"/>
            </button>
          </div>
        }
@@ -3159,7 +3178,8 @@ const onSetType=(t:SetType)=>mutate(x=>{
                            ex,
                            s.workouts,
                            s.profile,
-                           s.exercises
+                           s.exercises,
+                           today()
                          ).targetRir
                        }
                        onChange={p=>
@@ -3573,7 +3593,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              inputMode="decimal"
              value={wtInput(set.weight)}
              placeholder={`Actual ${weightLabel()}`}
-             onChange={e=>onChange({weight:e.target.value===''?undefined:Math.round(fromWt(Number(e.target.value))*1000)/1000})}
+             onChange={e=>onChange({weight:e.target.value===''?undefined:Math.max(0,Math.round(fromWt(Number(e.target.value))*1000)/1000)})}
              onBlur={e=>{if(e.target.value==='')return;const raw=fromWt(Number(e.target.value));const snapped=snapToAvailableLoad(ex,raw,loadProfile);onChange({weight:snapped??raw,loadDetail:loadDetailForSet(ex,snapped??raw,set.loadDetail)});}}
            />
              <button
@@ -3599,7 +3619,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              placeholder={weightLabel()}
              onChange={e=>
                onChange({
-                 assistance:e.target.value===''?undefined:Math.round(fromWt(Number(e.target.value))*1000)/1000
+                 assistance:e.target.value===''?undefined:Math.max(0,Math.round(fromWt(Number(e.target.value))*1000)/1000)
                })
              }
            />
@@ -3621,7 +3641,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
                  seconds:
                    e.target.value===''
                      ?undefined
-                     :Number(e.target.value)
+                     :Math.max(0,Number(e.target.value))
                })
              }
            />
@@ -3647,7 +3667,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
                  reps:
                    e.target.value===''
                      ?undefined
-                     :Number(e.target.value)
+                     :Math.max(0,Number(e.target.value))
                })
              }
            />
@@ -3831,7 +3851,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
                seconds:
                  e.target.value===''
                    ?undefined
-                   :+e.target.value
+                   :Math.max(0,+e.target.value)
              })
            }
          />
@@ -3846,7 +3866,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
                reps:
                  e.target.value===''
                    ?undefined
-                   :+e.target.value
+                   :Math.max(0,+e.target.value)
              })
            }
          />
@@ -3866,7 +3886,7 @@ function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targe
              rir:
                e.target.value===''
                  ?undefined
-                 :+e.target.value
+                 :Math.min(10,Math.max(0,+e.target.value))
            })
          }
        />
@@ -4109,7 +4129,7 @@ function ExerciseSheet({ex,s,close,onUse,onAlternative}:{ex:Exercise;s:AppState;
  <button className="a3-cta" onClick={onUse}>Use in training</button></Modal>
 }
 function Templates({s,update,onStart}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void;onStart:(w:Workout)=>void}){const [name,setName]=useState('');const [selected,setSelected]=useState<string[]>([]);const toggle=(id:string)=>setSelected(a=>a.includes(id)?a.filter(x=>x!==id):[...a,id]);const save=()=>{if(!name.trim()||!selected.length)return;const t:WorkoutTemplate={id:uid('tpl'),name:name.trim(),exerciseIds:selected,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};update(x=>({...x,workoutTemplates:[...(x.workoutTemplates||[]),t]}));setName('');setSelected([])};const useT=(t:WorkoutTemplate)=>{const w=cloneTemplateWorkout(t,today(),s.exercises);update(x=>({...x,workouts:[...x.workouts,w],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'template_used',timestamp:new Date().toISOString(),payload:{templateId:t.id,workoutId:w.id}}]}));onStart(w)};const remove=(id:string)=>update(x=>({...x,workoutTemplates:(x.workoutTemplates||[]).filter(t=>t.id!==id)}));return <div className="a3-home"><PageTitle eyebrow="TEMPLATES" title="Save the work you repeat." sub="Templates are reusable structures. Completed workouts remain separate historical events."/><section className="a3-card a3-stack plan-editor"><label>Template name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Quick upper"/></label><div className="a3-list picker-list">{s.exercises.slice(0,35).map(e=><button className="a3-card a3-pick a3-tap picker-row" key={e.id} onClick={()=>toggle(e.id)}><span><strong>{e.name}</strong><small>{selected.includes(e.id)?'Included':'Tap to include'} · {e.pattern}</small></span>{selected.includes(e.id)?<Icon name="check"/>:<Icon name="plus"/>}</button>)}</div><button className="a3-cta" disabled={!name.trim()||!selected.length} onClick={save}>Save template</button></section><section className="a3-block"><div className="a3-list">{(s.workoutTemplates||[]).map(t=><div className="a3-card a3-stack template-row" key={t.id}><ListRow title={t.name} sub={`${t.exerciseIds.length} exercises`} icon="train" click={()=>useT(t)}/><button className="a3-pill a3-danger" onClick={()=>remove(t.id)}>Delete</button></div>)}</div></section></div>}
-function Coach({s,onNav}:{s:AppState;onNav?:(r:string)=>void}){
+function Coach({s,update,onNav}:{s:AppState;update?:(f:(x:AppState)=>AppState)=>void;onNav?:(r:string)=>void}){
   const [q,setQ]=useState('');
   const [messages,setMessages]=useState([{from:'apex',text:'APEX Coach is connected to your training record. Ask what to do next, why a prescription changed, or how to handle today’s session.'}]);
   const buildContext=(userInput?:string)=>{
@@ -4118,7 +4138,8 @@ function Coach({s,onNav}:{s:AppState;onNav?:(r:string)=>void}){
     const currentExercise=currentWorkout?.exercises?.[0];
     const exercise=currentExercise?s.exercises.find(e=>e.id===currentExercise.exerciseId):undefined;
     const currentSet=currentExercise?.sets?.find(set=>!set.completed);
-    return {state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:currentWorkout?.id,workout:currentWorkout,exerciseId:exercise?.id,exercise,workoutExercise:currentExercise,setId:currentSet?.id,set:currentSet,recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),recentExerciseEntryIds:[],userInput,now:new Date().toISOString()};
+    const evidence=coachEvidenceFromState(s,today());
+    return {context:evidence.context,plateaus:evidence.plateaus,state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:currentWorkout?.id,workout:currentWorkout,exerciseId:exercise?.id,exercise,workoutExercise:currentExercise,setId:currentSet?.id,set:currentSet,recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),recentExerciseEntryIds:[],userInput,now:new Date().toISOString()};
   };
   const live=coach(buildContext());
   const ask=()=>{
@@ -4144,6 +4165,12 @@ function Coach({s,onNav}:{s:AppState;onNav?:(r:string)=>void}){
       {live.decision.confidenceReason&&<div className="a3-decision-reason"><Icon name="shield" size={15}/><span>{displayText(live.decision.confidenceReason)}</span></div>}
     </section>
 
+    {live.decision.candidates.some(c=>c.id==='review_plateau'||c.id==='lighter_session_option')&&<section className="a3-block" aria-label="Coach options">
+      <div className="a3-head"><h2>Your options</h2><span className="a3-eyebrow">You decide</span></div>
+      <div className="a3-list">{live.decision.candidates.filter(c=>c.id==='review_plateau'||c.id==='lighter_session_option').map(c=><div className="a3-card a3-stack" key={c.id}><strong>{displayText(c.title)}</strong><p className="a3-muted">{displayText(c.description)}</p></div>)}</div>
+    </section>}
+    {update&&<RecoveryCheckInCard s={s} update={update}/>}
+
     <div className="a3-stats a3-stats-1">
       <div className="a3-card a3-stat"><span className="a3-eyebrow">Session</span><strong>{activeWorkout?.name||'None active'}</strong><small>{currentSet?`${currentSet.type||'working'} set · ${currentSet.reps||'—'} reps · RIR ${currentSet.rir??'—'}`:'Using your latest record'}</small></div>
       <div className="a3-card a3-stat"><span className="a3-eyebrow">Decision</span><strong>{live.decision.action}</strong><small>{live.decision.confidence?`${live.decision.confidence} confidence`:'Context grounded'}</small></div>
@@ -4157,6 +4184,53 @@ function Coach({s,onNav}:{s:AppState;onNav?:(r:string)=>void}){
       <div className="a3-chips"><button className="a3-pill" onClick={()=>setQ('What should I do in my next session?')}>Next session</button><button className="a3-pill" onClick={()=>setQ('Why did APEX choose this prescription?')}>Why this prescription?</button><button className="a3-pill" onClick={()=>setQ('Should I change anything today?')}>Change anything?</button></div>
     </section>
   </div>
+}
+function RecoveryGate({notice,onRecovered,onFresh}:{notice:RecoveryNotice;onRecovered:(s:AppState)=>void;onFresh:(s:AppState)=>void}){
+  const [confirmFresh,setConfirmFresh]=useState(false);
+  const [failed,setFailed]=useState(false);
+  const [summary,setSummary]=useState<{workouts:number;dropped:number}|null>(null);
+  const [recovered,setRecovered]=useState<AppState|null>(null);
+  const recover=()=>{const r=repository.recoverRejected();if(!r){setFailed(true);return}setFailed(false);setSummary({workouts:r.workouts,dropped:r.dropped});setRecovered(r.state)};
+  if(recovered&&summary)return <div className="a3-home" role="region" aria-label="Data recovery">
+    <PageTitle eyebrow="DATA RECOVERY" title="Your data was recovered." sub=""/>
+    <section className="a3-card a3-stack"><p className="a3-muted">{summary.workouts} workout{summary.workouts===1?'':'s'} restored{summary.dropped?`, ${summary.dropped} could not be read and were left out`:''}. The original damaged copy is still kept on this device.</p><button className="a3-cta" onClick={()=>onRecovered(recovered)}>Continue to APEX</button></section>
+  </div>;
+  return <div className="a3-home" role="region" aria-label="Data recovery">
+    <PageTitle eyebrow="DATA RECOVERY" title="We couldn’t read your saved data." sub=""/>
+    <section className="a3-card a3-stack">
+      <p className="a3-muted">Nothing was deleted. The unreadable data is preserved on this device, and APEX will not start an empty app until you choose.</p>
+      <p className="a3-muted">Detected {new Date(notice.detectedAt).toLocaleString()} · {notice.bytes.toLocaleString()} characters preserved · {notice.reason==='invalid_json'?'the stored text is not valid data':'the stored data failed integrity checks'}.</p>
+      {notice.recoverable
+        ?<button className="a3-cta" onClick={recover}>Recover what can be read</button>
+        :<p className="a3-muted">This copy cannot be repaired automatically, so it is kept untouched for manual recovery.</p>}
+      {failed&&<p role="alert" className="a3-muted">Nothing could be recovered from the preserved copy.</p>}
+      {!confirmFresh
+        ?<button className="a3-pill" onClick={()=>setConfirmFresh(true)}>Start fresh instead</button>
+        :<div className="a3-stack"><p className="a3-muted">Start with an empty app? The damaged copy stays on this device but APEX will no longer show it.</p><button className="a3-pill a3-danger" onClick={()=>onFresh(repository.startFresh())}>Yes, start fresh</button><button className="a3-pill" onClick={()=>setConfirmFresh(false)}>Cancel</button></div>}
+    </section>
+  </div>
+}
+function RecoveryCheckInCard({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){
+  const date=today();
+  const existing=(s.recoveryLog||[]).find(x=>x.date===date);
+  const [sleep,setSleep]=useState(existing?.sleepHours!==undefined?String(existing.sleepHours):'');
+  const [scale,setScale]=useState<Record<string,number|undefined>>({sleepQuality:existing?.sleepQuality,soreness:existing?.soreness,fatigue:existing?.fatigue});
+  const [saved,setSaved]=useState(Boolean(existing));
+  const labels:Record<string,string>={sleepQuality:'Sleep quality',soreness:'Soreness',fatigue:'Fatigue'};
+  const save=()=>{
+    const hours=sleep.trim()===''?undefined:Math.min(24,Math.max(0,Number(sleep)));
+    update(x=>({...x,recoveryLog:upsertRecoveryCheckIn(x.recoveryLog,{date,sleepHours:hours,...scale})}));
+    setSaved(true);
+  };
+  const any=sleep.trim()!==''||Object.values(scale).some(v=>v!==undefined);
+  return <section className="a3-card a3-stack" aria-label="Recovery check-in">
+    <div className="a3-head"><div><span className="a3-eyebrow">RECOVERY CHECK-IN</span><h2>How do you feel today?</h2></div></div>
+    <p className="a3-muted">Optional context for your coach. It is evidence, not an instruction: it never changes your prescription on its own.</p>
+    <label>Sleep last night (hours)<input className="a3-input" type="number" inputMode="decimal" min={0} max={24} step={0.5} aria-label="Sleep hours" value={sleep} onChange={e=>{setSaved(false);setSleep(e.target.value===''?'':String(Math.min(24,Math.max(0,+e.target.value))))}}/></label>
+    {RECOVERY_SCALE_FIELDS.filter(k=>k in labels).map(k=><div key={k} role="group" aria-label={labels[k]}><span className="a3-eyebrow">{labels[k]} · 1 low – 5 high</span>
+      <div className="a3-choices weight-range-control">{[1,2,3,4,5].map(v=><button key={v} type="button" aria-pressed={scale[k]===v} className={scale[k]===v?'selected':''} aria-label={`${labels[k]} ${v}`} onClick={()=>{setSaved(false);setScale(x=>({...x,[k]:x[k]===v?undefined:v}))}}>{v}</button>)}</div></div>)}
+    <button className="a3-cta" disabled={!any||saved} onClick={save}>{saved?'Check-in saved':'Save check-in'}</button>
+  </section>
 }
 function Learn(){const terms=[['RIR','Reps in reserve: an estimate of how many clean reps you could still perform.'],['RPE','Rate of perceived exertion: a subjective effort description.'],['PR','Personal record: a meaningful achievement appropriate to the movement and set type.'],['ROM','Range of motion: the distance through which a movement travels.'],['AMRAP','As many appropriate reps as the set context allows.'],['Tempo','The cadence of a repetition, such as 2–1–2.'],['Volume','The amount of training work; the exact measure depends on the exercise.'],['Progressive overload','Gradually increasing a useful training stimulus over time.'],['Deload','A reduction in training stress when context supports recovery.']];return <div className="a3-home"><PageTitle eyebrow="LEARN" title="Know what the numbers mean." sub="Tap concepts when you need them. APEX introduces complexity progressively."/><div className="a3-list">{terms.map(([a,b])=><div className="a3-card a3-stack" key={a}><strong>{a}</strong><p>{b}</p></div>)}</div></div>}
 function Measurements({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>void}){

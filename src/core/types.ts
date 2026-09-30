@@ -578,6 +578,20 @@ export interface CoachMemory {
   createdAt: string;
 }
 
+/**
+ * One self-reported recovery check-in (per calendar day). Context for the Coach only;
+ * it never changes a prescription. Scales 1-5, sleepHours 0-24.
+ */
+export interface RecoveryCheckIn {
+  date: string;
+  sleepHours?: number;
+  sleepQuality?: number;
+  soreness?: number;
+  fatigue?: number;
+  stress?: number;
+  readiness?: number;
+}
+
 export interface AppState {
   schemaVersion: number;
 
@@ -616,6 +630,8 @@ export interface AppState {
   journal: JournalEntry[];
 
   observations: Observation[];
+
+  recoveryLog?: RecoveryCheckIn[];
 
   preferences: {
     haptics: boolean;

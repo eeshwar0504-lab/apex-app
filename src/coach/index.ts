@@ -6,6 +6,7 @@ export {
 } from './coach';
 
 export {runCoachDecision} from './decisionPipeline';
+export {coachEvidenceFromState} from './signals';
 
 export type {
   AdaptationScope,
@@ -29,6 +30,7 @@ export type {
   EvidencePattern,
   EvidenceState,
   KnowledgeConfidence,
+  PlateauSignal,
   SafetyAssessment,
   SafetyStatus,
 } from './types';
