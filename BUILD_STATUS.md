@@ -358,3 +358,12 @@ The 26-phase product implementation is complete. The remaining release checklist
 - Unreadable saved data is preserved, announced and recoverable; starting fresh is an explicit, confirmed choice.
 - Engine volume/PR helpers no longer let NaN, Infinity or negative set values into totals.
 - Native Capacitor SQLite and Android runtime remain NOT VERIFIED (no emulator/device in the Node harness).
+
+
+## Beginner-first workout simplification (presentation only)
+- The engines are unchanged (selection, progression, fatigue, deload, warm-ups, analytics, Coach, persistence). Only what the athlete must see and tap changed.
+- Default workout view: exercise, how to do it, today's weight, reps, START SET / LOG SET, rest, next. Everything else sits behind **More → Advanced controls** (a device display preference).
+- The session brief uses the equipment from setup as the default answer; **Change** keeps the per-exercise override. "Why this weight?" and the readiness check-in are collapsed.
+- The first set starts from the exercise screen with one START SET; the active set has a visible **LOG SET**. RIR is never recorded unless the athlete enters it. Set feedback and session feedback are optional ("Not sure · skip", "Done").
+- Skip workout, Extra session, Remove set and Skip set ask first. The Journal pill opens the Journal. Home, Train and Progress show one next step until the first workout is completed.
+- Tests: `tests/beginner-workout-ux.test.cjs`, `tests/e2e/beginner-workout.spec.ts`.

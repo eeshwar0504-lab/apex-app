@@ -19,6 +19,7 @@ import './apex3-phase14.css';
 import './apex3-phase15.css';
 import './apex3-design-system.css';
 import './apex-motion.css';
+import './apex-beginner.css';
 import {ApexErrorBoundary,ErrorPanel,LoadingPanel} from './ui/primitives';
 import {App} from './App';
 

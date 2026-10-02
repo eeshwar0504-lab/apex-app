@@ -15,7 +15,7 @@ function phase6LoadDisplayRaw(ex:Exercise,set?:SetLog,fallback?:number,profile?:
  if(ex.loadSemantics==='none')return {primary:'NO EXTERNAL LOAD'};
  if(ex.loadSemantics==='time'){const seconds=set?.seconds??ex.repRange[0];return {primary:formatTimedDuration(seconds),secondary:`Target ${ex.repRange[0]}–${ex.repRange[1]} sec`};}
  const value=set?.weight??fallback;
- if(value===undefined)return {primary:'CALIBRATION'};
+ if(value===undefined)return {primary:'START LIGHT',secondary:'Pick a weight you can control for every rep'};
  const detail=loadDetailForSet(ex,value,set?.loadDetail);
  if(ex.loadSemantics==='per_hand'){const total=dumbbellTotalLoad(ex,value);return {primary:`${value} kg / hand`,secondary:total===undefined?undefined:`${total} kg total · ${ex.unilateral?'unilateral':'both hands'}`};}
  if(ex.loadSemantics==='stack')return {primary:`${value} kg stack`,secondary:ex.equipment.includes('cable')&&!ex.equipment.includes('machine')?'Cable stack':'Machine stack'};

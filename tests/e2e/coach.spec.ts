@@ -96,8 +96,8 @@ test.describe('APEX Coach', () => {
     await expect(apexMessage).toContainText(/Confidence:/i);
   });
   test('Coach 2.0: the briefing, the weekly card and a contextual question', async ({ page }) => {
-    // Home shows the briefing's next step on the Coach card
-    await expect(page.locator('[data-coach-next]').first()).toContainText(/^Next: /);
+    // a brand-new Home is just the next step; the briefing lives on the Coach screen
+    await expect(page.locator('[data-coach-next]')).toHaveCount(0);
 
     await page.getByRole('button', { name: /Ask Coach/i }).first().click();
     const briefing = page.getByRole('region', { name: 'Coach briefing' });
@@ -116,10 +116,9 @@ test.describe('APEX Coach', () => {
     await input.press('Enter');
     await expect(page.locator('.apex-message.apex').last()).toContainText(/not a medical assessment/);
 
-    // Progress shows the weekly analytics with an explicit comparison state
+    // with no completed workout Progress explains itself instead of showing empty analytics (the weekly card is covered by weekly-analytics.test.cjs)
     await page.getByRole('button', { name: 'Progress', exact: true }).first().click();
-    const week = page.getByRole('region', { name: 'Weekly analytics' });
-    await expect(week).toBeVisible();
-    await expect(week.locator('[data-week-comparison]')).toContainText(/Not enough data|\+|-/);
+    await expect(page.getByText('Your progress starts with your first workout')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Weekly analytics' })).toHaveCount(0);
   });
 });

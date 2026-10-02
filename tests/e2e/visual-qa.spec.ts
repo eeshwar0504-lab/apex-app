@@ -62,10 +62,7 @@ test.describe('APEX 3.0 visual QA', () => {
       '.a3-hero',
       '.a3-hero-body',
       '.a3-hero-image',
-      '.a3-stats',
-      '.a3-coach',
-      '.a3-rings',
-      '.a3-block',
+      '.a3-firstrun', // a new user sees the one next step; stats, coach and rings appear after the first workout
     ]) {
       await expect(page.locator(selector).first(), `${selector} should render on Home`).toBeVisible();
     }

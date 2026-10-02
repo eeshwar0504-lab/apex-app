@@ -88,6 +88,8 @@ export function Home({s,onNav,onStart,update}:{s:AppState;onNav:(r:string)=>void
  const weekVolume=vol(weekDone.reduce((n,w)=>n+volumeForWorkout(w,s.exercises),0));
  const volumeLabel=weekVolume>=1000?(weekVolume/1000).toFixed(1)+'K':String(weekVolume);
  const focusMuscles=focus?[...new Set(focus.exercises.flatMap(we=>s.exercises.find(e=>e.id===we.exerciseId)?.primaryMuscles||[]))].slice(0,3):[];
+ /* Before the first completed workout there is nothing to compare or total up, so Home is the one next step and a plain sentence about it. */
+ const firstRun=!s.workouts.some(w=>w.status==='completed');
  const kicker=active?'In progress':todayW?'Today’s workout':'Next up';
  const weekDays=Array.from({length:7},(_,i)=>{const iso=addDaysLocal(todayLocal(),-((new Date().getDay()+6)%7)+i);return {iso,label:'MTWTFSS'[i],on:s.workouts.some(w=>w.status==='completed'&&workoutDay(w)===iso),today:iso===today()}});
  return <div className="home-screen a3-home">
@@ -105,6 +107,13 @@ export function Home({s,onNav,onStart,update}:{s:AppState;onNav:(r:string)=>void
     </div>
    </section>
 
+   {firstRun&&<article className="a3-card a3-stack a3-firstrun" aria-label="Your first workout">
+    <span className="a3-eyebrow a3-gold">Your first workout</span>
+    <p>Tap <strong>Start Workout</strong>. APEX shows you each exercise one at a time: how to do it, what weight to start with and how many reps to aim for. Take your time, and rest between sets.</p>
+    <button className="a3-link" onClick={()=>onNav('coach')}>Have a question? Ask Coach <Icon name="arrow" size={14}/></button>
+   </article>}
+
+   {!firstRun&&<>
    <div className="a3-stats">
     <ApexStat label="Streak" value={String(consistency.streak)} unit="days"/>
     <ApexStat label="This week" value={String(weekDone.length)} unit="sessions"/>
@@ -141,5 +150,6 @@ export function Home({s,onNav,onStart,update}:{s:AppState;onNav:(r:string)=>void
    </section>
 
     <div className="a3-tools"><button className="a3-card a3-tap" onClick={()=>onNav('today')}><Icon name="calendar"/>Today</button><button className="a3-card a3-tap" onClick={()=>onNav('nutrition')}><Icon name="activity"/>Nutrition</button></div>
+   </>}
  </div>
 }

@@ -343,6 +343,48 @@ export function applySetFeedback(
 }
 
 /**
+ * The athlete chose not to rate the set ("Not sure"). Feedback is optional, so this leaves the set exactly as it was logged and
+ * starts the rest: no recommendation, load, calibration or feedback record is created or changed, and no value is invented.
+ */
+export function skipSetFeedback(
+  workout: Workout,
+  exercise: Exercise,
+  exerciseIndex: number,
+  setIndex: number,
+  at = new Date().toISOString(),
+  preferences?: { restPreference?: RestPreference; restCustomSec?: number },
+): Workout {
+  const c = structuredClone(workout);
+  const gs = completeGuidedSession(c.guidedSession);
+  const activeSet = c.exercises[exerciseIndex]?.sets[setIndex];
+
+  if (!activeSet) return workout;
+
+  c.guidedSession = {
+    ...gs,
+    phase: 'rest',
+    exerciseIndex,
+    setIndex,
+    updatedAt: at,
+    version: gs.version + 1,
+  };
+
+  Object.assign(c.guidedSession as any, {
+    restStartedAt: at,
+    restTargetSec: recommendedRest(
+      exercise,
+      preferences?.restPreference ?? 'adaptive',
+      preferences?.restCustomSec,
+      activeSet.rir,
+    ),
+    workStartedAt: undefined,
+    workTargetSec: undefined,
+  });
+
+  return c;
+}
+
+/**
  * After rest, select the next incomplete set in the SAME exercise first.
  * Only when no set remains do we move to the next exercise.
  */

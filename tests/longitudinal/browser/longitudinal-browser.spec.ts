@@ -66,14 +66,14 @@ async function driveWorkout(page: Page, maxSteps = 300) {
     if (!(await c.isVisible().catch(() => false))) break;
     await c.click();
   }
-  const go = page.getByRole('button', { name: /Session ready · Start training/i });
+  const go = page.getByRole('button', { name: /^Start training/i });
   if (await go.isVisible().catch(() => false)) await go.click();
   for (let i = 0; i < maxSteps; i++) {
     if (await page.locator('[data-apex-route^="session:"]').isVisible().catch(() => false)) break;
     let clicked = false;
     for (const re of [/FINISH SESSION/i, /REVIEW SESSION/i, /Log set/i, /Save Set/i, /START SET/i, /ABOUT RIGHT/i, /SKIP REST/i, /^CONTINUE/]) {
       const b = page.getByRole('button', { name: re }).first();
-      if (await b.isVisible().catch(() => false)) { if (/Save Set/i.test(String(re))) res.setsSaved++; await b.click(); clicked = true; break; }
+      if (await b.isVisible().catch(() => false)) { if (/Log set/i.test(String(re))) res.setsSaved++; await b.click(); clicked = true; break; }
     }
     if (!clicked) await page.waitForTimeout(60);
   }
@@ -112,7 +112,7 @@ test('incomplete workout survives reload and can be resumed', async ({ page }) =
   await tab(page, 'Train');
   await page.locator('.main').getByRole('button', { name: /Start Workout/ }).first().click();
   for (let i = 0; i < 12; i++) { const c = page.getByRole('button', { name: 'Confirm available' }).first(); if (!(await c.isVisible().catch(() => false))) break; await c.click(); }
-  await page.getByRole('button', { name: /Session ready · Start training/i }).click();
+  await page.getByRole('button', { name: /^Start training/i }).click();
   await page.getByRole('button', { name: /START SET/i }).first().click();
   await page.reload();
   await expect(page.locator('[data-apex-route="workout"]')).toBeVisible({ timeout: 20000 });
@@ -135,12 +135,9 @@ test('unit switching: canonical kg untouched, labels follow the unit, Log Set sh
   await tab(page, 'Train');
   await page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first().click();
   for (let i = 0; i < 12; i++) { const c = page.getByRole('button', { name: 'Confirm available' }).first(); if (!(await c.isVisible().catch(() => false))) break; await c.click(); }
-  await page.getByRole('button', { name: /Session ready · Start training/i }).click();
+  await page.getByRole('button', { name: /^Start training/i }).click();
   await page.getByRole('button', { name: /START SET/i }).first().click();
-  await page.getByRole('button', { name: /START SET/i }).first().click();
-  await page.getByRole('button', { name: 'Log set' }).click();
   await expect(page.getByText('Weight (lb)')).toBeVisible();
-  await page.getByRole('button', { name: 'Back to set' }).click();
   await page.getByRole('button', { name: 'Exit workout' }).click();
   // starting the workout legitimately carries the recommendation into the planned sets (first hydration);
   // from here on only the unit may change, never a stored kg value
@@ -149,7 +146,6 @@ test('unit switching: canonical kg untouched, labels follow the unit, Log Set sh
   await page.locator('#settings-units').getByRole('button', { name: /Metric/ }).click();
   expect(await canonical()).toBe(afterStart);
   await tab(page, 'Train'); // the in-progress workout resumes exactly where it was left
-  await page.getByRole('button', { name: 'Log set' }).click();
   await expect(page.getByText('Weight (kg)')).toBeVisible();
 });
 
@@ -227,7 +223,7 @@ const readState = (page: Page) => page.evaluate((k) => JSON.parse(localStorage.g
 async function startTodaysWorkout(page: Page) {
   await page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first().click();
   for (let i = 0; i < 12; i++) { const c = page.getByRole('button', { name: 'Confirm available' }).first(); if (!(await c.isVisible().catch(() => false))) break; await c.click(); }
-  const go = page.getByRole('button', { name: /Session ready · Start training/i });
+  const go = page.getByRole('button', { name: /^Start training/i });
   if (await go.isVisible().catch(() => false)) await go.click();
 }
 
@@ -240,8 +236,10 @@ test('zero-set workout: skipping every set ends as "No sets logged", is abandone
   for (let i = 0; i < 200; i++) {
     if (await page.getByRole('button', { name: /END WITHOUT RECORDING/i }).isVisible().catch(() => false)) break;
     let clicked = false;
+    const confirmSkip = page.getByRole('dialog').getByRole('button', { name: 'Skip set', exact: true });
+    if (await confirmSkip.isVisible().catch(() => false)) { await confirmSkip.click(); continue; }
     if (!(await page.getByRole('button', { name: /Skip this set/i }).first().isVisible().catch(() => false))) {
-      const opts = page.locator('summary', { hasText: 'Set options' }).first();
+      const opts = page.locator('summary', { hasText: 'More options' }).first();
       if (await opts.isVisible().catch(() => false)) await opts.click();
     }
     for (const re of [/Skip this set/i, /^CONTINUE/, /REVIEW SESSION/i, /START SET/i]) {
@@ -352,7 +350,8 @@ test('return to training: a 30-day gap is explained in the app and the load is l
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
   await tab(page, 'Train');
   await startTodaysWorkout(page);
-  // exercise-ready screen: the recommendation and its reason
+  // exercise-ready screen: the recommendation, and its reason behind "Why this weight?"
+  await page.getByRole('button', { name: 'Why this weight?' }).click();
   let body = await page.locator('body').innerText();
   expect(body).toMatch(/Return to training after 30 days/);
   expect(body).toMatch(/55 kg stack/);
@@ -518,10 +517,16 @@ test.describe('IST midnight boundary', () => {
     await resetApp(page);
     await completeOnboarding(page);
     await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
-    const today = await page.evaluate(() => Array.from(document.querySelectorAll('.a3-week-days span.today')).map((e) => e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent));
+    // a new user's Home has no week strip, so the local day is read from the History calendar's marked day
+    await page.getByRole('button', { name: 'Command Center', exact: true }).click();
+    const cmd = page.getByRole('dialog').locator('input').first();
+    await cmd.fill('Open history');
+    await cmd.press('Enter');
+    const today = await page.evaluate(() => Array.from(document.querySelectorAll('.a3-cal-day.is-today')).map((e) => e.getAttribute('aria-label') || e.textContent));
     expect(today.length).toBe(1);
     expect(String(today[0])).toContain('2026-03-15');
-    await page.getByRole('button', { name: /Nutrition/ }).first().click();
+    await page.getByRole('button', { name: 'You', exact: true }).click();
+    await page.locator('.main').getByRole('button', { name: /Nutrition/ }).first().click();
     await page.getByRole('button', { name: '+ 250 ml' }).click();
     const st = await readState(page);
     expect(Object.keys(st.nutrition.log)).toEqual(['2026-03-15']);

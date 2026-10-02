@@ -4,7 +4,7 @@ import {getUnits,wtInput,fromWt,weightLabel} from '../data/units';
 import {SET_TYPES} from '../ui/shared';
 import {Icon,BumpInput} from '../ui/primitives';
 
-export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,hideOptions=false,loadProfile}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;hideOptions?:boolean;loadProfile?:UserProfile}){
+export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,hideOptions=false,loadProfile,showRir=true,showNotes=true}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;hideOptions?:boolean;loadProfile?:UserProfile;showRir?:boolean;showNotes?:boolean}){
  const timed=set.type==='timed'||ex.loadSemantics==='time';
  const assist=set.type==='assisted'||ex.loadSemantics==='assistance';
  const loadable=
@@ -150,8 +150,8 @@ export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemov
          </div>
        }
 
-       <div className="a3-control">
-         <small>RIR</small>
+       {showRir&&<div className="a3-control">
+         <small>RIR (reps left in the tank) · optional</small>
          <div className="a3-stepper">
            <button
              type="button"
@@ -190,11 +190,11 @@ export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemov
              +
            </button>
          </div>
-       </div>
+       </div>}
      </div>
      </div>
 
-     <label className="a3-control a3-notes">
+     {showNotes&&<label className="a3-control a3-notes">
        <small>Notes (optional)</small>
        <textarea
          className="a3-input"
@@ -204,17 +204,17 @@ export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemov
          placeholder="Felt good, tempo, grip…"
          onChange={e=>onChange({note:e.target.value||undefined})}
        />
-     </label>
+     </label>}
 
      <div className="a3-actions">
        <button
          className={`a3-cta a3-complete ${set.completed?'completed':''}`}
          onClick={onComplete}
-         aria-label={set.completed?'Undo set':'Save Set'}
+         aria-label={set.completed?'Undo set':'Log set'}
        >
          <Icon name="check"/>
          <span>
-           {set.completed?'SET SAVED ✓':'SAVE SET'}
+           {set.completed?'SET LOGGED ✓':'LOG SET'}
          </span>
        </button>
      </div>

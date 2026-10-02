@@ -7,7 +7,7 @@ import {volumeForWorkout,bestLoad,setLoad,isWorkingSet} from '../engine/training
 import {goalProgress,trainingLoadSummary} from '../engine/intelligence';
 import {consistencySummary,volumeTrend,goalMomentum,trainingBalance} from '../engine/analytics';
 import {wt,vol,volLabel,weightLabel,displayText} from '../data/units';
-import {today,formatLoad} from '../ui/shared';
+import {today,formatLoad,sourceLabel} from '../ui/shared';
 import {Icon,ApexSpark,SegBar,ApexStat,ApexRing,ApexMeter,PageTitle,Empty} from '../ui/primitives';
 import {workingOf} from '../ui/setHelpers';
 
@@ -72,10 +72,13 @@ export function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const bodyRangeEntries=bodyEntries.filter(x=>x.date>=bodyCut);
  const bodySeries=bodyRangeEntries.map(x=>wt(x.weightKg as number));
  const shortDate=(d:string)=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+ /* With no completed workout there is nothing to chart: one plain explanation and the body-weight shortcut, then analytics appear as data does. */
+ const zero=done.length===0;
  return <div className="a3-home a3-progress">
-   <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">Progress · {done.length} sessions</span><h1>Progress</h1></header>
-   <SegBar label="Progress sections" value={tab} onChange={setTab} items={[['overview','Overview'],['strength','Strength'],['body','Body'],['prs','PRs']]}/>
-   {tab==='overview'&&<WeeklyCard s={s}/>}
+   <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">{zero?'Progress':`Progress · ${done.length} session${done.length===1?'':'s'}`}</span><h1>Progress</h1></header>
+   {zero&&<Empty title="Your progress starts with your first workout" text="Finish a workout and your sessions, weights and records will show up here."/>}
+   {!zero&&<SegBar label="Progress sections" value={tab} onChange={setTab} items={[['overview','Overview'],['strength','Strength'],['body','Body'],['prs','PRs']]}/>}
+   {!zero&&tab==='overview'&&<WeeklyCard s={s}/>}
    {(tab==='overview'||tab==='body')&&<>
    <div className="a3-card a3-stack a3-bodycard apex-body-shortcut">
     <div className="a3-bodyhead"><div><span className="a3-eyebrow">Body weight</span><strong className="a3-bodyvalue">{latestBodyEntry?<>{wt(latestBodyEntry.weightKg as number)}<small>{weightLabel()}</small></>:'Start a recorded-weight history'}</strong></div>{bodyWeightChange!==undefined&&<span className="a3-delta">{bodyWeightChange>=0?'↑':'↓'} {Math.abs(wt(bodyWeightChange)).toFixed(1)} {weightLabel()}<small>since previous</small></span>}</div>
@@ -85,7 +88,7 @@ export function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
    </div>
    </>}
 
-   {tab==='overview'&&<>
+   {!zero&&tab==='overview'&&<>
    <div className="a3-stats">
     <ApexStat label="Sessions" value={String(done.length)} unit="done"/>
     <ApexStat label="Volume" value={total?vol(total).toLocaleString():'—'} unit={volLabel()}/>
@@ -203,5 +206,5 @@ export function History({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
   </section>
   <div className="a3-search"><Icon name="search"/><input aria-label="Search workouts" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search workout, date…"/></div>
   <div className="a3-chips">{['all','completed','skipped','missed','rescheduled','extra'].map(x=><button className={`a3-pill ${status===x?'selected':''}`} key={x} onClick={()=>setStatus(x)}>{x}</button>)}</div>
-  <div className="a3-list">{rows.map(w=><button className="a3-card a3-pick a3-tap history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="a3-eyebrow">{w.scheduledDate} · {w.status} · {w.source}</span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {vol(volumeForWorkout(w,s.exercises)).toLocaleString()} {volLabel()}</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Nothing to show" text="Your timeline will populate as training happens."/>}</div>
+  <div className="a3-list">{rows.map(w=><button className="a3-card a3-pick a3-tap history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="a3-eyebrow">{[w.scheduledDate,w.status,sourceLabel(w.source)].filter(Boolean).join(' · ')}</span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {vol(volumeForWorkout(w,s.exercises)).toLocaleString()} {volLabel()}</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Nothing to show" text="Your timeline will populate as training happens."/>}</div>
  </div>}

@@ -74,7 +74,7 @@ async function openScheduledSession(page: Page) {
   });
 
   await expect(
-    page.getByText('LOAD GUIDANCE')
+    page.getByRole('button', { name: 'Why this weight?' })
   ).toBeVisible({
     timeout: 10_000,
   });
@@ -188,7 +188,7 @@ async function enterGuidedWorkout(page: Page) {
   await confirmAllRequiredEquipment(page);
 
   const startTraining = page.getByRole('button', {
-    name: /Session ready · Start training/i,
+    name: /^Start training/i,
   });
 
   if (
@@ -198,7 +198,7 @@ async function enterGuidedWorkout(page: Page) {
     await startTraining.click();
   } else {
     const confirmEquipment = page.getByRole('button', {
-      name: /Confirm equipment to continue/i,
+      name: /Check your equipment to continue/i,
     });
 
     if (
@@ -296,7 +296,7 @@ async function reachActiveSet(page: Page) {
      * it here instead of immediately entering the focused card.
      */
     const startTraining = page.getByRole('button', {
-      name: /Session ready · Start training/i,
+      name: /^Start training/i,
     });
 
     if (
@@ -404,120 +404,58 @@ test.describe('APEX training execution', () => {
     });
 
     await expect(
-      page.getByText('LOAD GUIDANCE')
+      page.getByRole('button', { name: 'Why this weight?' })
     ).toBeVisible({
       timeout: 10_000,
     });
   });
 
-  test('equipment confirmation gates training start', async ({ page }) => {
+  test('the equipment chosen in setup is the default: start is available at once and Change keeps the per-exercise override', async ({ page }) => {
     await openScheduledSession(page);
 
-    const confirmButtons = page.getByRole('button', {
-      name: 'Confirm available',
-    });
+    // no equipment question has to be answered before training can start
+    await expect(page.getByRole('button', { name: /^Start training/i })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Confirm available' })).toHaveCount(0);
+    await expect(page.getByText('Using the equipment from your setup.')).toBeVisible();
 
-    const unavailableButtons = page.getByRole('button', {
-      name: 'Not available',
-    });
-
-    const confirmCount = await confirmButtons.count();
-    const unavailableCount = await unavailableButtons.count();
+    // Change reveals one row per exercise requirement
+    await page.getByRole('button', { name: 'Change', exact: true }).click();
     const requirementLabels = await page.locator('.equipment-check-block .a3-equip-main .a3-eyebrow').allTextContents();
-
-    expect(
-      confirmCount + unavailableCount
-    ).toBeGreaterThan(0);
     expect(requirementLabels).toContain('Machine Chest Press');
     expect(new Set(requirementLabels).size).toBeGreaterThan(1);
 
-    /*
-     * Verify that APEX exposes the actual equipment decision surface.
-     */
-    if (confirmCount > 0) {
-      await expect(
-        confirmButtons.first()
-      ).toBeVisible();
-    }
+    // marking one requirement unavailable gates the start and offers other exercises, in plain words
+    await page.getByRole('button', { name: 'Not available' }).first().click();
+    await expect(page.getByText(/Not available today/i).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Replace unavailable equipment to continue/i })).toBeDisabled();
 
-    if (unavailableCount > 0) {
-      await expect(
-        unavailableButtons.first()
-      ).toBeVisible();
-
-      await unavailableButtons.first().click();
-
-      await expect(
-        page.getByText(/Equipment unavailable/i).first()
-      ).toBeVisible();
-
-      await expect(
-        page.getByText(/APEX found alternatives/i).first()
-      ).toBeVisible();
-
-      /*
-       * Restore the session to an executable state so the test
-       * does not leave a partially mutated workout behind.
-       */
-      const markAvailable = page.getByRole('button', {
-        name: /Mark available/i,
-      });
-
-      if (
-        await markAvailable.first().isVisible().catch(() => false)
-      ) {
-        await markAvailable.first().click();
-      }
-    }
+    // and the override can be undone
+    await page.getByRole('button', { name: 'Confirm available' }).first().click();
+    await expect(page.getByRole('button', { name: /^Start training/i })).toBeEnabled();
   });
 
-  test('active set logger exposes load/reps/RIR controls without clipping', async ({ page }) => {
+  test('active set logger is weight, reps and one visible LOG SET; RIR is advanced', async ({ page }) => {
     await enterActiveSet(page);
-    await page.getByRole('button',{name:'Log set'}).click();
 
-    /*
-     * These are the real focused-set controls rendered by SetEditor.
-     */
-    await expect(
-      page.getByRole('button', {
-        name: 'Decrease reps',
-      })
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log set' })).toContainText('LOG SET');
+    await expect(page.getByRole('button', { name: 'Decrease reps' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Increase reps' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Decrease load' })).toBeVisible();
 
-    await expect(
-      page.getByRole('button', {
-        name: 'Increase reps',
-      })
-    ).toBeVisible();
-
-    await expect(
-      page.getByRole('button', {
-        name: 'Decrease RIR',
-      })
-    ).toBeVisible();
-
-    await expect(
-      page.getByRole('button', {
-        name: 'Increase RIR',
-      })
-    ).toBeVisible();
-
-    await expect(
-      page.getByRole('button', {
-        name: 'Save Set',
-      })
-    ).toBeVisible();
+    // RIR is hidden until the advanced controls are switched on
+    await expect(page.getByRole('button', { name: 'Decrease RIR' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await page.getByRole('button', { name: 'Advanced controls' }).click();
+    await expect(page.getByRole('button', { name: 'Decrease RIR' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Increase RIR' })).toBeVisible();
 
     const overflow = await page.evaluate(() => ({
       width: document.documentElement.scrollWidth,
       viewport: document.documentElement.clientWidth,
     }));
 
-    expect(
-      overflow.width
-    ).toBeLessThanOrEqual(
-      overflow.viewport + 1
-    );
+    expect(overflow.width).toBeLessThanOrEqual(overflow.viewport + 1);
   });
 
   test('pause and resume controls remain reachable during an active session', async ({ page }) => {
@@ -527,6 +465,7 @@ test.describe('APEX training execution', () => {
      * APEX exposes the toolbar control with an explicit accessible
      * name that changes with the persisted pause state.
      */
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     const pause = page.getByRole('button', {
       name: 'Pause workout',
     });
@@ -596,14 +535,16 @@ test.describe('APEX training execution', () => {
 
   test('paused active workout restores after browser reload', async ({ page }) => {
     await enterActiveSet(page);
+    await page.getByRole('button',{name:'More',exact:true}).click();
     await page.getByRole('button',{name:'Pause workout'}).click();
     await expect(page.getByRole('button',{name:'Resume workout'})).toBeVisible();
 
     await page.reload({waitUntil:'domcontentloaded'});
     await expect(page.locator('[data-apex-route="workout"]')).toBeVisible({timeout:15000});
-    await expect(page.getByRole('button',{name:'Resume workout'})).toBeVisible();
+    await expect(page.getByText('SESSION PAUSED')).toBeVisible();
 
-    await page.getByRole('button',{name:'Resume workout'}).click();
+    await page.getByRole('button',{name:'Resume',exact:true}).click();
+    await page.getByRole('button',{name:'More',exact:true}).click();
     await expect(page.getByRole('button',{name:'Pause workout'})).toBeVisible();
   });
 
@@ -717,9 +658,8 @@ test.describe('APEX training execution', () => {
 
     await expect(page.getByText(/WARM-UP 1 \/ \d/)).toBeVisible();
     await page.getByRole('button', { name: 'Log set' }).click();
-    await page.getByRole('button', { name: 'Save Set' }).first().click();
     await expect(page.getByText('How did that feel?')).toHaveCount(0);
-    await expect(page.getByText('RECOVER', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('REST', { exact: true }).first()).toBeVisible({ timeout: 10_000 });
 
     for (let step = 0; step < 40; step++) {
       if (await page.getByText(/^SET 1 \/ \d/).first().isVisible().catch(() => false)) break;

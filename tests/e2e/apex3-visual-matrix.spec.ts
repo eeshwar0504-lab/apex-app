@@ -77,7 +77,7 @@ async function startWorkoutFromBrief(page: Page) {
     if (!(await confirm.isVisible().catch(() => false))) break;
     await confirm.click();
   }
-  const go = page.getByRole('button', { name: /Session ready · Start training/i });
+  const go = page.getByRole('button', { name: /^Start training/i });
   if (!(await go.isEnabled().catch(() => false))) return false;
   await go.click();
   return page.locator('[data-apex-route="workout"]').isVisible({ timeout: 4000 }).catch(() => false);

@@ -112,3 +112,9 @@ export class ApexErrorBoundary extends React.Component<{children:React.ReactNode
 
 /* Calm placeholder while something is being prepared. The shimmer is a transform on a pseudo-element (see apex-motion.css) and stops under reduced motion. */
 export function Skeleton({label,lines=2}:{label:string;lines?:number}){return <div className="a3-skeleton" role="status" aria-label={label}>{Array.from({length:lines},(_,i)=><span key={i}/>)}</div>}
+
+/* A real show/hide control for secondary detail: the detail is not in the page until it is asked for. */
+export function Disclosure({label,children,className=''}:{label:string;children:React.ReactNode;className?:string}){
+ const [open,setOpen]=useState(false);
+ return <div className={`a3-disclosure ${className}`}><button type="button" className="a3-disclosure-toggle" aria-expanded={open} onClick={()=>setOpen(x=>!x)}>{label}<Icon name="chev" size={16}/></button>{open&&<div className="a3-disclosure-body">{children}</div>}</div>;
+}
