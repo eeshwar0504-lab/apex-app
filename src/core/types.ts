@@ -310,6 +310,11 @@ export interface Exercise {
   loadDescription?: string;
 
   durationRangeSec?: [number, number];
+
+  /** Set by programExercise(): the catalogue values the goal program started from, and the goal applied. */
+  catalogueRepRange?: [number, number];
+  catalogueRestSec?: number;
+  programmedFor?: GoalKind;
 }
 
 export interface SetLog {
@@ -590,6 +595,10 @@ export interface RecoveryCheckIn {
   fatigue?: number;
   stress?: number;
   readiness?: number;
+  /** Context only: never read by the training prescription engine. */
+  recentIllness?: boolean;
+  pain?: boolean;
+  discomfort?: boolean;
 }
 
 export interface AppState {

@@ -37,6 +37,9 @@ export function normalizeRecoveryCheckIn(raw:unknown):RecoveryCheckIn|undefined{
   const value=clampNumber(input[key],1,5,true);
   if(value!==undefined)out[key]=value;
  }
+ for(const key of ['recentIllness','pain','discomfort'] as const){
+  if(input[key]===true)out[key]=true;
+ }
  return Object.keys(out).length>1?out:undefined;
 }
 

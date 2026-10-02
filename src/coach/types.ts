@@ -3,8 +3,6 @@ import type {
   Exercise,
   Goal,
   GoalKind,
-  LoadDetail,
-  LoadSemantics,
   SetLog,
   UserProfile,
   Workout,
@@ -142,6 +140,9 @@ export interface CoachContext {
   /** Deterministic plateau signals (analytics.plateauCandidates). Evidence only; never a prescription change. */
   plateaus?: PlateauSignal[];
 
+  /** Deterministic, read-only interpretation of stored APEX history. */
+  signals?: CoachStateSignals;
+
   /** Current timestamp used for deterministic decision evaluation. */
   now: string;
 }
@@ -177,6 +178,21 @@ export interface CoachContextSignals {
   note?: string;
 }
 
+/**
+ * Facts derived from local APEX state. These are deliberately descriptive;
+ * they are not instructions to training.ts and cannot carry a load change.
+ */
+export interface CoachStateSignals {
+  recovery?: 'good' | 'normal' | 'poor' | 'missing' | 'conflicted';
+  recoveryDate?: string;
+  safety?: 'pain' | 'discomfort' | 'recent_illness';
+  workload?: 'normal' | 'elevated';
+  consistency30?: number;
+  missedSessions21?: number;
+  returnToTrainingDays?: number;
+  performance?: 'improving' | 'stable' | 'declining' | 'insufficient';
+}
+
 /** A single piece of evidence considered by the coach. */
 export interface CoachEvidence {
   id: string;
@@ -193,6 +209,11 @@ export interface CoachEvidence {
   quality: DataQuality;
   pattern: EvidencePattern;
   confidence: CoachConfidence;
+  /** Whether this item supports, contradicts, or merely contextualizes the decision. */
+  role?: 'supporting' | 'contradicting' | 'context' | 'missing';
+  /** Human-readable freshness, not invented physiological precision. */
+  recency?: 'current' | 'recent' | 'stale' | 'unknown';
+  direction?: 'positive' | 'negative' | 'neutral' | 'mixed';
   timestamp?: string;
   references?: string[];
 }
@@ -241,28 +262,13 @@ export interface CoachingConsequence {
 }
 
 /**
- * The actual prescription delivered by the coach.
- * Fields remain optional because not every coaching action is a set prescription.
+ * Interpretive guidance only. Numerical training prescriptions intentionally
+ * do not exist in this contract; training.ts owns load, reps, sets and rest.
  */
 export interface CoachPrescription {
   action: CoachAction;
   exerciseId?: string;
   setId?: string;
-
-  weight?: number;
-  minWeight?: number;
-  maxWeight?: number;
-  loadSemantics?: LoadSemantics;
-  loadDetail?: LoadDetail;
-
-  repsMin?: number;
-  repsMax?: number;
-  targetRir?: number;
-  targetSeconds?: number;
-  restSec?: number;
-
-  sets?: number;
-  exerciseOrder?: number;
 
   /** Human-readable instruction suitable for the UI. */
   instruction: string;

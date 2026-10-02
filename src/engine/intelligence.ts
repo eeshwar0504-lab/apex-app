@@ -1,13 +1,15 @@
 import type {AppState, Observation, Workout} from '../core/types';
 import type {CoachContext, CoachResult} from '../coach/types';
 import {runCoachDecision} from '../coach/decisionPipeline';
-import {volumeForWorkout, summarizeSets} from './training';
+import {volumeForWorkout, summarizeSets, workloadFatigue, chronologicalCompleted, progression, isWorkingSet} from './training';
+import {localDate,addDaysLocal,workoutDay} from '../data/dates';
+import {coachEvidenceFromState} from '../coach/signals';
 
 export type EvidenceGrade='high'|'medium'|'low';
 export interface Insight {title:string; detail:string; evidence:string[]; confidence:EvidenceGrade; kind:'fact'|'inference'|'recommendation';}
 export interface Adaptation {type:'load'|'reps'|'rest'|'volume'|'recovery'|'schedule'|'replace'; title:string; detail:string; evidence:string[]; confidence:EvidenceGrade; requiresConfirmation:boolean;}
 
-export function completedWorkouts(s:AppState){return s.workouts.filter(w=>w.status==='completed').sort((a,b)=>(a.completedAt||a.scheduledDate).localeCompare(b.completedAt||b.scheduledDate));}
+export function completedWorkouts(s:AppState){return chronologicalCompleted(s.workouts);}
 export function exerciseHistory(s:AppState,id:string){return completedWorkouts(s).flatMap(w=>w.exercises.filter(e=>e.exerciseId===id).map(e=>({workout:w,entry:e})));}
 export function recentVolumes(s:AppState){return completedWorkouts(s).slice(-6).map(w=>({date:w.scheduledDate,volume:volumeForWorkout(w,s.exercises)}));}
 
@@ -26,8 +28,8 @@ export function homeInsights(s:AppState):Insight[]{
 export function readiness(s:AppState):{label:string;detail:string;level:'baseline'|'normal'|'elevated'}{
  const done=completedWorkouts(s).slice(-3);
  if(!done.length)return {label:'Baseline',detail:'Not enough history for a readiness inference.',level:'baseline'};
- const last=done[done.length-1], prev=done[done.length-2];
- if(prev && volumeForWorkout(last,s.exercises)>volumeForWorkout(prev,s.exercises)*1.25)return {label:'Elevated load',detail:'Recent session volume was substantially higher than the prior session.',level:'elevated'};
+ // the workload-spike rule lives in the training engine (workloadFatigue) so readiness and progression always agree
+ if(workloadFatigue(s.workouts,s.exercises)==='elevated')return {label:'Elevated load',detail:'Recent session volume was substantially higher than the prior session.',level:'elevated'};
  return {label:'Normal',detail:'Recent training provides usable evidence without a strong fatigue flag.',level:'normal'};
 }
 
@@ -56,15 +58,16 @@ export function adaptationsForWorkout(s:AppState,w:Workout):Adaptation[]{
    const history=exerciseHistory(s,ex.id).filter(x=>x.workout.id!==w.id).slice(-4);
    const sets=history.flatMap(x=>x.entry.sets);
    if(!sets.length)continue;
-   const completed=sets.filter(x=>x.completed&&x.type!=='warmup');
+   const completed=sets.filter(isWorkingSet);
    if(completed.length<2)continue;
+   // advisory text only: the decision itself is progression(), the same function that prescribes the load
+   const decision=progression(ex,completed,{fatigue:workloadFatigue(s.workouts,s.exercises)});
    const bottom=ex.repRange[0],top=ex.repRange[1];
    const recent=completed.slice(-3);
-   const reached=recent.length>=2&&recent.every(x=>(x.reps||0)>=top);
-   if(reached&&read.level!=='elevated'){
+   if(decision.action==='increase'){
      const last=recent[recent.length-1];
-     out.push({type:'load',title:`Progress ${ex.name}`,detail:`Recent comparable sets repeatedly reached ${top} reps. A small equipment-specific load step is supported.`,evidence:[`Last ${recent.length} comparable sets reached the top of the range`,`Last load: ${last.weight??'bodyweight'}`],confidence:'high',requiresConfirmation:false});
-   } else if(recent.filter(x=>(x.reps||0)<bottom).length>=2){
+     out.push({type:'load',title:`Progress ${ex.name}`,detail:`Recent comparable sets repeatedly reached ${top} reps. A small equipment-specific load step is supported.`,evidence:[`Last ${recent.length} comparable sets reached the top of the range`,`Last load: ${last.weight??last.assistance??'bodyweight'}`],confidence:'high',requiresConfirmation:false});
+   } else if(decision.action==='reduce'){
      out.push({type:'recovery',title:`Protect ${ex.name}`,detail:'Recent comparable performance has repeatedly fallen below the target range. Hold or reduce rather than forcing progression.',evidence:[`${recent.filter(x=>(x.reps||0)<bottom).length} recent sets below ${bottom} reps`],confidence:'medium',requiresConfirmation:false});
    }
  }
@@ -136,8 +139,8 @@ export function trainingLoadSummary(s:AppState){
     sessions,
     recentAverageVolume:avg(recent.map(x=>x.volume)),
     priorAverageVolume:avg(prior.map(x=>x.volume)),
-    consistency30:done.filter(w=>{const d=new Date(w.scheduledDate);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);return d>=cutoff}).length,
-    workingSets30:done.filter(w=>{const d=new Date(w.scheduledDate);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);return d>=cutoff}).reduce((n,w)=>n+w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed&&x.type!=='warmup').length,0),0)
+    consistency30:done.filter(w=>workoutDay(w)>=addDaysLocal(localDate(),-30)).length,
+    workingSets30:done.filter(w=>workoutDay(w)>=addDaysLocal(localDate(),-30)).reduce((n,w)=>n+w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed&&x.type!=='warmup').length,0),0)
   };
 }
 export function explainObservation(o:Observation){return `${o.statement} Evidence: ${o.evidence.join('; ')}. Confidence: ${o.confidence}. Purpose: ${o.purpose}.`;}
@@ -204,6 +207,8 @@ export function buildCoachContext(
         .map(item=>`${item.workout.id}:${item.entry.exerciseId}`)
     : [];
 
+  const coachEvidence=coachEvidenceFromState(s, (options.now||new Date().toISOString()).slice(0,10), exercise);
+
   return {
     state:s,
     profile:s.profile,
@@ -220,7 +225,9 @@ export function buildCoachContext(
     recentWorkoutIds,
     recentExerciseEntryIds,
     userInput:options.userInput,
-    context:options.context,
+    context:{...coachEvidence.context,...options.context},
+    plateaus:coachEvidence.plateaus,
+    signals:coachEvidence.signals,
     now:options.now||new Date().toISOString(),
   };
 }

@@ -36,6 +36,12 @@ test('log: one entry per day (last wins), sorted, malformed entries dropped, sta
   assert.equal(R.latestRecoveryCheckIn(log, '2026-01-20'), undefined);
 });
 
+test('normalizer: false boolean flags are omitted so empty recovery responses remain clean', () => {
+  const c = R.normalizeRecoveryCheckIn({ date: '2026-01-01', sleepHours: 6.5, recentIllness: false, pain: false, discomfort: false });
+  assert.deepEqual(c, { date: '2026-01-01', sleepHours: 6.5 });
+  assert.equal(R.normalizeRecoveryCheckIn({ date: '2026-01-01', recentIllness: false, pain: false }), undefined);
+});
+
 test('persistence: values round-trip through save/load; hostile stored values are cleaned at the boundary', () => {
   global.localStorage = storage();
   const { repository, fresh } = loadEngine().loadRepository();

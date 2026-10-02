@@ -57,7 +57,7 @@ function run(ctx) {
     {
       // The Coach layer consumes the plateau signal, explains it with options and never changes the plan or the load.
       const C = E.coachMod;
-      const plateauState = { schemaVersion: 4, goals: [], exercises, achievements: [], measurements: [], journal: [], observations: [], preferences: {}, activeRoute: 'home', onboardingComplete: true, coachMemory: [], workoutTemplates: [], learnedPreferences: {}, eventLog: [], profile: { name: 'T', experience: 'beginner', equipment: ['machine'], primaryGoal: 'strength', goals: ['strength'] }, workouts: [1, 2, 3, 4].map((n) => ({ id: 'cp' + n, status: 'completed', scheduledDate: '2026-02-0' + n, completedAt: '2026-02-0' + n + 'T10:00:00Z', exercises: [{ exerciseId: chest.id, sets: [set(30, 10, 2, { id: 'cp' + n + 'a' }), set(30, 10, 2, { id: 'cp' + n + 'b' }), set(30, 10, 2, { id: 'cp' + n + 'c' })] }] })) };
+      const plateauState = { schemaVersion: 4, goals: [], exercises, achievements: [], measurements: [], journal: [], observations: [], preferences: {}, activeRoute: 'home', onboardingComplete: true, coachMemory: [], workoutTemplates: [], learnedPreferences: {}, eventLog: [], profile: { name: 'T', experience: 'beginner', equipment: ['machine'], primaryGoal: 'general', goals: ['general'] }, workouts: [1, 2, 3, 4].map((n) => ({ id: 'cp' + n, status: 'completed', scheduledDate: '2026-02-0' + n, completedAt: '2026-02-0' + n + 'T10:00:00Z', exercises: [{ exerciseId: chest.id, sets: [set(30, 10, 2, { id: 'cp' + n + 'a' }), set(30, 10, 2, { id: 'cp' + n + 'b' }), set(30, 10, 2, { id: 'cp' + n + 'c' })] }] })) };
       const before = JSON.stringify(plateauState);
       const loadBefore = T.personalizedLoad(chest, plateauState.workouts, plateauState.profile, exercises, '2026-02-05');
       const ev = C.coachEvidenceFromState(plateauState, '2026-02-05');
@@ -67,7 +67,7 @@ function run(ctx) {
       const unchanged = JSON.stringify(plateauState) === before && JSON.stringify(T.personalizedLoad(chest, plateauState.workouts, plateauState.profile, exercises, '2026-02-05')) === JSON.stringify(loadBefore) && loadBefore.weight === 30 && res.decision.prescription.weight === undefined;
       out.push(rec('plateau', 'a plateau never silently changes state or the prescribed load (load stays 30 during the plateau)', unchanged ? 'pass' : 'fail', { loadBefore: loadBefore.weight }, seed));
       const mainSrc = require('node:fs').readFileSync(require('node:path').join(require('../load-engine.cjs').root, 'src/main.tsx'), 'utf8');
-      out.push(rec('plateau', 'the Coach screen is supplied with plateau + recovery evidence (source wiring)', /coachEvidenceFromState\(s,today\(\)\)/.test(mainSrc) ? 'pass' : 'fail', {}, seed));
+      out.push(rec('plateau', 'the Coach screen supplies plateau, recovery and exercise context to evidence collection', /coachEvidenceFromState\(s,today\(\),(?:focusEx|exercise)\)/.test(mainSrc) ? 'pass' : 'fail', {}, seed));
     }
     const breakthrough = T.progression(chest, [...history, set(30, 12, 1), set(30, 12, 1), set(30, 12, 1)]);
     out.push(rec('plateau', 'plateau followed by a breakthrough to the top of range progresses', breakthrough.action === 'increase' && breakthrough.weight === 32.5 ? 'pass' : 'fail', { got: { action: breakthrough.action, weight: breakthrough.weight } }, seed));

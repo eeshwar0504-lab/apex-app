@@ -1,4 +1,5 @@
 import type {Exercise, AppState} from '../core/types';
+import {comparisonScore, isEquivalentSubstitution, rankSubstitutes} from '../engine/training';
 
 export type KnowledgeIssue = { exerciseId:string; field:string; message:string; severity:'warning'|'error' };
 export type KnowledgeNode = Exercise & { related:string[]; substitutionClass:string };
@@ -20,23 +21,14 @@ export function validateExerciseKnowledge(exercises:Exercise[]):KnowledgeIssue[]
 
 export function substitutionClass(e:Exercise){return `${e.pattern}|${e.loadSemantics}|${e.unilateral?'unilateral':'bilateral'}`;}
 
+/** Similarity on a 0-100 scale; it is the engine's comparison score, not a second formula. */
 export function exerciseSimilarity(a:Exercise,b:Exercise){
-  let score=0;
-  if(a.pattern===b.pattern) score+=4;
-  if(a.loadSemantics===b.loadSemantics) score+=3;
-  if(a.unilateral===b.unilateral) score+=1;
-  score+=a.primaryMuscles.filter(m=>b.primaryMuscles.includes(m)).length*2;
-  score+=a.secondaryMuscles.filter(m=>b.secondaryMuscles.includes(m)).length;
-  score+=a.equipment.filter(x=>b.equipment.includes(x)).length;
-  return score;
+  return Math.round(comparisonScore(a,b)*100);
 }
 
+/** Ranked replacements. Delegates to the engine's single substitution ranking (rankSubstitutes). */
 export function rankedAlternatives(source:Exercise, exercises:Exercise[], equipment:string[]=[]){
-  return exercises.filter(e=>e.id!==source.id).map(e=>{
-    const available=e.equipment.includes('bodyweight')||e.equipment.some(x=>equipment.includes(x));
-    const sameClass=substitutionClass(source)===substitutionClass(e);
-    return {exercise:e,score:exerciseSimilarity(source,e)+(available?3:0)+(sameClass?5:0),comparable:sameClass};
-  }).sort((a,b)=>b.score-a.score);
+  return rankSubstitutes(source,exercises,equipment.length?equipment:undefined).map(item=>({exercise:item.exercise,score:item.score,comparable:isEquivalentSubstitution(source,item.exercise)}));
 }
 
 export function knowledgeReport(s:AppState){

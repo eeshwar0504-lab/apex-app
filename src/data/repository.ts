@@ -1,8 +1,10 @@
 import type {AppState} from '../core/types';
 import {EXERCISES} from '../knowledge/exercises';
+import {programExercises} from '../engine/goalProgram';
 import {ApexSQLiteStore} from './sqliteAdapter';
 import {isUsableState,inspectState} from './integrity';
 import {normalizeRecoveryLog} from '../engine/recovery';
+import {MAX_PLAUSIBLE_LOAD_KG,MAX_PLAUSIBLE_REPS,MAX_PLAUSIBLE_SECONDS} from '../engine/limits';
 import {normalizeUnits} from './units';
 
 const KEY='apex-state-v4';
@@ -97,12 +99,40 @@ function repairWorkoutValues(workouts:any){
    return {...we,sets:we.sets.map((s:any)=>{
     if(!s||typeof s!=='object')return s;
     const next={...s};
-    for(const key of ['weight','reps','seconds','assistance'])if(bad(next[key]))delete next[key];
+    for(const key of ['weight','assistance'])if(bad(next[key],MAX_PLAUSIBLE_LOAD_KG))delete next[key];
+    if(bad(next.reps,MAX_PLAUSIBLE_REPS))delete next.reps;
+    if(bad(next.seconds,MAX_PLAUSIBLE_SECONDS))delete next.seconds;
     if(bad(next.rir,10))delete next.rir;
     return next;
    })};
   })};
  });
+}
+
+export function migratePersistedState(raw:unknown):AppState{
+ const incoming=raw&&typeof raw==='object'?raw as Record<string,unknown>:{ };
+ const version=typeof incoming.schemaVersion==='number'?incoming.schemaVersion:0;
+ const migrated:any={...incoming};
+
+ if(version < SCHEMA_VERSION){
+  const base=fresh();
+  const prefs=(incoming.preferences&&typeof incoming.preferences==='object'?incoming.preferences as Record<string,unknown>:{}) as Record<string,unknown>;
+  const notificationPrefs=(prefs.notifications&&typeof prefs.notifications==='object'?prefs.notifications as Record<string,unknown>:{}) as Record<string,unknown>;
+  migrated.schemaVersion=SCHEMA_VERSION;
+  migrated.preferences={
+   ...base.preferences,
+   ...(prefs as any),
+   notifications:{
+    ...base.preferences.notifications,
+    ...(notificationPrefs as any),
+   }
+  };
+  migrated.eventLog=Array.isArray(incoming.eventLog)?incoming.eventLog:[];
+  migrated.workoutTemplates=Array.isArray(incoming.workoutTemplates)?incoming.workoutTemplates:[];
+  if(incoming.recoveryLog!==undefined)migrated.recoveryLog=incoming.recoveryLog;
+ }
+
+ return merge(migrated);
 }
 
 function merge(raw:any):AppState{
@@ -139,7 +169,8 @@ function merge(raw:any):AppState{
     ?Math.max(SCHEMA_VERSION,incoming.schemaVersion)
     :SCHEMA_VERSION,
   preferences,
-  exercises:EXERCISES,
+  // the catalogue is never persisted: it is rebuilt on load and programmed for the profile's current goal
+  exercises:programExercises(EXERCISES,incoming.profile?.primaryGoal),
   workoutTemplates:Array.isArray(incoming.workoutTemplates)?incoming.workoutTemplates:[],
   eventLog:Array.isArray(incoming.eventLog)?incoming.eventLog:[]
  } as AppState;
@@ -210,7 +241,7 @@ function readLocal():AppState{
   raw=localStorage.getItem(KEY);
   if(!raw)return fresh();
 
-  const state=merge(JSON.parse(raw));
+  const state=migratePersistedState(JSON.parse(raw));
   if(isUsableState(state))return state;
   preserveRejected(raw,'unusable_state');
   return fresh();
@@ -333,7 +364,7 @@ export const repository:Repository={
    const raw=await sqlite.read();
 
    if(raw){
-    const native=merge(JSON.parse(raw));
+    const native=migratePersistedState(JSON.parse(raw));
 
     /*
      * Prefer the state with the newest trustworthy mutation timestamp.
@@ -398,7 +429,7 @@ export const repository:Repository={
   const obj=JSON.parse(raw);
   if(obj?.format!=='APEX_BACKUP')throw new Error('This is not an APEX backup.');
 
-  const state=merge(obj.data);
+  const state=migratePersistedState(obj.data);
   if(!isUsableState(state))throw new Error('This APEX backup is not usable.');
 
   return state;

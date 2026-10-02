@@ -28,6 +28,14 @@ class AthleteModel {
     const base = (CLASS_FACTOR[ex.pattern] ?? 25) * (EXPERIENCE_SCALE[this.cfg.experience] ?? 1) * this.cfg.strengthScale;
     const inc = ex.loadSemantics === 'stack' ? 1 : 1;
     const variation = this.rng.float(0.85, 1.15);
+    if (ex.loadSemantics === 'assistance') {
+      // an assisted pull-up: the athlete lifts (bodyweight - assistance); capacity is relative to bodyweight
+      const cap = Math.max(3, (this.cfg.bodyWeightKg || 75) * 0.9 * variation * (EXPERIENCE_SCALE[this.cfg.experience] ?? 1) ** 0.5 * Math.min(1.3, this.cfg.strengthScale));
+      this.strength.set(ex.id, cap);
+      this.potential.set(ex.id, cap * this.cfg.potentialMultiple ** 0.5);
+      this.familiarity.set(ex.id, this.cfg.experience === 'beginner' ? 0.55 : 0.8);
+      return;
+    }
     const v = ex.loadSemantics === 'per_hand' ? base * 0.42 * variation : base * variation * inc;
     this.strength.set(ex.id, Math.max(3, v));
     this.potential.set(ex.id, Math.max(3, v) * this.cfg.potentialMultiple);

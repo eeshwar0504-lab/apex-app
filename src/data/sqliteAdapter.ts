@@ -14,6 +14,8 @@ import {
   type SQLiteDBConnection,
 } from '@capacitor-community/sqlite';
 
+export const SQLITE_SCHEMA_VERSION = 4;
+
 export class ApexSQLiteStore {
   private readonly connection = new SQLiteConnection(CapacitorSQLite);
 
@@ -67,6 +69,25 @@ export class ApexSQLiteStore {
         updated_at TEXT NOT NULL
       );
     `);
+
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+    `);
+
+    const applied = await this.db.query(
+      'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1'
+    );
+    const highestApplied = Number(applied.values?.[0]?.version ?? 0);
+
+    if (highestApplied < SQLITE_SCHEMA_VERSION) {
+      await this.db.run(
+        'INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)',
+        [SQLITE_SCHEMA_VERSION, new Date().toISOString()]
+      );
+    }
 
     return this.db;
   }

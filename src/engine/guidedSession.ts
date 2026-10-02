@@ -3,6 +3,7 @@ import {
   feedbackLoad,
   loadAvailability,
   snapToAvailableLoad,
+  setLoad,
   recommendedRest,
   loadDetailForSet,
 } from './training';
@@ -205,8 +206,9 @@ export function applySetFeedback(
 
   if (!target || !activeSet) return workout;
 
+  // feedback is about the load the athlete actually lifted; the recommendation is only the fallback
   const currentLoad =
-    target.recommendedWeight ?? activeSet.weight;
+    setLoad(exercise, activeSet) ?? target.recommendedWeight;
 
   const next = feedbackLoad(
     exercise,
@@ -229,13 +231,21 @@ export function applySetFeedback(
   if (recommendationWeight !== undefined) {
     target.recommendedWeight = recommendationWeight;
 
+    // bodyweight, timed and no-load movements have no load to carry forward
+    const carriesLoad = !['bodyweight', 'none', 'time'].includes(exercise.loadSemantics);
     target.sets.forEach((set, index) => {
       if (
+        carriesLoad &&
         !set.completed &&
         index > setIndex &&
         set.type !== 'warmup'
       ) {
-        set.weight = recommendationWeight;
+        if (exercise.loadSemantics === 'assistance') {
+          set.assistance = recommendationWeight;
+          set.loadDetail = { kind: 'assistance', assistanceKg: recommendationWeight };
+        } else {
+          set.weight = recommendationWeight;
+        }
       }
     });
   }

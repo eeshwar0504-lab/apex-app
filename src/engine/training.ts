@@ -1,3 +1,6 @@
+import { dayNumber, dayOfTimestamp, workoutDay } from '../data/dates';
+import { goalTargetRir, programExercise } from './goalProgram';
+import { MAX_PLAUSIBLE_LOAD_KG, MAX_PLAUSIBLE_REPS, MAX_PLAUSIBLE_SECONDS } from './limits';
 import type {
   Exercise,
   GoalKind,
@@ -36,6 +39,10 @@ export interface LoadRecommendation {
   targetRir: number;
   /** Present when the load was set by the return-to-training rule (see docs/RETURN_TO_TRAINING.md). */
   returnToTraining?: { gapDays: number; tier: string; steps: number };
+  /** The progression decision this load came from (exact-history tier only). */
+  action?: ProgressionAction;
+  /** Rest recommended by that decision, in seconds (exact-history tier only). */
+  recommendedRest?: number;
 }
 
 export interface LoadAvailability {
@@ -497,11 +504,16 @@ export function loadAvailability(
 
   const configured = profile?.loadIncrementsKg;
   const keys = [ex.id, ...ex.equipment];
-  const raw = keys.flatMap(key => configured?.[key] || []);
+  const raw = keys.flatMap(key => {
+    const list = configured?.[key] as unknown;
+    return Array.isArray(list) ? list : [];
+  });
   const options = [...new Set(
     raw
-      .filter(value => Number.isFinite(value) && value > 0)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
       .map(value => roundTo(value, 0.1))
+      // validate AFTER rounding: 0.0001 rounds to 0, which is not a load
+      .filter(value => value > 0 && value <= MAX_PLAUSIBLE_LOAD_KG)
   )].sort((a,b) => a-b);
 
   if (options.length) {
@@ -539,13 +551,20 @@ export function snapToAvailableLoad(
   profile?: UserProfile,
   direction: 'nearest' | 'up' | 'down' = 'nearest'
 ): number | undefined {
-  const clean = sanitizeRecommendedLoad(ex, weight);
-  if (clean === undefined) return undefined;
-
   const availability = loadAvailability(ex, profile);
-  if (!availability.options.length) return clean;
-
   const options = availability.options;
+
+  /*
+   * With a configured load list the target is snapped exactly as given. It is NOT first rounded to the exercise
+   * increment: that would throw away information (a logged 21 kg would become 20 kg and then tie between two
+   * options). Without a list the value is rounded to the exercise increment as before.
+   */
+  const clean = options.length
+    ? (typeof weight === 'number' && Number.isFinite(weight) && (weight > 0 || (ex.loadSemantics === 'assistance' && weight >= 0)) ? weight : undefined)
+    : sanitizeRecommendedLoad(ex, weight);
+  if (clean === undefined) return undefined;
+  if (!options.length) return clean;
+
   if (direction === 'up') return options.find(value => value >= clean) ?? options.at(-1);
   if (direction === 'down') return [...options].reverse().find(value => value <= clean) ?? options[0];
 
@@ -740,15 +759,75 @@ export function rankComparableExercises(
    PERFORMANCE HELPERS
    ============================================================ */
 
+/* ---- authoritative set semantics (see docs/TRAINING_SEMANTICS.md) ----
+ *
+ *  external weight  (total / stack / per_hand): kg moved, stored in SetLog.weight.
+ *  assistance       (assisted movements):       kg of counter-weight REMOVED from bodyweight, stored ONLY in
+ *                                               SetLog.assistance. Lower assistance = harder = progress.
+ *  effective resistance = bodyweight - assistance. APEX does not assume a body weight, so it never computes it:
+ *                                               assisted sets carry no volume (like bodyweight movements) and
+ *                                               their "best" load is the LOWEST assistance.
+ *  warm-up sets are logged but are not training evidence: they never count for progression, volume, PRs,
+ *  load history, plateau signals or whether a session "logged sets".
+ */
+
+/** A set that counts as training work: completed and not a warm-up. */
+export function isWorkingSet(set: SetLog): boolean {
+  return set.completed === true && set.type !== 'warmup';
+}
+
+/**
+ * The ONE place the load of a set is read. Assisted movements read SetLog.assistance (older saved data that
+ * stored assistance in weight is still understood); everything else reads SetLog.weight.
+ */
+export function setLoad(ex: Exercise, set: SetLog): number | undefined {
+  const value =
+    ex.loadSemantics === 'assistance'
+      ? (typeof set.assistance === 'number' && Number.isFinite(set.assistance) ? set.assistance : set.weight)
+      : set.weight;
+  return typeof value === 'number' && Number.isFinite(value) && value <= MAX_PLAUSIBLE_LOAD_KG ? value : undefined;
+}
+
+/** Best load among working sets: the heaviest external load, or the LOWEST assistance. */
+export function bestLoad(ex: Exercise, sets: SetLog[]): number | undefined {
+  const values = sets
+    .filter(isWorkingSet)
+    .map(set => setLoad(ex, set))
+    .filter((value): value is number => value !== undefined && meaningfulLoad(ex, value));
+  if (!values.length) return undefined;
+  return ex.loadSemantics === 'assistance' ? Math.min(...values) : Math.max(...values);
+}
+
+/** The performance a set must carry to be evidence: duration for timed movements, repetitions otherwise. */
+function hasValidPerformance(ex: Exercise, set: SetLog): boolean {
+  if (ex.loadSemantics === 'time') {
+    return typeof set.seconds === 'number' && Number.isFinite(set.seconds) && set.seconds > 0 && set.seconds <= MAX_PLAUSIBLE_SECONDS;
+  }
+  return typeof set.reps === 'number' && Number.isFinite(set.reps) && set.reps >= 0 && set.reps <= MAX_PLAUSIBLE_REPS;
+}
+
+function completedTime(workout: Workout): number {
+  const stamp = Date.parse(workout.completedAt ?? '');
+  if (Number.isFinite(stamp)) return stamp;
+  const scheduled = Date.parse(`${workout.scheduledDate}T12:00:00Z`);
+  return Number.isFinite(scheduled) ? scheduled : 0;
+}
+
+/** Completed workouts in chronological order (stable), independent of the order records are stored in. */
+export function chronologicalCompleted(workouts: Workout[]): Workout[] {
+  return workouts
+    .map((workout, index) => ({ workout, index }))
+    .filter(item => item.workout.status === 'completed')
+    .sort((a, b) => completedTime(a.workout) - completedTime(b.workout) || a.index - b.index)
+    .map(item => item.workout);
+}
+
 function recentCompleted(
+  ex: Exercise,
   sets: SetLog[]
 ) {
   return sets
-    .filter(
-      set =>
-        set.completed &&
-        set.type !== 'warmup'
-    )
+    .filter(set => isWorkingSet(set) && hasValidPerformance(ex, set))
     .slice(-6);
 }
 
@@ -757,14 +836,9 @@ function averageMeaningfulLoad(
   sets: SetLog[]
 ): number | undefined {
   const valid = sets
-    .filter(
-      set =>
-        set.completed &&
-        meaningfulLoad(ex, set.weight)
-    )
-    .map(
-      set => set.weight as number
-    );
+    .filter(isWorkingSet)
+    .map(set => setLoad(ex, set))
+    .filter((value): value is number => value !== undefined && meaningfulLoad(ex, value));
 
   if (!valid.length) {
     return undefined;
@@ -782,21 +856,47 @@ function latestMeaningfulLoad(
   ex: Exercise,
   sets: SetLog[]
 ): number | undefined {
-  const valid = sets.filter(
-    set =>
-      set.completed &&
-      meaningfulLoad(ex, set.weight)
-  );
+  const valid = sets
+    .filter(isWorkingSet)
+    .map(set => setLoad(ex, set))
+    .filter((value): value is number => value !== undefined && meaningfulLoad(ex, value));
 
-  return valid.at(-1)?.weight;
+  return valid.at(-1);
+}
+
+/**
+ * Workload-spike fatigue signal: the existing APEX readiness rule (the latest completed session's volume is more
+ * than 25% above the previous one). intelligence.readiness() uses this same function.
+ */
+export function workloadFatigue(workouts: Workout[], exercises: Exercise[]): 'normal' | 'elevated' {
+  if (!exercises.length) return 'normal';
+  const done = chronologicalCompleted(workouts).slice(-3);
+  const last = done.at(-1);
+  const previous = done.at(-2);
+  if (!last || !previous) return 'normal';
+  const previousVolume = volumeForWorkout(previous, exercises);
+  return previousVolume > 0 && volumeForWorkout(last, exercises) > previousVolume * 1.25 ? 'elevated' : 'normal';
 }
 
 /* ============================================================
    PROGRESSION
    ============================================================ */
 
+/*
+ * The single authoritative progression decision. Precedence (first match wins):
+ *
+ *   1. no usable evidence                         -> calibrate
+ *   2. timed movement                             -> hold (duration is tracked, there is no load to change)
+ *   3. repeatedly below the rep range             -> reduce   (direct performance evidence beats any context)
+ *   4. top of range AND elevated workload context -> recover  (suppresses ONLY an increase; load is held)
+ *   5. top of range                               -> increase
+ *   6. very low RIR                               -> hold (shorter-rest flavour)
+ *   7. otherwise                                  -> hold
+ *
+ * personalizedLoad() layers return-to-training and the athlete's real load list on top of this decision.
+ */
 export function progression(
-  ex: Exercise,
+  catalogueEx: Exercise,
   recent: SetLog[],
   context?: {
     goal?: GoalKind;
@@ -805,7 +905,9 @@ export function progression(
   }
 ): ProgressionResult {
 
-  const valid = recentCompleted(recent);
+  // the exercise as the goal prescribes it (idempotent: an already programmed exercise is not shifted twice)
+  const ex = programExercise(catalogueEx, context?.goal);
+  const valid = recentCompleted(ex, recent);
 
   if (!valid.length) {
     return {
@@ -818,6 +920,17 @@ export function progression(
     };
   }
 
+  if (ex.loadSemantics === 'time') {
+    return {
+      action: 'hold',
+      reason:
+        'Timed movement: APEX tracks duration and never adds or removes load. Keep the target duration and build repeatable holds.',
+      confidence: 'medium',
+      nextRepRange: ex.repRange,
+      recommendedRest: ex.restSec
+    };
+  }
+
   const top = ex.repRange[1];
   const bottom = ex.repRange[0];
   const last = valid[valid.length - 1];
@@ -825,10 +938,12 @@ export function progression(
   const fatigue =
     context?.fatigue ?? 'normal';
 
+  const assisted = ex.loadSemantics === 'assistance';
+
   const lastWeight =
     sanitizeRecommendedLoad(
       ex,
-      last.weight
+      setLoad(ex, last)
     );
 
   const recentThree =
@@ -863,18 +978,10 @@ export function progression(
         ) / rirs.length
       : undefined;
 
-  if (fatigue === 'elevated') {
-    return {
-      action: 'recover',
-      weight: lastWeight,
-      reason:
-        'Recent context suggests elevated training load; protect repeatable performance.',
-      confidence: 'medium',
-      nextRepRange: ex.repRange,
-      recommendedRest:
-        ex.restSec + 15
-    };
-  }
+  const step =
+    ex.incrementKg > 0
+      ? ex.incrementKg
+      : 0.5;
 
   if (low) {
     /*
@@ -883,26 +990,35 @@ export function progression(
      * exercise's smallest meaningful load. Loads are snapped to the
      * athlete's available loads by personalizedLoad().
      */
-    const reduceStep =
-      ex.incrementKg > 0
-        ? ex.incrementKg
-        : 0.5;
-    const reduceJump =
-      ex.loadSemantics === 'assistance'
-        ? reduceStep
-        : -reduceStep;
     const reducedLoad =
       lastWeight !== undefined
         ? sanitizeRecommendedLoad(
             ex,
-            lastWeight + reduceJump
+            lastWeight + (assisted ? step : -step)
           )
         : undefined;
     return {
       action: 'reduce',
       weight: reducedLoad ?? lastWeight,
       reason:
-        `Comparable performance has repeatedly fallen below the target range; reduce by one ${reduceStep} kg step.`,
+        `Comparable performance has repeatedly fallen below the target range; reduce by one ${step} kg step.`,
+      confidence: 'medium',
+      nextRepRange: ex.repRange,
+      recommendedRest:
+        ex.restSec + 15
+    };
+  }
+
+  if (
+    allTop &&
+    lastWeight !== undefined &&
+    fatigue === 'elevated'
+  ) {
+    return {
+      action: 'recover',
+      weight: lastWeight,
+      reason:
+        'You reached the top of the range, but recent training load rose sharply; hold this load for one more session before adding more.',
       confidence: 'medium',
       nextRepRange: ex.repRange,
       recommendedRest:
@@ -914,27 +1030,17 @@ export function progression(
     allTop &&
     lastWeight !== undefined
   ) {
-    const step =
-      ex.incrementKg > 0
-        ? ex.incrementKg
-        : 0.5;
-
-    const jump =
-      ex.loadSemantics === 'assistance'
-        ? -step
-        : step;
-
     const next =
       sanitizeRecommendedLoad(
         ex,
-        lastWeight + jump
+        lastWeight + (assisted ? -step : step)
       );
 
     return {
       action: 'increase',
       weight: next,
       reason:
-        `Repeatedly reached ${top} reps; use a small ${Math.abs(step)} kg progression step.`,
+        `Repeatedly reached ${top} reps; use a small ${step} kg progression step.`,
       confidence: 'high',
       nextRepRange: ex.repRange,
       recommendedRest:
@@ -1008,22 +1114,16 @@ export function returnTierForGap(gapDays: number | undefined): { tier: ReturnTie
   return { tier: 'extended', steps: 3 };
 }
 
-function dayNumber(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const time = new Date(String(value).length <= 10 ? `${value}T00:00:00Z` : value).getTime();
-  return Number.isFinite(time) ? Math.floor(time / 86400000) : undefined;
-}
-
-/** Whole days since the last completed exposure to this exercise; undefined without a date or history. */
+/** Whole days since the last completed working exposure to this exercise; undefined without a date or history. */
 export function trainingGapDays(ex: Exercise, workouts: Workout[], asOf?: string): number | undefined {
-  const target = dayNumber(asOf);
+  const target = dayNumber(dayOfTimestamp(asOf));
   if (target === undefined) return undefined;
   let latest: number | undefined;
   for (const workout of workouts) {
     if (workout.status !== 'completed') continue;
-    const exposed = workout.exercises.some(entry => entry.exerciseId === ex.id && entry.sets.some(set => set.completed && meaningfulLoad(ex, set.weight)));
+    const exposed = workout.exercises.some(entry => entry.exerciseId === ex.id && entry.sets.some(set => isWorkingSet(set) && (setLoad(ex, set) !== undefined ? meaningfulLoad(ex, setLoad(ex, set)) : meaningfulLoad(ex, undefined))));
     if (!exposed) continue;
-    const day = dayNumber(workout.completedAt || workout.scheduledDate);
+    const day = dayNumber(workoutDay(workout));
     if (day !== undefined && (latest === undefined || day > latest)) latest = day;
   }
   return latest === undefined ? undefined : Math.max(0, target - latest);
@@ -1075,11 +1175,7 @@ function returnToTrainingLoad(
 function targetRirForProfile(
   profile?: UserProfile
 ): number {
-  if (profile?.experience === 'advanced') {
-    return 1;
-  }
-
-  return 2;
+  return goalTargetRir(profile?.primaryGoal, profile?.experience);
 }
 
 /**
@@ -1089,29 +1185,15 @@ function directExerciseSets(
   ex: Exercise,
   workouts: Workout[]
 ): SetLog[] {
-  return workouts
-    .filter(
-      workout =>
-        workout.status === 'completed'
-    )
-    .flatMap(
-      workout => workout.exercises
-    )
-    .filter(
-      entry =>
-        entry.exerciseId === ex.id
-    )
-    .flatMap(
-      entry => entry.sets
-    )
-    .filter(
-      set =>
-        set.completed &&
-        meaningfulLoad(
-          ex,
-          set.weight
-        )
-    );
+  return chronologicalCompleted(workouts)
+    .flatMap(workout => workout.exercises)
+    .filter(entry => entry.exerciseId === ex.id)
+    .flatMap(entry => entry.sets)
+    .filter(set => {
+      if (!isWorkingSet(set)) return false;
+      const load = setLoad(ex, set);
+      return load !== undefined && meaningfulLoad(ex, load);
+    });
 }
 
 /**
@@ -1135,30 +1217,20 @@ function comparableExerciseEvidence(
     );
 
   return comparisons
+    // a load is only transferable between exercises that measure load the same way
+    .filter(comparison => comparison.exercise.loadSemantics === target.loadSemantics)
     .slice(0, 6)
     .map(comparison => {
       const sets =
         completedWorkouts
-          .flatMap(
-            workout =>
-              workout.exercises
-          )
-          .filter(
-            entry =>
-              entry.exerciseId ===
-              comparison.exercise.id
-          )
-          .flatMap(
-            entry => entry.sets
-          )
-          .filter(
-            set =>
-              set.completed &&
-              meaningfulLoad(
-                comparison.exercise,
-                set.weight
-              )
-          );
+          .flatMap(workout => workout.exercises)
+          .filter(entry => entry.exerciseId === comparison.exercise.id)
+          .flatMap(entry => entry.sets)
+          .filter(set => {
+            if (!isWorkingSet(set)) return false;
+            const load = setLoad(comparison.exercise, set);
+            return load !== undefined && meaningfulLoad(comparison.exercise, load);
+          });
 
       const load =
         averageMeaningfulLoad(
@@ -1190,13 +1262,14 @@ function comparableExerciseEvidence(
  * APEX never claims a universal "correct" starting weight.
  */
 export function personalizedLoad(
-  ex: Exercise,
+  catalogueEx: Exercise,
   workouts: Workout[],
   profile?: UserProfile,
   exercises: Exercise[] = [],
   /** Date (YYYY-MM-DD or ISO) the load is being prescribed for. Enables return-to-training handling. */
   asOf?: string
 ): LoadRecommendation {
+  const ex = programExercise(catalogueEx, profile?.primaryGoal);
   const targetRir = targetRirForProfile(profile);
 
   if (ex.loadSemantics === 'bodyweight' || ex.loadSemantics === 'none') {
@@ -1227,23 +1300,46 @@ export function personalizedLoad(
   if (direct.length) {
     const result = progression(ex, direct, {
       goal: profile?.primaryGoal,
-      experience: profile?.experience
+      experience: profile?.experience,
+      fatigue: workloadFatigue(workouts, exercises)
     });
     const latest = latestMeaningfulLoad(ex, direct);
     const gapDays = trainingGapDays(ex, workouts, asOf);
     const reentry = returnToTrainingLoad(ex, latest, result.weight, gapDays, profile);
-    const reducing = result.action === 'reduce' || reentry.applied;
-    const reduceDirection = ex.loadSemantics === 'assistance' ? 'up' : 'down';
+    const assisted = ex.loadSemantics === 'assistance';
+    /*
+     * Snapping respects the athlete's real load list and never silently reverses the decision:
+     *   increase -> the smallest available load at or above (last + one increment), i.e. a real step up
+     *   reduce / return-to-training -> the largest available load at or below the target, i.e. a real step down
+     *   hold / recover / calibrate -> the nearest available load to the last worked load (a tie goes to the lower one)
+     * Assisted movements mirror increase and reduce (less assistance is the harder direction).
+     */
+    const direction: 'nearest' | 'up' | 'down' = reentry.applied
+      ? (assisted ? 'up' : 'down')
+      : result.action === 'increase'
+        ? (assisted ? 'down' : 'up')
+        : result.action === 'reduce'
+          ? (assisted ? 'up' : 'down')
+          : 'nearest';
+    const listed = availability.options.length > 0 && latest !== undefined;
+    const incrementKg = ex.incrementKg > 0 ? ex.incrementKg : 0.5;
+    const sign = assisted ? -1 : 1;
+    const unrounded =
+      result.action === 'increase' ? (latest as number) + sign * incrementKg
+      : result.action === 'reduce' ? (latest as number) - sign * incrementKg
+      : (latest as number);
     const candidate = snapToAvailableLoad(
       ex,
-      reentry.applied ? reentry.weight : (result.weight ?? latest),
+      reentry.applied ? reentry.weight : listed ? unrounded : (result.weight ?? latest),
       profile,
-      reducing ? reduceDirection : 'nearest'
+      direction
     );
 
     if (candidate !== undefined) {
       return {
         weight: candidate,
+        action: result.action,
+        recommendedRest: result.recommendedRest,
         confidence: reentry.applied ? 'medium' : result.confidence,
         kind: 'baseline',
         reason: reentry.applied ? reentry.reason : result.reason,
@@ -1296,7 +1392,8 @@ export function personalizedLoad(
    * The estimate is derived from exercise mechanics/class metadata,
    * target reps, experience, target RIR and real load increments.
    */
-  const increment = availability.incrementKg || ex.incrementKg;
+  // the class formula scales the exercise's own increment; a coarse load list must not inflate the starting load
+  const increment = ex.incrementKg > 0 ? ex.incrementKg : (availability.incrementKg ?? 0);
   if (increment > 0) {
     const compoundPatterns = new Set(['squat','hinge','horizontal_push','horizontal_pull','vertical_push','vertical_pull']);
     const isolationPatterns = new Set(['arm_flexion','arm_extension','shoulder_abduction','knee_flexion','knee_extension','calf']);
@@ -1360,8 +1457,8 @@ export function personalizedLoad(
  * (volume, PRs) treat anything that is not a finite, non-negative number as 0
  * instead of letting NaN, Infinity or a negative value into a total.
  */
-function safeNum(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+function safeNum(value: unknown, max = Infinity): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= max ? value : 0;
 }
 
 export function summarizeSets(
@@ -1369,55 +1466,39 @@ export function summarizeSets(
   sets: SetLog[]
 ): PerformanceSummary {
 
-  const done =
-    sets.filter(
-      set => set.completed
-    );
+  // warm-ups are not training work (see the set-semantics note)
+  const done = sets.filter(isWorkingSet);
+  const assisted = ex.loadSemantics === 'assistance';
 
   const reps =
     done.reduce(
       (sum, set) =>
-        sum + safeNum(set.reps),
+        sum + safeNum(set.reps, MAX_PLAUSIBLE_REPS),
       0
     );
+
+  // external load only: assistance is not mass moved, so it adds no load and no volume
+  const external = !assisted && ex.loadSemantics !== 'time' && ex.loadSemantics !== 'none' && ex.loadSemantics !== 'bodyweight';
 
   const load =
-    done.reduce(
-      (sum, set) =>
-        sum + safeNum(set.weight),
-      0
-    );
+    external
+      ? done.reduce((sum, set) => sum + safeNum(setLoad(ex, set)), 0)
+      : 0;
 
   const volume =
-    done.reduce(
-      (sum, set) => {
+    external
+      ? done.reduce(
+          (sum, set) => {
+            const multiplier =
+              ex.loadSemantics === 'per_hand'
+                ? (ex.unilateral ? 1 : 2)
+                : 1;
 
-        if (
-          ex.loadSemantics ===
-            'time' ||
-          ex.loadSemantics ===
-            'none' ||
-          ex.loadSemantics ===
-            'bodyweight'
-        ) {
-          return sum;
-        }
-
-        const multiplier =
-          ex.loadSemantics ===
-          'per_hand'
-            ? (ex.unilateral ? 1 : 2)
-            : 1;
-
-        return (
-          sum +
-          safeNum(set.weight) *
-            safeNum(set.reps) *
-            multiplier
-        );
-      },
-      0
-    );
+            return sum + safeNum(setLoad(ex, set)) * safeNum(set.reps, MAX_PLAUSIBLE_REPS) * multiplier;
+          },
+          0
+        )
+      : 0;
 
   const rirs =
     done
@@ -1431,22 +1512,6 @@ export function summarizeSets(
           Number.isFinite(value)
       );
 
-  const loads =
-    done
-      .map(
-        set =>
-          set.weight
-      )
-      .filter(
-        (
-          value
-        ): value is number =>
-          typeof value ===
-            'number' &&
-          Number.isFinite(value) &&
-          value > 0
-      );
-
   return {
     completedSets:
       done.length,
@@ -1454,15 +1519,13 @@ export function summarizeSets(
     load,
     volume,
     topLoad:
-      loads.length
-        ? Math.max(...loads)
-        : undefined,
+      bestLoad(ex, done),
     bestReps:
       reps
         ? Math.max(
             ...done.map(
               set =>
-                safeNum(set.reps)
+                safeNum(set.reps, MAX_PLAUSIBLE_REPS)
             )
           )
         : undefined,
@@ -1785,7 +1848,8 @@ export function feedbackLoad(
   const clearlyEasy = aboveTarget && (rir === undefined || rir > targetRir);
   const clearlyHeavy = belowTarget || (rir !== undefined && rir < targetRir);
 
-  const direction = feedback === 'easy' ? 'up' : 'down';
+  // 'upward' is the direction the stored number moves: assisted movements are harder with LESS assistance
+  const upward = ex.loadSemantics === 'assistance' ? feedback === 'heavy' : feedback === 'easy';
   const shouldMove = feedback === 'heavy' ? true : feedback === 'easy' ? true : (clearlyEasy || clearlyHeavy);
   if (!shouldMove) return snapToAvailableLoad(ex, base, profile);
 
@@ -1795,14 +1859,14 @@ export function feedbackLoad(
     if (currentOption === undefined) return base;
     const index = availability.options.indexOf(currentOption);
     const jump = (feedback === 'heavy' || feedback === 'easy') && (clearlyHeavy || clearlyEasy) ? 2 : 1;
-    const nextIndex = feedback === 'easy' ? Math.min(availability.options.length-1,index+jump) : Math.max(0,index-jump);
+    const nextIndex = upward ? Math.min(availability.options.length-1,index+jump) : Math.max(0,index-jump);
     return availability.options[nextIndex];
   }
 
   const step = availability.incrementKg || ex.incrementKg || 0.5;
   const percent = Math.min(base * 0.10, step * 2);
   const change = Math.max(step, percent);
-  const adjusted = feedback === 'easy' ? base + change : base - change;
+  const adjusted = upward ? base + change : base - change;
   return sanitizeRecommendedLoad(ex, adjusted);
 }
 
@@ -1819,14 +1883,8 @@ function chooseByPattern(
   return (
     exercises.find(
       exercise =>
-        exercise.pattern ===
-          pattern &&
-        exercise.equipment.some(
-          required =>
-            equipment.includes(
-              required
-            )
-        )
+        exercise.pattern === pattern &&
+        exerciseFitsEquipment(exercise, equipment)
     ) ||
     exercises.find(
       exercise =>
@@ -1842,6 +1900,12 @@ function chooseByPattern(
   );
 }
 
+/** Training days per week: a whole number from 2 to 6; anything invalid (NaN, Infinity, text) becomes 3. */
+export function sanitizeTrainingDays(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 3;
+  return Math.max(2, Math.min(6, Math.round(value)));
+}
+
 export function buildPlan(
   profile: UserProfile,
   exercises: Exercise[],
@@ -1851,14 +1915,9 @@ export function buildPlan(
   const available =
     exercises.filter(
       exercise =>
-        exercise.equipment.some(
-          equipment =>
-            profile.equipment.includes(
-              equipment
-            )
-        ) ||
-        exercise.equipment.includes(
-          'bodyweight'
+        exerciseFitsEquipment(
+          exercise,
+          profile.equipment
         )
     );
 
@@ -1922,14 +1981,7 @@ export function buildPlan(
 
   const days: PlanDay[] = [];
 
-  const trainingDays =
-    Math.max(
-      2,
-      Math.min(
-        6,
-        profile.trainingDays
-      )
-    );
+  const trainingDays = sanitizeTrainingDays(profile.trainingDays);
 
   const trainingIndexes =
     trainingDays <= 3
@@ -2004,14 +2056,19 @@ export function buildPlan(
         ' '
       )} program`,
     days,
+    /*
+     * A training day is never empty: with very little equipment (bodyweight or kettlebell only) no upper-body
+     * movement exists, so an UPPER or LOWER day falls back to the full-body set instead of becoming a workout
+     * with zero exercises.
+     */
     exerciseSets: {
       upper:
-        upper.map(
+        (upper.length ? upper : full).map(
           exercise =>
             exercise.id
         ),
       lower:
-        lower.map(
+        (lower.length ? lower : full).map(
           exercise =>
             exercise.id
         ),
@@ -2181,6 +2238,38 @@ export function createWorkout(
    SET CREATION / TYPE MANAGEMENT
    ============================================================ */
 
+/**
+ * Carry the authoritative recommendation into a workout's uncompleted working sets.
+ * On the FIRST hydration of a workout every such set takes the recommendation (loads pre-filled when the workout was
+ * created are stale: the plan is built before any history exists). Later hydrations only fill a missing load, so
+ * they never overwrite what the athlete chose. Warm-ups and completed sets are never touched. Assisted movements
+ * write SetLog.assistance, everything else SetLog.weight. Movements without a load are returned unchanged.
+ */
+export function loadRecommendationIntoSets(
+  ex: Exercise,
+  sets: SetLog[],
+  value: number | undefined,
+  firstHydration: boolean
+): SetLog[] {
+  if (value === undefined || !Number.isFinite(value)) return sets;
+  const assisted = ex.loadSemantics === 'assistance';
+  const external = !['bodyweight', 'none', 'time', 'assistance'].includes(ex.loadSemantics);
+  if (!assisted && !external) return sets;
+  return sets.map(set => {
+    if (set.completed || set.type === 'warmup') return set;
+    const hasLoad = assisted ? set.assistance !== undefined : set.weight !== undefined && set.weight > 0;
+    if (hasLoad && !firstHydration) return set;
+    return assisted
+      ? { ...set, assistance: value, loadDetail: { kind: 'assistance' as const, assistanceKg: value } }
+      : { ...set, weight: value, loadDetail: loadDetailForSet(ex, value, { ...(set.loadDetail || {}), totalKg: undefined, stackKg: undefined, perHandKg: undefined } as any) };
+  });
+}
+
+/** Assistance is a finite, non-negative number of kg; anything else is 0. */
+function cleanAssistance(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
 export function makeSet(
   type: SetType,
   ex: Exercise,
@@ -2238,14 +2327,14 @@ export function makeSet(
 
     assistance:
       assistance
-        ? Math.max(0, weight || 0)
+        ? cleanAssistance(weight)
         : undefined
   };
 
   if (assistance) {
     set.loadDetail = {
       kind: 'assistance',
-      assistanceKg: Math.max(0, weight || 0)
+      assistanceKg: cleanAssistance(weight)
     };
   }
 
@@ -2358,242 +2447,106 @@ export function detectAchievements(
 
   const output: any[] = [];
 
-  for (
-    const workoutExercise of
-      w.exercises
-  ) {
+  for (const workoutExercise of w.exercises) {
 
-    const ex =
-      exercises.find(
-        exercise =>
-          exercise.id ===
-          workoutExercise.exerciseId
-      );
-
+    const ex = exercises.find(exercise => exercise.id === workoutExercise.exerciseId);
     if (!ex) {
       continue;
     }
 
-    const completed =
-      workoutExercise.sets.filter(
-        set => set.completed
-      );
+    const assisted = ex.loadSemantics === 'assistance';
+    // only working sets count; warm-ups are never a record
+    const completed = workoutExercise.sets.filter(isWorkingSet);
+    const priorEntries = previous.flatMap(workout => workout.exercises.filter(entry => entry.exerciseId === ex.id));
+    const old = priorEntries.flatMap(entry => entry.sets.filter(isWorkingSet));
 
-    const old =
-      previous
-        .flatMap(
-          workout =>
-            workout.exercises
-        )
-        .filter(
-          entry =>
-            entry.exerciseId ===
-            ex.id
-        )
-        .flatMap(
-          entry =>
-            entry.sets.filter(
-              set =>
-                set.completed
-            )
-        );
+    /* load: heaviest external load, or (assisted) the LOWEST assistance */
+    const top = bestLoad(ex, completed);
+    const oldTop = bestLoad(ex, old);
+    const loadBetter =
+      top !== undefined &&
+      (oldTop === undefined
+        ? (assisted || top > 0)
+        : assisted
+          ? top < oldTop
+          : top > oldTop);
 
-    const top =
-      Math.max(
-        0,
-        ...completed.map(
-          set =>
-            safeNum(set.weight)
-        )
-      );
-
-    const oldTop =
-      Math.max(
-        0,
-        ...old.map(
-          set =>
-            safeNum(set.weight)
-        )
-      );
-
-    const best =
-      Math.max(
-        0,
-        ...completed.map(
-          set =>
-            safeNum(set.reps)
-        )
-      );
-
-    const oldBest =
-      Math.max(
-        0,
-        ...old.map(
-          set =>
-            safeNum(set.reps)
-        )
-      );
-
-    const volume =
-      summarizeSets(
-        ex,
-        workoutExercise.sets
-      ).volume;
-
-    const oldVolume =
-      previous
-        .flatMap(
-          workout =>
-            workout.exercises
-        )
-        .filter(
-          entry =>
-            entry.exerciseId ===
-            ex.id
-        )
-        .reduce(
-          (
-            sum,
-            entry
-          ) =>
-            sum +
-            summarizeSets(
-              ex,
-              entry.sets
-            ).volume,
-          0
-        );
-
-    if (
-      top >
-        oldTop &&
-      top > 0
-    ) {
+    if (loadBetter && top !== undefined) {
       output.push({
         exerciseId: ex.id,
         kind: 'load',
-        label:
-          `New load best: ${formatLoad(
-            ex,
-            top
-          )}`,
+        label: assisted
+          ? `New assistance best: ${formatLoad(ex, top)}`
+          : `New load best: ${formatLoad(ex, top)}`,
         value: top,
-        unit:
-          loadUnit(ex)
+        unit: loadUnit(ex)
       });
     }
 
-    if (
-      best >
-        oldBest &&
-      best > 0
-    ) {
+    /* reps */
+    const best = Math.max(0, ...completed.map(set => safeNum(set.reps, MAX_PLAUSIBLE_REPS)));
+    const oldBest = Math.max(0, ...old.map(set => safeNum(set.reps, MAX_PLAUSIBLE_REPS)));
+
+    if (best > oldBest && best > 0) {
       output.push({
         exerciseId: ex.id,
         kind: 'rep',
-        label:
-          `New rep best: ${best} reps`,
+        label: `New rep best: ${best} reps`,
         value: best,
         unit: 'reps'
       });
     }
 
-    const estimatedOneRepMax =
-      (
-        sets: SetLog[]
-      ) =>
-        Math.max(
-          0,
-          ...sets
-            .filter(
-              set =>
-                set.completed &&
-                safeNum(set.weight) > 0 &&
-                safeNum(set.reps) >= 1 &&
-                safeNum(set.reps) <= 10
-            )
-            .map(
-              set =>
-                safeNum(set.weight) *
-                (
-                  1 +
-                  safeNum(set.reps) /
-                    30
-                )
-            )
-        );
-
-    const estimated =
-      estimatedOneRepMax(
-        completed
+    /* estimated strength (Epley) needs a real external load */
+    const estimatedOneRepMax = (sets: SetLog[]) =>
+      Math.max(
+        0,
+        ...(assisted
+          ? []
+          : sets
+              .filter(set => safeNum(setLoad(ex, set)) > 0 && safeNum(set.reps, MAX_PLAUSIBLE_REPS) >= 1 && safeNum(set.reps, MAX_PLAUSIBLE_REPS) <= 10)
+              .map(set => safeNum(setLoad(ex, set)) * (1 + safeNum(set.reps, MAX_PLAUSIBLE_REPS) / 30)))
       );
 
-    const oldEstimated =
-      estimatedOneRepMax(
-        old
-      );
+    const estimated = estimatedOneRepMax(completed);
+    const oldEstimated = estimatedOneRepMax(old);
 
-    if (
-      estimated >
-        oldEstimated &&
-      estimated > 0
-    ) {
+    if (estimated > oldEstimated && estimated > 0) {
       output.push({
         exerciseId: ex.id,
-        kind:
-          'estimated_strength',
-        label:
-          `Estimated strength best: ${formatLoad(
-            ex,
-            estimated
-          )}`,
-        value:
-          estimated,
-        unit:
-          'estimated 1RM'
+        kind: 'estimated_strength',
+        label: `Estimated strength best: ${formatLoad(ex, estimated)}`,
+        value: estimated,
+        unit: 'estimated 1RM'
       });
     }
 
-    if (
-      volume >
-        oldVolume &&
-      volume > 0
-    ) {
+    /* session volume: this session against the best PREVIOUS single session */
+    const volume = summarizeSets(ex, completed).volume;
+    const oldVolume = Math.max(0, ...priorEntries.map(entry => summarizeSets(ex, entry.sets).volume));
+
+    if (volume > oldVolume && volume > 0) {
       output.push({
         exerciseId: ex.id,
         kind: 'volume',
-        label:
-          'New session volume best',
-        value:
-          volume,
-        unit:
-          'kg·reps'
+        label: 'New session volume best',
+        value: volume,
+        unit: 'kg·reps'
       });
     }
 
-    if (
-      ex.loadSemantics ===
-      'time'
-    ) {
+    /* timed: longest hold against the previous longest */
+    if (ex.loadSemantics === 'time') {
+      const seconds = Math.max(0, ...completed.map(set => safeNum(set.seconds, MAX_PLAUSIBLE_SECONDS)));
+      const oldSeconds = Math.max(0, ...old.map(set => safeNum(set.seconds, MAX_PLAUSIBLE_SECONDS)));
 
-      const seconds =
-        Math.max(
-          0,
-          ...completed.map(
-            set =>
-              safeNum(set.seconds)
-          )
-        );
-
-      if (seconds > 0) {
+      if (seconds > oldSeconds && seconds > 0) {
         output.push({
           exerciseId: ex.id,
           kind: 'timed',
-          label:
-            `New time best: ${seconds}s`,
+          label: `New time best: ${seconds}s`,
           value: seconds,
-          unit:
-            'seconds'
+          unit: 'seconds'
         });
       }
     }
@@ -2665,12 +2618,42 @@ export type EquipmentFit =
   | 'unknown'
   | 'unavailable';
 
+/**
+ * The one equipment-compatibility rule (plan building, substitutions, the library and the session brief all use it):
+ * an exercise is usable when it needs no equipment, when it is bodyweight, or when at least one of the pieces of
+ * equipment it lists is available. Matching is by exact, case-insensitive name.
+ */
+export function usesNoEquipment(ex: Exercise): boolean {
+  return ex.equipment.length === 0 || ex.equipment.includes('bodyweight');
+}
+
+/**
+ * The equipment an exercise actually needs the athlete to have. "bodyweight" and "none" are not equipment: they are
+ * the absence of a requirement, so they are never listed, confirmed or counted as missing. An exercise that can be
+ * done with bodyweight (alone or as one option) needs nothing.
+ */
+export function requiredEquipment(ex: Exercise): string[] {
+  if (usesNoEquipment(ex)) return [];
+  return ex.equipment.filter(item => item && item !== 'none');
+}
+
+export function exerciseFitsEquipment(ex: Exercise, available: readonly string[]): boolean {
+  if (usesNoEquipment(ex)) return true;
+  const normalized = new Set(available.map(value => String(value).toLowerCase().trim()));
+  return ex.equipment.some(required => normalized.has(required.toLowerCase().trim()));
+}
+
 export function equipmentFit(
   ex: Exercise,
   available:
     | string[]
     | undefined
 ): EquipmentFit {
+
+  // a movement that needs no equipment is available whether or not the athlete has listed any
+  if (usesNoEquipment(ex)) {
+    return 'available';
+  }
 
   if (
     !available ||
@@ -2679,62 +2662,57 @@ export function equipmentFit(
     return 'unknown';
   }
 
-  const normalized =
-    available.map(
-      value =>
-        value
-          .toLowerCase()
-          .trim()
-    );
-
-  const matches =
-    (required: string) =>
-      normalized.some(
-        availableItem =>
-          availableItem ===
-            required ||
-          availableItem.includes(
-            required
-          ) ||
-          required.includes(
-            availableItem
-          )
-      );
-
-  if (
-    ex.equipment.length === 0
-  ) {
-    return 'available';
-  }
-
-  if (
-    ex.equipment.some(
-      equipment =>
-        matches(equipment)
-    )
-  ) {
-    return 'available';
-  }
-
-  if (
-    ex.equipment.some(
-      equipment =>
-        [
-          'bodyweight',
-          'floor',
-          'bench'
-        ].includes(
-          equipment
-        ) &&
-        matches(equipment)
-    )
-  ) {
-    return 'available';
-  }
-
-  return 'unavailable';
+  return exerciseFitsEquipment(ex, available)
+    ? 'available'
+    : 'unavailable';
 }
 
+/**
+ * The one substitution score. Equipment fit dominates, then how much of the movement is preserved
+ * (same pattern, same way of measuring load, same family), then whether the catalogue lists the pair.
+ */
+export function substituteScore(
+  source: Exercise,
+  candidate: Exercise,
+  available: readonly string[] | undefined
+): number {
+  const fit = equipmentFit(candidate, available ? [...available] : undefined);
+  let score = fit === 'available' ? 1000 : fit === 'unknown' ? 500 : 0;
+  if (candidate.pattern === source.pattern) score += 120;
+  if (candidate.loadSemantics === source.loadSemantics) score += 80;
+  if (candidate.family === source.family) score += 50;
+  if (candidate.alternatives.includes(source.id) || source.alternatives.includes(candidate.id)) score += 30;
+  if (candidate.equipment.length < source.equipment.length) score += 10;
+  // a swap that keeps the prescription meaningful (same pattern, load meaning and rep-range width) outranks one that resets the baseline
+  if (isEquivalentSubstitution(source, candidate)) score += 100;
+  return score;
+}
+
+/**
+ * Every usable replacement for an exercise, best first: the catalogue's listed alternatives plus every other
+ * exercise, minus anything the athlete cannot use (profile equipment) or has marked unavailable for this session.
+ * Ties are broken by id so the order never depends on how the catalogue happens to be stored.
+ */
+export function rankSubstitutes(
+  source: Exercise,
+  exercises: Exercise[],
+  available: readonly string[] | undefined,
+  unavailableItems: readonly string[] = []
+): { exercise: Exercise; score: number; equivalent: boolean }[] {
+  const blocked = new Set(unavailableItems.map(item => item.toLowerCase().trim()));
+  return exercises
+    .filter(candidate => candidate.id !== source.id)
+    .filter(candidate => !candidate.equipment.some(item => blocked.has(item.toLowerCase().trim())))
+    .filter(candidate => equipmentFit(candidate, available ? [...available] : undefined) !== 'unavailable')
+    .map(candidate => ({
+      exercise: candidate,
+      score: substituteScore(source, candidate, available),
+      equivalent: isEquivalentSubstitution(source, candidate)
+    }))
+    .sort((x, y) => y.score - x.score || x.exercise.id.localeCompare(y.exercise.id));
+}
+
+/** The catalogue's listed alternatives for an exercise, best first, including ones the equipment rules exclude. */
 export function smartAlternatives(
   ex: Exercise,
   exercises: Exercise[],
@@ -2744,76 +2722,17 @@ export function smartAlternatives(
 ) {
 
   return ex.alternatives
-    .map(
-      id =>
-        exercises.find(
-          exercise =>
-            exercise.id === id
-        )
-    )
-    .filter(
-      (
-        exercise
-      ): exercise is Exercise =>
-        Boolean(exercise)
-    )
+    .map(id => exercises.find(exercise => exercise.id === id))
+    .filter((exercise): exercise is Exercise => Boolean(exercise))
     .map(exercise => ({
       exercise,
-      fit:
-        equipmentFit(
-          exercise,
-          available
-        ),
-      samePattern:
-        exercise.pattern ===
-        ex.pattern,
-      sameLoad:
-        exercise.loadSemantics ===
-        ex.loadSemantics,
-      similarity:
-        comparisonScore(
-          ex,
-          exercise
-        )
+      fit: equipmentFit(exercise, available),
+      samePattern: exercise.pattern === ex.pattern,
+      sameLoad: exercise.loadSemantics === ex.loadSemantics,
+      similarity: comparisonScore(ex, exercise),
+      score: substituteScore(ex, exercise, available)
     }))
-    .sort(
-      (a, b) => {
-
-        const fitRank =
-          (
-            value: EquipmentFit
-          ) =>
-            value ===
-            'available'
-              ? 0
-              : value ===
-                  'unknown'
-                ? 1
-                : 2;
-
-        return (
-          fitRank(a.fit) -
-            fitRank(b.fit) ||
-
-          Number(
-            b.samePattern
-          ) -
-            Number(
-              a.samePattern
-            ) ||
-
-          Number(
-            b.sameLoad
-          ) -
-            Number(
-              a.sameLoad
-            ) ||
-
-          b.similarity -
-            a.similarity
-        );
-      }
-    );
+    .sort((a, b) => b.score - a.score || b.similarity - a.similarity || a.exercise.id.localeCompare(b.exercise.id));
 }
 
 /* ============================================================
@@ -3075,6 +2994,18 @@ export function reorderWorkoutExercise(
    EXERCISE REPLACEMENT
    ============================================================ */
 
+/**
+ * The one substitution-equivalence rule: a replacement carries the old prescription forward only when it moves the
+ * same pattern, measures load the same way and has the same rep-range width. Anything else starts a new baseline.
+ */
+export function isEquivalentSubstitution(oldEx: Exercise, newEx: Exercise): boolean {
+  return (
+    oldEx.pattern === newEx.pattern &&
+    oldEx.loadSemantics === newEx.loadSemantics &&
+    oldEx.repRange[1] - oldEx.repRange[0] === newEx.repRange[1] - newEx.repRange[0]
+  );
+}
+
 export function replaceWorkoutExercise(
   workout: Workout,
   oldId: string,
@@ -3110,14 +3041,7 @@ export function replaceWorkoutExercise(
 
   const equivalent =
     oldEx
-      ? oldEx.pattern ===
-          newEx.pattern &&
-        oldEx.loadSemantics ===
-          newEx.loadSemantics &&
-        oldEx.repRange[1] -
-          oldEx.repRange[0] ===
-          newEx.repRange[1] -
-            newEx.repRange[0]
+      ? isEquivalentSubstitution(oldEx, newEx)
       : false;
 
   const previousSets =
@@ -3557,11 +3481,11 @@ export function recoverWorkoutSession(
    ============================================================ */
 
 /**
- * A workout is only a real completed workout when at least one set was logged.
+ * A workout is only a real completed workout when at least one working (non-warm-up) set was logged.
  * A session that ended with zero logged sets is abandoned, never "completed".
  */
 export function hasLoggedSets(workout: Workout): boolean {
-  return workout.exercises.some(entry => entry.sets.some(set => set.completed));
+  return workout.exercises.some(entry => entry.sets.some(isWorkingSet));
 }
 
 /** Mark a workout that ended without any logged set as abandoned (status "skipped"); it is not a completion. */
@@ -3578,10 +3502,7 @@ export function sessionAssessment(
   const completed =
     workout.exercises.flatMap(
       workoutExercise =>
-        workoutExercise.sets.filter(
-          set =>
-            set.completed
-        )
+        workoutExercise.sets.filter(isWorkingSet)
     );
 
   const planned =
@@ -3593,7 +3514,8 @@ export function sessionAssessment(
         sum +
         workoutExercise.sets.filter(
           set =>
-            set.disposition !== 'skipped'
+            set.disposition !== 'skipped' &&
+            set.type !== 'warmup'
         ).length,
       0
     );
@@ -3683,16 +3605,25 @@ export function sessionAssessment(
    WORKOUT ADAPTATION
    ============================================================ */
 
+/**
+ * Prepare the NEXT planned workout from completed history. It does not decide anything itself: the load and rest
+ * come from personalizedLoad() (the single authoritative prescription), so this can never disagree with what the
+ * session screen recommends. `recent` is treated as completed history.
+ */
 export function applyWorkoutAdaptation(
   workout: Workout,
   exercises: Exercise[],
-  recent: Workout[]
+  recent: Workout[],
+  profile?: UserProfile
 ) {
 
   const output =
     structuredClone(
       workout
     );
+
+  const history =
+    recent.map(item => ({ ...item, status: 'completed' as const }));
 
   for (
     const workoutExercise of
@@ -3710,43 +3641,31 @@ export function applyWorkoutAdaptation(
       continue;
     }
 
-    const sets =
-      recent
-        .flatMap(
-          workout =>
-            workout.exercises
-        )
-        .filter(
-          entry =>
-            entry.exerciseId ===
-            ex.id
-        )
-        .flatMap(
-          entry =>
-            entry.sets
-        );
-
-    const result =
-      progression(
+    const recommendation =
+      personalizedLoad(
         ex,
-        sets
+        history,
+        profile,
+        exercises,
+        workout.scheduledDate
       );
 
     if (
-      result.weight !==
-        undefined &&
-      result.action !==
-        'calibrate'
+      recommendation.kind === 'baseline' &&
+      recommendation.action !== undefined &&
+      recommendation.action !== 'calibrate' &&
+      recommendation.weight !== undefined
     ) {
       workoutExercise.recommendedWeight =
-        sanitizeRecommendedLoad(
-          ex,
-          result.weight
-        );
+        recommendation.weight;
     }
 
+    const programmed = programExercise(ex, profile?.primaryGoal);
+    if (!workoutExercise.sets.some(set => set.completed)) {
+      workoutExercise.repRange = programmed.repRange;
+    }
     workoutExercise.restSec =
-      result.recommendedRest;
+      recommendation.recommendedRest ?? programmed.restSec;
   }
 
   output.updatedAt =

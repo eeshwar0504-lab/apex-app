@@ -7,6 +7,19 @@
 const { loadEngine } = require('../load-engine.cjs');
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+/* Independent reading of a set's load: assisted movements store assistance (older data: weight), the rest weight. */
+const loadOf = (ex, s) => (ex.loadSemantics === 'assistance' ? (isNum(s.assistance) ? s.assistance : s.weight) : s.weight);
+const LOADED = (ex) => !['bodyweight', 'none', 'time'].includes(ex.loadSemantics);
+/* Independent statement of the documented goal rule (docs/TRAINING_SEMANTICS.md, Goals): the catalogue window shifted by
+   -3 (strength) or +2 (fitness) for compound lifts that are measured in reps at a load; everything else is the catalogue. */
+const COMPOUND = new Set(['squat', 'hinge', 'horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull', 'unilateral_squat']);
+const goalRepRange = (ex, goal) => {
+  const [lo, hi] = ex.repRange;
+  if (['time', 'none', 'bodyweight'].includes(ex.loadSemantics) || !COMPOUND.has(ex.pattern)) return [lo, hi];
+  const shift = goal === 'strength' ? -3 : goal === 'fitness' ? 2 : 0;
+  const low = Math.max(Math.min(3, lo), lo + shift);
+  return [low, low + hi - lo];
+};
 const EXTERNAL = (ex) => !['bodyweight', 'none', 'time', 'assistance'].includes(ex.loadSemantics);
 const availableUnder = (ex, equipment) => ex.equipment.includes('bodyweight') || ex.equipment.some((e) => equipment.includes(e));
 
@@ -30,7 +43,7 @@ function checkState(state, simDate, log) {
     }
     if (w.status === 'completed') {
       if (w.scheduledDate > simDate) add('hard', 'completed session dated in the future', { date: w.scheduledDate, simDate });
-      if (w.completedAt && w.completedAt.slice(0, 10) > simDate) add('hard', 'completedAt in the future', { completedAt: w.completedAt });
+      if (w.completedAt && E.dates.dayOfTimestamp(w.completedAt) > simDate) add('hard', 'completedAt in the future', { completedAt: w.completedAt });
       const done = w.exercises.flatMap((we) => we.sets).filter((s) => s.completed).length;
       if (done === 0) add('hard', 'completed workout has no completed sets (a session with no logged sets must be abandoned, not completed)', { id: w.id, date: w.scheduledDate });
       const eq = log && log.equipmentByDate ? log.equipmentByDate[w.scheduledDate] : undefined;
@@ -40,6 +53,7 @@ function checkState(state, simDate, log) {
         if (ex && eq && !availableUnder(ex, eq)) add('hard', 'unavailable equipment prescribed', { exercise: ex.id, needs: ex.equipment, had: eq, date: w.scheduledDate });
         for (const s of we.sets) {
           if (s.weight !== undefined && (!isNum(s.weight) || s.weight < 0)) add('hard', 'invalid load', { v: s.weight, ex: we.exerciseId });
+          if (s.assistance !== undefined && (!isNum(s.assistance) || s.assistance < 0)) add('hard', 'invalid assistance', { v: s.assistance, ex: we.exerciseId });
           if (s.reps !== undefined && (!isNum(s.reps) || s.reps < 0)) add('hard', 'invalid reps', { v: s.reps, ex: we.exerciseId });
           if (s.rir !== undefined && (!isNum(s.rir) || s.rir < 0 || s.rir > 10)) add('hard', 'invalid RIR', { v: s.rir, ex: we.exerciseId });
           if (s.completed && s.weight !== undefined && s.reps !== undefined && (s.reps > 200 || s.weight * s.reps > 20000)) add('hard', 'impossible volume for a set', { w: s.weight, r: s.reps });
@@ -69,18 +83,21 @@ function checkState(state, simDate, log) {
 const TABLE = [[56, 3], [28, 2], [14, 1], [0, 0]];
 const dayNum = (d) => Math.floor(Date.parse(String(d).slice(0, 10) + 'T00:00:00Z') / 86400000);
 function layoffCheck(rx, ex, done, last, inc, add, log) {
-  const dates = done.filter((w) => w.exercises.some((we) => we.exerciseId === ex.id && we.sets.some((s) => s.completed && isNum(s.weight) && s.weight > 0))).map((w) => String(w.completedAt || w.scheduledDate).slice(0, 10));
+  const dates = done.filter((w) => w.exercises.some((we) => we.exerciseId === ex.id && we.sets.some((s) => s.completed && s.type !== 'warmup' && isNum(loadOf(ex, s)) && (loadOf(ex, s) > 0 || ex.loadSemantics === 'assistance')))).map((w) => loadEngine().dates.workoutDay(w));
   if (!dates.length || !rx.date) return false;
   const gap = dayNum(rx.date) - dayNum(dates.sort().at(-1));
   const steps = TABLE.find(([min]) => gap >= min)[1];
   if (!steps) return false;
   if (log) log.layoffPrescriptions = (log.layoffPrescriptions || 0) + 1;
-  const drop = last - rx.weight;
+  const assisted = ex.loadSemantics === 'assistance';
+  // "drop" = how much EASIER the prescription is than the last worked load (assisted: more assistance)
+  const drop = assisted ? rx.weight - last : last - rx.weight;
+  const cap = assisted ? Infinity : 0.5 * last;
   if (drop < -1e-9) add('hard', 'load increased on the return session after a layoff', { last, prescribed: rx.weight, gapDays: gap });
-  else if (last > inc * 1.0001 && drop <= 1e-9) add('hard', 'layoff of ' + gap + ' days was not reflected in the prescribed load', { last, prescribed: rx.weight, gapDays: gap, expectedSteps: steps });
+  else if ((assisted || last > inc * 1.0001) && drop <= 1e-9) add('hard', 'layoff of ' + gap + ' days was not reflected in the prescribed load', { last, prescribed: rx.weight, gapDays: gap, expectedSteps: steps });
   if (drop > steps * inc + inc / 2 + 1e-9) add('hard', 'return-to-training reduction larger than the documented maximum (' + steps + ' increment(s))', { last, prescribed: rx.weight, gapDays: gap, inc });
-  if (drop > 0.5 * last + inc / 2 + 1e-9) add('hard', 'return-to-training reduction larger than half of the last worked load', { last, prescribed: rx.weight, gapDays: gap });
-  if (drop < Math.min(steps * inc, 0.5 * last) - inc - 1e-9) add('hard', 'return-to-training reduction smaller than the documented minimum band', { last, prescribed: rx.weight, gapDays: gap, expectedSteps: steps, inc });
+  if (!assisted && drop > cap + inc / 2 + 1e-9) add('hard', 'return-to-training reduction larger than half of the last worked load', { last, prescribed: rx.weight, gapDays: gap });
+  if (drop < Math.min(steps * inc, cap) - inc - 1e-9) add('hard', 'return-to-training reduction smaller than the documented minimum band', { last, prescribed: rx.weight, gapDays: gap, expectedSteps: steps, inc });
   return true;
 }
 
@@ -92,24 +109,28 @@ function checkPrescriptions(rxs, state, exercises, T, equipment, log) {
     const ex = exercises.find((e) => e.id === rx.exerciseId);
     const add = (severity, name, detail) => out.push({ category: 'progression', severity, name, detail: { exercise: rx.exerciseId, prescribed: rx.weight, kind: rx.kind, ...detail } });
     if (!availableUnder(ex, equipment)) out.push({ category: 'equipment', severity: 'hard', name: 'prescribed exercise unavailable under current equipment', detail: { exercise: ex.id, needs: ex.equipment, had: equipment } });
-    if (!EXTERNAL(ex)) continue;
+    if (!LOADED(ex)) continue;
+    const assisted = ex.loadSemantics === 'assistance';
+    const sign = assisted ? -1 : 1; // for assisted movements a LOWER number is the harder prescription
     if (rx.weight !== undefined && (!isNum(rx.weight) || rx.weight < 0)) { add('hard', 'invalid prescribed load', {}); continue; }
-    const hist = done.flatMap((w) => w.exercises.filter((we) => we.exerciseId === ex.id).flatMap((we) => we.sets)).filter((s) => s.completed && s.type !== 'warmup' && isNum(s.weight) && s.weight > 0);
-    if (rx.weight === undefined || rx.weight === 0) { if (hist.length) add('warn', 'no numeric load prescribed although exact history exists', { history: hist.length }); continue; }
+    const hist = done.flatMap((w) => w.exercises.filter((we) => we.exerciseId === ex.id).flatMap((we) => we.sets)).filter((s) => s.completed && s.type !== 'warmup' && isNum(loadOf(ex, s)) && (loadOf(ex, s) > 0 || assisted)).map((s) => ({ ...s, weight: loadOf(ex, s) }));
+    if (rx.weight === undefined || (rx.weight === 0 && !assisted)) { if (hist.length) add('warn', 'no numeric load prescribed although exact history exists', { history: hist.length }); continue; }
     if (!hist.length) continue; // first exposure: only the sanity checks above apply
     const last = hist[hist.length - 1].weight;
     const inc = Math.max(0.5, ex.incrementKg || 0.5);
     if (layoffCheck(rx, ex, done, last, inc, add, log)) continue;
-    const top = ex.repRange[1];
+    const range = goalRepRange(ex, rx.goal);
+    if (rx.repRange && (rx.repRange[0] !== range[0] || rx.repRange[1] !== range[1])) add('hard', 'session rep range does not match the documented goal rule', { exercise: ex.id, goal: rx.goal, got: rx.repRange, expected: range });
+    const top = range[1];
     const last3 = hist.slice(-3);
     const supported = last3.length >= 2 && last3.every((s) => (s.reps ?? 0) >= top);
-    const delta = rx.weight - last;
-    if (/fallen below the target range/.test(rx.reason || '') && rx.weight >= last) add('warn', 'engine signalled "reduce" (repeatedly below rep range) but the prescribed load was not reduced', { last, recentReps: last3.map((s) => s.reps) });
+    const delta = sign * (rx.weight - last); // positive = harder
+    if (/fallen below the target range/.test(rx.reason || '') && delta >= 0) add('warn', 'engine signalled "reduce" (repeatedly below rep range) but the prescribed load was not reduced', { last, recentReps: last3.map((s) => s.reps) });
     if (delta > 1e-9) {
       if (!supported) add(delta > 2 * inc + 1e-9 ? 'hard' : 'warn', 'load increased without supporting top-of-range performance', { last, delta, recentReps: last3.map((s) => s.reps), top });
       else if (delta > 2 * inc + 1e-9) add('hard', 'supported increase larger than two increments', { last, delta, inc });
     } else if (delta < -1e-9) {
-      const bottom = ex.repRange[0];
+      const bottom = range[0];
       const belowRange = last3.filter((s) => (s.reps ?? 0) < bottom).length >= 2;
       if (!belowRange) add(-delta > 0.5 * last ? 'hard' : 'warn', 'load decreased versus last worked load without repeated sub-range performance', { last, delta, recentReps: last3.map((s) => s.reps) });
       else if (-delta > 3 * inc + 1e-9 && -delta > 0.5 * last) add('hard', 'reduction larger than both three increments and half the load', { last, delta, inc });

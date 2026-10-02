@@ -13,8 +13,11 @@ const inv = require('../oracle/invariants.cjs');
 const ctxOracle = require('../oracle/context.cjs');
 
 const START = Date.UTC(2026, 0, 5); // a Monday
+/* A timestamp inside the LOCAL calendar day `date` (never depends on the machine's time zone). */
+const atLocal = (date, h, m = 0) => { const [y, mo, d] = date.split('-').map(Number); return new Date(y, mo - 1, d, h, m).toISOString(); };
 const iso = (dayIndex) => new Date(START + dayIndex * 86400000).toISOString().slice(0, 10);
 const EXTERNAL = (ex) => !['bodyweight', 'none', 'time', 'assistance'].includes(ex.loadSemantics);
+const LOADED = (ex) => EXTERNAL(ex) || ex.loadSemantics === 'assistance';
 
 function memoryStorage() {
   const m = new Map();
@@ -106,7 +109,11 @@ function runSimulation(scenario, options = {}) {
       if (alt) { ids.push(alt.id); stats.substitutions++; log.events.push({ date, type: 'substitution', from: id, to: alt.id }); }
       else { stats.skippedExercises++; log.events.push({ date, type: 'no_substitute', exercise: id }); }
     }
-    const w = T.createWorkout(label, date, ids, exercises, plan.id, 'scheduled', 1);
+    // half of the athletes also train an assisted pull-up on upper and full-body days when a machine is available
+    const assisted = exercises.find((x) => x.loadSemantics === 'assistance');
+    if (assisted && scenario.seed % 2 === 0 && !label.includes('LOWER') && availableUnder(assisted, equipment) && !ids.includes(assisted.id)) ids.push(assisted.id);
+    // like the app, workouts are built from the exercises as the athlete's CURRENT goal prescribes them
+    const w = T.createWorkout(label, date, ids, E.goalProgram.programExercises(exercises, state.profile.primaryGoal), plan.id, 'scheduled', 1);
     w.originalPlanVersion = 1; w.currentPlanVersion = 1;
     return w;
   }
@@ -115,17 +122,19 @@ function runSimulation(scenario, options = {}) {
     const done = state.workouts.filter((x) => x.status === 'completed');
     const rxs = [];
     for (const we of w.exercises) {
-      const ex = exercises.find((e) => e.id === we.exerciseId);
+      const ex = E.goalProgram.programExercise(exercises.find((e) => e.id === we.exerciseId), state.profile.primaryGoal);
+      if (!we.sets.some((x) => x.completed)) we.repRange = ex.repRange; // the app's hydration: a planned exercise follows the current goal
       const rec = T.personalizedLoad(ex, done, state.profile, exercises, date);
       let weight = we.recommendedWeight;
-      if (EXTERNAL(ex)) {
+      if (LOADED(ex)) {
         const snapped = T.snapToAvailableLoad(ex, rec.weight, state.profile);
         weight = snapped !== undefined ? snapped : rec.weight;
         we.recommendedWeight = weight;
-        we.sets = we.sets.map((s) => (s.completed ? s : { ...s, weight }));
+        // the app's own hydration rule (first hydration of a workout): the recommendation reaches the sets
+        we.sets = T.loadRecommendationIntoSets(ex, we.sets, weight, true);
       }
       athlete.ensure(ex);
-      rxs.push({ date, exerciseId: ex.id, e1rm: athlete.strength.get(ex.id), weight, kind: rec.kind, reason: rec.reason, targetRir: rec.targetRir, repRange: we.repRange, sets: we.sets.length });
+      rxs.push({ date, exerciseId: ex.id, e1rm: athlete.strength.get(ex.id), weight, kind: rec.kind, reason: rec.reason, targetRir: rec.targetRir, repRange: we.repRange, goal: state.profile.primaryGoal, sets: we.sets.length });
     }
     return rxs;
   }
@@ -138,7 +147,7 @@ function runSimulation(scenario, options = {}) {
     // the Coach reads recovery + plateau evidence; it must explain it without touching the prescription
     for (const v of ctxOracle.checkCoachContext(E, state, date, exercises, rxs, log)) pushIssue({ ...v, date });
     const ds = athlete.startDay(day);
-    w.startedAt = date + 'T17:00:00.000Z';
+    w.startedAt = atLocal(date, 17, 0);
     const trained = [];
     let completedSets = 0, plannedSets = 0;
     const tired = ds.readiness < 0.8 && rng.chance(0.4);
@@ -152,7 +161,7 @@ function runSimulation(scenario, options = {}) {
         plannedSets++;
         if (ex.loadSemantics === 'time') {
           set.seconds = Math.max(5, Math.round(rng.gauss(ex.repRange[0] + 5, 5) * ds.readiness));
-          set.completed = true; set.timestamp = date + 'T17:30:00.000Z'; completedSets++; stats.sets++; return;
+          set.completed = true; set.timestamp = atLocal(date, 17, 30); completedSets++; stats.sets++; return;
         }
         let load;
         if (EXTERNAL(ex)) load = set.weight;
@@ -161,13 +170,13 @@ function runSimulation(scenario, options = {}) {
         const r = athlete.performSet(ex, load ?? 1, we.repRange, si);
         if (r.reps < 1) { set.completed = false; return; }
         set.reps = r.reps; if (r.rir !== undefined) set.rir = r.rir; else delete set.rir;
-        set.completed = true; set.timestamp = date + 'T17:30:00.000Z'; completedSets++; stats.sets++;
+        set.completed = true; set.timestamp = atLocal(date, 17, 30); completedSets++; stats.sets++;
       });
       trained.push(ex);
     });
     if (completedSets === 0) {
       // The app does not record a session with no logged sets as completed: it is abandoned.
-      const at = date + 'T18:30:00.000Z';
+      const at = atLocal(date, 18, 30);
       if (T.hasLoggedSets(w)) note('zero_set', 'hard', 'hasLoggedSets() reports logged sets although the athlete logged none', { date });
       const abandoned = T.abandonWorkout(w, at);
       if (abandoned.status === 'completed') note('zero_set', 'hard', 'abandonWorkout produced a completed workout', { date });
@@ -176,7 +185,7 @@ function runSimulation(scenario, options = {}) {
       athlete.rest(1);
       return;
     }
-    w.status = 'completed'; w.completedAt = date + 'T18:30:00.000Z'; w.updatedAt = w.completedAt;
+    w.status = 'completed'; w.completedAt = atLocal(date, 18, 30); w.updatedAt = w.completedAt;
     const previous = state.workouts.filter((x) => x.status === 'completed');
     state.workouts.push(w);
     const ach = T.detectAchievements(w, exercises, previous);

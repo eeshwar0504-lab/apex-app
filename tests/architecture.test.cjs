@@ -20,6 +20,19 @@ test('repository keeps persistence writes serialized',()=>{
  assert.match(x,/reset/);
 });
 
+test('repository migrates older persisted state into the current schema',()=>{
+ const x=read('src/data/repository.ts');
+ assert.match(x,/migratePersistedState/);
+ assert.match(x,/version < SCHEMA_VERSION/);
+ assert.match(x,/schemaVersion=SCHEMA_VERSION/);
+});
+
+test('SQLite schema migrations are tracked natively',()=>{
+ const x=read('src/data/sqliteAdapter.ts');
+ assert.match(x,/schema_migrations/);
+ assert.match(x,/SQLITE_SCHEMA_VERSION/);
+});
+
 test('encrypted backup uses authenticated encryption',()=>{
  const x=read('src/data/backupCrypto.ts');
  assert.match(x,/AES-GCM/);

@@ -64,6 +64,35 @@ function run(ctx) {
   const snap = JSON.stringify([base, profile]);
   T.personalizedLoad(chest, base, profile, ex);
   out.push(rec('recommendation calculation does not mutate its inputs', JSON.stringify([base, profile]) === snap ? 'pass' : 'fail', {}, seed));
+  // 9. the order records are stored in never changes a prescription (whole simulated history, every exercise)
+  {
+    const sim = runSimulation(makeScenario({ archetype: 'consistent_beginner', seed: seed + 3200, weeks: Math.min(ctx.weeks, 8) }));
+    const asOf = E.dates.addDaysLocal(E.dates.localDate(new Date(sim.state.workouts.filter((w) => w.completedAt).map((w) => w.completedAt).sort().at(-1))), 2);
+    const decide = (workouts) => JSON.stringify(ex.map((x) => { const r = T.personalizedLoad(x, workouts, sim.state.profile, ex, asOf); return [x.id, r.weight, r.kind, r.action]; }));
+    const rngO = new Rng(seed + 3300);
+    let diff = 0;
+    const baseline = decide(sim.state.workouts);
+    for (let k = 0; k < 6; k++) {
+      const shuffled = sim.state.workouts.slice();
+      for (let i = shuffled.length - 1; i > 0; i--) { const j = rngO.int(0, i); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+      if (decide(shuffled) !== baseline) diff++;
+    }
+    out.push(rec('shuffling the order of stored workouts never changes any prescription (6 shuffles of a full simulated history)', diff ? 'fail' : 'pass', { shufflesThatDiffered: diff, workouts: sim.state.workouts.length }, seed));
+  }
+
+  // 10. assisted movements: the legacy (assistance stored in weight) and current (assistance) representations are interchangeable
+  {
+    const pull = ex.find((x) => x.loadSemantics === 'assistance');
+    let bad = 0, n = 0;
+    const rngA = new Rng(seed + 3400);
+    for (let i = 0; i < 300; i++) {
+      const a = 5 + rngA.int(0, 16) * 2.5, reps = rngA.int(3, 14);
+      const mk = (field) => [workoutOf(pull.id, [0, 1, 2].map((k) => ({ id: 'a' + k, type: 'working', [field]: a, reps, rir: 2, completed: true })), '2026-02-01', 'x' + field)];
+      const r1 = T.personalizedLoad(pull, mk('assistance'), profile, ex, '2026-02-04'), r2 = T.personalizedLoad(pull, mk('weight'), profile, ex, '2026-02-04');
+      n++; if (JSON.stringify(r1) !== JSON.stringify(r2)) bad++;
+    }
+    out.push(rec('assisted load representations (assistance vs legacy weight) give identical prescriptions (300 random histories)', bad ? 'fail' : 'pass', { violations: bad, cases: n }, seed));
+  }
   return out;
 }
 module.exports = { run };

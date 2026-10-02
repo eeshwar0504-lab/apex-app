@@ -14,7 +14,7 @@ const sess = (date, reps, weight = 20) => ({
 const state = (workouts) => ({
   schemaVersion: 4, goals: [], workouts, exercises: exercisesMod.EXERCISES, achievements: [], measurements: [], journal: [], observations: [],
   preferences: {}, activeRoute: 'home', onboardingComplete: true, coachMemory: [], workoutTemplates: [], learnedPreferences: {}, eventLog: [],
-  profile: { name: 'T', experience: 'beginner', equipment: ['machine'], primaryGoal: 'strength', goals: ['strength'] },
+  profile: { name: 'T', experience: 'beginner', equipment: ['machine'], primaryGoal: 'general', goals: ['general'] },
 });
 const ctx = (s, extra = {}) => ({ state: s, profile: s.profile, goals: s.goals, primaryGoal: 'strength', recentWorkoutIds: [], recentExerciseEntryIds: [], now: '2026-02-01T10:00:00.000Z', ...extra });
 const flat = (k) => Array.from({ length: k }, (_, i) => sess('2026-01-' + String(i * 3 + 1).padStart(2, '0'), [9, 9, 9]));

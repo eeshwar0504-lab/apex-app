@@ -155,6 +155,40 @@ function buildEvidence(context: CoachContext): CoachEvidence[] {
     });
   }
 
+  const stateSignals = context.signals;
+  if (stateSignals?.recovery === 'missing') {
+    evidence.push({
+      id: evidenceId('recovery_missing'), statement: 'No recent recovery check-in is available.',
+      source: 'user', state: 'unknown', quality: 'missing', pattern: 'missing', confidence: 'low',
+      role: 'missing', recency: 'unknown', direction: 'neutral', timestamp: context.now,
+    });
+  } else if (stateSignals?.recovery) {
+    evidence.push({
+      id: evidenceId('recovery_state'), statement: `Recovery context is ${stateSignals.recovery}.`,
+      source: 'user', state: stateSignals.recovery === 'conflicted' ? 'conflicted' : 'probable',
+      quality: stateSignals.recovery === 'conflicted' ? 'conflicted' : 'low', pattern: 'confounder', confidence: 'low',
+      role: stateSignals.recovery === 'poor' ? 'supporting' : stateSignals.recovery === 'conflicted' ? 'contradicting' : 'context',
+      recency: stateSignals.recoveryDate ? 'current' : 'unknown',
+      direction: stateSignals.recovery === 'poor' ? 'negative' : stateSignals.recovery === 'good' ? 'positive' : stateSignals.recovery === 'conflicted' ? 'mixed' : 'neutral', timestamp: context.now,
+    });
+  }
+  if (stateSignals?.workload === 'elevated') evidence.push({
+    id: evidenceId('workload'), statement: 'Recent workload is elevated according to the deterministic training rule.',
+    source: 'history', state: 'known', quality: 'medium', pattern: 'signal', confidence: 'medium', role: 'supporting', recency: 'recent', direction: 'negative', timestamp: context.now,
+  });
+  if (stateSignals?.missedSessions21) evidence.push({
+    id: evidenceId('missed'), statement: `${stateSignals.missedSessions21} missed scheduled session${stateSignals.missedSessions21 === 1 ? '' : 's'} in the last 21 days.`,
+    source: 'history', state: 'known', quality: 'medium', pattern: 'signal', confidence: 'medium', role: 'context', recency: 'recent', direction: 'negative', timestamp: context.now,
+  });
+  if (stateSignals?.returnToTrainingDays) evidence.push({
+    id: evidenceId('return'), statement: `Return-to-training context: ${stateSignals.returnToTrainingDays} days since the exercise's last working exposure.`,
+    source: 'history', state: 'known', quality: 'high', pattern: 'signal', confidence: 'high', role: 'supporting', recency: 'current', direction: 'neutral', timestamp: context.now,
+  });
+  if (stateSignals?.performance && stateSignals.performance !== 'insufficient') evidence.push({
+    id: evidenceId('performance'), statement: `Recent comparable exercise output is ${stateSignals.performance}.`,
+    source: 'history', state: 'probable', quality: 'medium', pattern: 'signal', confidence: 'medium', role: stateSignals.performance === 'declining' ? 'supporting' : 'context', recency: 'recent', direction: stateSignals.performance === 'declining' ? 'negative' : stateSignals.performance === 'improving' ? 'positive' : 'neutral', timestamp: context.now,
+  });
+
   for (const plateau of context.plateaus || []) {
     evidence.push({
       id: evidenceId(`plateau_${plateau.exerciseId}`),
@@ -202,6 +236,15 @@ function assessSafety(context: CoachContext, evidence: CoachEvidence[]): SafetyA
       status: 'caution',
       reason: 'Recent illness is known, so normal training optimization should be conservative until current tolerance is established.',
       evidence,
+      recommendedAction: 'ask',
+    };
+  }
+
+  if (signals?.discomfort === true) {
+    return {
+      status: 'caution',
+      reason: 'Discomfort was reported; clarify it before normal training optimization.',
+      evidence: evidence.filter((item) => item.id === evidenceId('discomfort')),
       recommendedAction: 'ask',
     };
   }
@@ -354,8 +397,17 @@ function buildCandidates(
     });
   }
 
+  if (context.signals?.returnToTrainingDays) {
+    extra.push({
+      id: 'review_return_to_training', action: 'review', title: 'Review your return-to-training context',
+      description: `You are returning after ${context.signals.returnToTrainingDays} days away from this exercise. APEX's deterministic return-to-training prescription remains authoritative; use this session to re-establish tolerance.`,
+      objectiveFit: 1, sustainabilityFit: 1, recoveryFit: 1, adherenceFit: 1, preferenceFit: 1,
+      safetyStatus: 'clear', reversibility: 'easy', consequences: ['No training prescription is changed by the Coach.'], evidence,
+    });
+  }
+
   return [
-    ...extra.filter((item) => item.id === 'review_plateau'),
+    ...extra.filter((item) => item.id === 'review_plateau' || item.id === 'review_return_to_training'),
     {
       id: 'continue',
       action: 'continue',
@@ -386,7 +438,7 @@ function buildCandidates(
       consequences: ['The current decision is delayed while more evidence is collected.'],
       evidence,
     },
-    ...extra.filter((item) => item.id !== 'review_plateau'),
+    ...extra.filter((item) => item.id !== 'review_plateau' && item.id !== 'review_return_to_training'),
   ];
 }
 
@@ -425,6 +477,9 @@ function confidenceFor(
 
   const known = evidence.filter((item) => item.state === 'known' && item.quality === 'high').length;
   const missing = evidence.filter((item) => item.quality === 'missing').length;
+  const conflicted = evidence.filter((item) => item.quality === 'conflicted' || item.state === 'conflicted').length;
+
+  if (conflicted > 0) return {confidence: 'low', reason: 'Relevant evidence conflicts, so the Coach will not overstate a conclusion.'};
 
   if (!context.primaryGoal || missing > 0) {
     return {
@@ -493,7 +548,11 @@ export function runCoachDecision(request: CoachDecisionRequest): CoachResult {
   const safety = assessSafety(context, evidence);
   const objective = resolveObjective(context);
   const candidates = buildCandidates(context, safety, objective, evidence);
-  const selected = selectCandidate(candidates);
+  const selected = safety.status === 'clear' && context.signals?.recovery === 'poor'
+    ? candidates.find((candidate) => candidate.id === 'lighter_session_option') || selectCandidate(candidates)
+    : safety.status === 'clear' && context.signals?.returnToTrainingDays
+      ? candidates.find((candidate) => candidate.id === 'review_return_to_training') || selectCandidate(candidates)
+      : selectCandidate(candidates);
   let confidence = confidenceFor(context, safety, evidence);
   if (selected.id === 'review_plateau') {
     const weakest = Math.min(...(context.plateaus || []).map((item) => item.sessions));

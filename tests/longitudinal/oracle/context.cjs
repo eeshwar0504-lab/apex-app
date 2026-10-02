@@ -13,13 +13,20 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
 /* Independent re-statement of the plateau rule, derived from logged history only. */
 function expectedPlateaus(state) {
-  const done = state.workouts.filter((w) => w.status === 'completed');
+  // chronological by when each session was completed, independent of how the records are stored
+  const done = state.workouts.filter((w) => w.status === 'completed').map((w, i) => ({ w, i })).sort((a, b) => (Date.parse(a.w.completedAt || a.w.scheduledDate) - Date.parse(b.w.completedAt || b.w.scheduledDate)) || a.i - b.i).map((x) => x.w);
   const out = [];
   for (const ex of state.exercises) {
     const rows = done.filter((w) => w.exercises.some((we) => we.exerciseId === ex.id)).slice(-4);
     if (rows.length < 3) continue;
     const totals = rows.map((w) => w.exercises.filter((we) => we.exerciseId === ex.id).flatMap((we) => we.sets).filter((s) => s.completed && s.type !== 'warmup').reduce((n, s) => n + (isNum(s.reps) ? s.reps : 0) + (isNum(s.seconds) ? s.seconds : 0), 0));
-    const loads = rows.map((w) => Math.max(0, ...w.exercises.filter((we) => we.exerciseId === ex.id).flatMap((we) => we.sets).filter((x) => x.completed && x.type !== 'warmup' && isNum(x.weight)).map((x) => x.weight)));
+    // the load of a session: the heaviest external load, or (assisted movements) the LOWEST assistance; warm-ups excluded
+    const assisted = ex.loadSemantics === 'assistance';
+    const loads = rows.map((w) => {
+      const values = w.exercises.filter((we) => we.exerciseId === ex.id).flatMap((we) => we.sets).filter((x) => x.completed && x.type !== 'warmup').map((x) => (assisted ? (isNum(x.assistance) ? x.assistance : x.weight) : x.weight)).filter(isNum);
+      if (!values.length) return 0;
+      return assisted ? Math.min(...values) : Math.max(0, ...values);
+    });
     if (!loads.every((l) => l === loads[0])) continue; // not comparable: the load changed, so unchanged reps are not a plateau
     if (totals[0] > 0 && totals.every((t) => t === totals[0])) out.push(ex.id); // zero output is absence of evidence
   }

@@ -24,16 +24,18 @@ import {APEX_TRAINING_IMAGES,imageKindForExercise,type TrainingImageKind} from '
 import type {AppState,Exercise,Goal,GoalKind,SetLog,SetType,UserProfile,Workout,WorkoutTemplate,Measurement} from './core/types';
 import {EXERCISES,findExercises} from './knowledge/exercises';
 import {repository} from './data/repository';
+import {todayLocal,addDaysLocal,workoutDay} from './data/dates';
 import type {RecoveryNotice} from './data/repository';
 import {encryptBackup,decryptBackup,recoveryKey} from './data/backupCrypto';
-import {buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad as engineFormatLoad,makeSet,recommendedRest,markMissedWorkouts,volumeForWorkout,updateSetType,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,hasLoggedSets,abandonWorkout,applyWorkoutAdaptation,planWithDays,equipmentFit,smartAlternatives,personalizedLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail as engineFormatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
+import {programExercises} from './engine/goalProgram';
+import {requiredEquipment,buildPlan,createWorkout,createCustomWorkout,cloneTemplateWorkout,detectAchievements,formatLoad as engineFormatLoad,makeSet,recommendedRest,markMissedWorkouts,volumeForWorkout,updateSetType,uid,addWorkoutSet,removeWorkoutSet,reorderWorkoutExercise,replaceWorkoutExercise,markWorkoutExerciseSkipped,markWorkoutSetSkipped,rescheduleWorkoutWithEvent,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,sessionAssessment,hasLoggedSets,abandonWorkout,applyWorkoutAdaptation,bestLoad,setLoad,isWorkingSet,rankSubstitutes,isEquivalentSubstitution,loadRecommendationIntoSets,planWithDays,equipmentFit,smartAlternatives,personalizedLoad,loadAvailability,snapToAvailableLoad,adjacentAvailableLoad,loadDetailForSet,formatLoadDetail as engineFormatLoadDetail,dumbbellTotalLoad,barbellLoadBreakdown,formatTimedDuration} from './engine/training';
 import {normalizeGuidedPosition,completeSet,applySetFeedback,continueAfterRest as continueGuidedAfterRest,advanceToNextExercise as advanceGuidedToNextExercise} from './engine/guidedSession';
 import {homeInsights,readiness,buildObservations,adaptationsForWorkout,goalProgress,goalMilestones,trainingLoadSummary} from './engine/intelligence';
 import {notificationIntents} from './engine/notifications';
 import {syncLocalNotifications,listenForNotificationActions} from './native/localNotifications';
 import {knowledgeReport} from './knowledge/knowledgeGraph';
 import {inspectState} from './data/integrity';
-import {coach,coachEvidenceFromState} from './coach';
+import {coach,coachEvidenceFromState,answerCoachQuestion} from './coach';
 import {upsertRecoveryCheckIn,RECOVERY_SCALE_FIELDS} from './engine/recovery';
 import {consistencySummary,volumeTrend,goalMomentum,trainingBalance} from './engine/analytics';
 import {accessibilityClass,fontScaleValue} from './data/accessibility';
@@ -41,7 +43,7 @@ import pkg from '../package.json';
 import {App as CapacitorApp} from '@capacitor/app';
 import {setUnits,getUnits,wt,wtInput,fromWt,len,fromLen,vol,volLabel,weightLabel,weightWord,lengthLabel,displayText} from './data/units';
 
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>todayLocal();
 /* Engine strings are authored in kg; convert at the presentation boundary only. */
 const formatLoad=(...a:Parameters<typeof engineFormatLoad>)=>displayText(engineFormatLoad(...a));
 const formatLoadDetail=(...a:Parameters<typeof engineFormatLoadDetail>)=>displayText(engineFormatLoadDetail(...a));
@@ -128,7 +130,7 @@ function Nutrition({s,update}:{s:AppState;update:(f:(x:AppState)=>AppState)=>voi
  };
  const addWater=(l:number)=>mutateDay(d=>({...d,waterL:Math.round((d.waterL+l)*100)/100}));
  const saveTargets=()=>update(x=>({...x,nutrition:{log:x.nutrition?.log||{},targets:{proteinG:num(tv.protein),calories:num(tv.calories),carbsG:num(tv.carbs),fatsG:num(tv.fats),waterL:num(tv.water)}}}));
- const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const iso=d.toISOString().slice(0,10);return {iso,protein:nutritionDay(s,iso).proteinG}});
+ const week=Array.from({length:7},(_,i)=>{const iso=addDaysLocal(todayLocal(),-(6-i));return {iso,protein:nutritionDay(s,iso).proteinG}});
  const weekMax=Math.max(1,...week.map(x=>x.protein));
  const remaining=targets.proteinG?Math.max(0,targets.proteinG-day.proteinG):undefined;
  const rows:[string,number,number|undefined,string][]=[['Calories',day.calories,targets.calories,'kcal'],['Carbs',day.carbsG,targets.carbsG,'g'],['Fats',day.fatsG,targets.fatsG,'g'],['Water',day.waterL,targets.waterL,'L']];
@@ -220,6 +222,8 @@ function recommendationFor(ex:Exercise,s:AppState){
   return personalizedLoad(ex,s.workouts,s.profile,s.exercises,today());
 }
 
+function withGoalProgram(x:AppState):AppState{const programmed=programExercises(x.exercises,x.profile?.primaryGoal);return programmed===x.exercises?x:{...x,exercises:programmed};}
+
 function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
   const next=structuredClone(w);
   const now=new Date().toISOString();
@@ -250,8 +254,10 @@ function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
 
     const rec=recommendationFor(ex,s);
     const isExternal=!["bodyweight","none","time","assistance"].includes(ex.loadSemantics);
+    const isAssisted=ex.loadSemantics==='assistance';
+    const hasLoad=isExternal||isAssisted;
     const availability=loadAvailability(ex,s.profile);
-    const safeRec=isExternal
+    const safeRec=hasLoad
       ?snapToAvailableLoad(ex,rec.weight,s.profile)
       :rec.weight;
 
@@ -261,25 +267,20 @@ function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
     );
 
     const recommendationWeight=safeRec!==undefined?safeRec:rec.weight;
-    const nextWeight=isExternal
+    const nextWeight=hasLoad
       ?(recommendationWeight!==undefined
           ?recommendationWeight
           :we.recommendedWeight)
       :we.recommendedWeight;
 
     /*
-     * A workout created before a long break carries the load that was current then. On the FIRST hydration of the
-     * workout the return-to-training load replaces those pre-filled, uncompleted loads so the set screen and the
-     * recommendation agree. Later hydrations (resume) never overwrite what the athlete has since chosen.
+     * On the FIRST hydration of a workout (nothing recommended for this exercise yet) every uncompleted working set
+     * takes the authoritative recommendation. Loads pre-filled when the workout was created are stale by then: the
+     * plan is built before any history exists, and only the recommendation reflects progression, return to training
+     * and the athlete's real load list. Later hydrations (resume, feedback) never overwrite what the athlete chose.
      */
-    const applyReturnLoad=isExternal&&!!(rec as any).returnToTraining&&!existing?.recommendations?.[ex.id]&&nextWeight!==undefined;
-    const nextSets=we.sets.map(set=>{
-      if(!isExternal||set.completed)return set;
-      if(applyReturnLoad)return {...set,weight:nextWeight,loadDetail:loadDetailForSet(ex,nextWeight,{...(set.loadDetail||{}),totalKg:undefined,stackKg:undefined,perHandKg:undefined} as any)};
-      if(set.weight!==undefined&&set.weight>0)return set;
-      if(nextWeight!==undefined)return {...set,weight:nextWeight};
-      return set;
-    });
+    const firstHydration=!existing?.recommendations?.[ex.id];
+    const nextSets=loadRecommendationIntoSets(ex,we.sets,nextWeight,firstHydration);
 
     const calibrationState=rec.kind==='calibration'
       ?'calibrating'
@@ -310,12 +311,13 @@ function hydrateWorkoutRecommendations(w:Workout,s:AppState):Workout{
     return {
       ...we,
       sets:nextSets,
+      repRange:we.sets.some(set=>set.completed)?we.repRange:ex.repRange,
       recommendedWeight:
-        isExternal
+        hasLoad
           ?(nextWeight!==undefined?nextWeight:(invalidLoaded?undefined:we.recommendedWeight))
           :we.recommendedWeight,
       note:
-        isExternal
+        hasLoad
           ?`${rec.kind==='calibration'?'Initial calibration':'Evidence-based recommendation'} · ${rec.reason}`
           :we.note
     };
@@ -377,7 +379,9 @@ function completeGuidedSession(value?:Workout['guidedSession']):NonNullable<Work
 }
 
 function App(){
- const [s,setS]=useState<AppState>(()=>repository.load()),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false),[recovery,setRecovery]=useState<RecoveryNotice|null>(null);
+ const [s,setRaw]=useState<AppState>(()=>withGoalProgram(repository.load())),[route,setRoute]=useState('home'),[sheet,setSheet]=useState<string|null>(null),[query,setQuery]=useState(''),[splash,setSplash]=useState(true),[hydrated,setHydrated]=useState(false),[recovery,setRecovery]=useState<RecoveryNotice|null>(null);
+ /* every state change passes through the goal program, so the exercises the app reads always carry the current goal's targets */
+ const setS=(v:AppState|((x:AppState)=>AppState))=>setRaw(prev=>withGoalProgram(typeof v==='function'?(v as (x:AppState)=>AppState)(prev):v));
  const routeHistory=useRef<string[]>([]);
  const routeRef=useRef(route);
  useEffect(()=>{window.scrollTo({top:0,behavior:'instant'})},[route]);
@@ -804,7 +808,7 @@ function App(){
  {route==='home'&&<Home s={s} onNav={nav} onStart={start}/>}
  {route==='train'&&<Train s={s} onStart={start} onNav={nav} update={update}/>}
  {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} update={update} onStart={(w)=>{update(x=>{const now=new Date().toISOString();const prepared=hydrateWorkoutRecommendations(ensureGuidedSession({...w,status:'in_progress',startedAt:w.startedAt||now,updatedAt:now}),x);return {...x,activeWorkoutId:w.id,activeRoute:'workout',workouts:x.workouts.map(q=>q.id===w.id?{...q,...prepared}:q)}});nav('workout')}} onBack={()=>nav('train')}/>}
- {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onDone={w=>{if(!hasLoggedSets(w)){const at=new Date().toISOString();update(x=>({...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?abandonWorkout(w,at):q),activeWorkoutId:undefined,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_abandoned',timestamp:at,payload:{workoutId:w.id,reason:'no sets logged'}}]}));nav('home');return}const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,w]):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
+ {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onDone={w=>{if(!hasLoggedSets(w)){const at=new Date().toISOString();update(x=>({...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?abandonWorkout(w,at):q),activeWorkoutId:undefined,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_abandoned',timestamp:at,payload:{workoutId:w.id,reason:'no sets logged'}}]}));nav('home');return}const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,{...w,status:'completed' as const,completedAt:completed.completedAt}],s.profile):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
  {route.startsWith('session:')&&<SessionReview s={s} id={route.slice(8)} onNav={nav} update={update}/>}
  {route==='progress'&&<Progress s={s} onNav={nav}/>}
  {route==='history'&&<History s={s} onNav={nav}/>}
@@ -827,7 +831,7 @@ function App(){
 }
 
 function makeInitialWorkouts(p:UserProfile,plan:any,exercises:Exercise[]){const ids=plan.exerciseSets as Record<string,string[]>;return plan.days.filter((d:any)=>!d.rest).map((d:any,i:number)=>{const label=String(d.label);const list=label.includes('UPPER')?ids.upper:label.includes('LOWER')?ids.lower:ids.full;const w=createWorkout(label,todayPlus(d.dayIndex),list.slice(0,Math.min(7,list.length)),exercises,plan.id,'scheduled',1);w.originalPlanVersion=plan.version;w.currentPlanVersion=plan.version;return w;});}
-function todayPlus(offset:number){const d=new Date();d.setDate(d.getDate()+offset);return d.toISOString().slice(0,10)}
+function todayPlus(offset:number){return addDaysLocal(todayLocal(),offset)}
 
 function Onboarding({onDone}:{onDone:(p:UserProfile,g:Goal,plan:any)=>void}){
 
@@ -1329,21 +1333,21 @@ function Home({s,onNav,onStart}:{s:AppState;onNav:(r:string)=>void;onStart:(w:Wo
  const focusEx=focusExercise?s.exercises.find(e=>e.id===focusExercise.exerciseId):undefined;
  const focusSet=focusExercise?.sets?.find(set=>!set.completed);
  const gp=goal?goalProgress(s,goal):undefined;
- const evidence=coachEvidenceFromState(s,today());
- const coachResult=coach({context:evidence.context,plateaus:evidence.plateaus,state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:focus?.id,workout:focus,exerciseId:focusEx?.id,exercise:focusEx,workoutExercise:focusExercise,setId:focusSet?.id,set:focusSet,recentWorkoutIds:recent.map(w=>w.id),recentExerciseEntryIds:[],now:new Date().toISOString()});
+ const evidence=coachEvidenceFromState(s,today(),focusEx);
+ const coachResult=coach({context:evidence.context,plateaus:evidence.plateaus,signals:evidence.signals,state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:focus?.id,workout:focus,exerciseId:focusEx?.id,exercise:focusEx,workoutExercise:focusExercise,setId:focusSet?.id,set:focusSet,recentWorkoutIds:recent.map(w=>w.id),recentExerciseEntryIds:[],now:new Date().toISOString()});
  const decision=coachResult.decision;
   const hour=new Date().getHours();
  const greeting=hour<12?'Good morning':hour<18?'Good afternoon':'Good evening';
  const firstName=(s.profile?.name||'').trim().split(' ')[0];
  const dateLabel=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'}).replace(/^([A-Za-z]+) /,'$1, ');
  const consistency=consistencySummary(s);
- const weekAgo=Date.now()-7*86400000;
- const weekDone=s.workouts.filter(w=>w.status==='completed'&&new Date(w.completedAt||w.scheduledDate).getTime()>=weekAgo);
+ const weekAgo=addDaysLocal(todayLocal(),-6);
+ const weekDone=s.workouts.filter(w=>w.status==='completed'&&workoutDay(w)>=weekAgo);
  const weekVolume=vol(weekDone.reduce((n,w)=>n+volumeForWorkout(w,s.exercises),0));
  const volumeLabel=weekVolume>=1000?(weekVolume/1000).toFixed(1)+'K':String(weekVolume);
  const focusMuscles=focus?[...new Set(focus.exercises.flatMap(we=>s.exercises.find(e=>e.id===we.exerciseId)?.primaryMuscles||[]))].slice(0,3):[];
  const kicker=active?'In progress':todayW?'Today’s workout':'Next up';
- const weekDays=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7)+i);const iso=d.toISOString().slice(0,10);return {iso,label:'MTWTFSS'[i],on:s.workouts.some(w=>w.status==='completed'&&String(w.completedAt||w.scheduledDate).slice(0,10)===iso),today:iso===today()}});
+ const weekDays=Array.from({length:7},(_,i)=>{const iso=addDaysLocal(todayLocal(),-((new Date().getDay()+6)%7)+i);return {iso,label:'MTWTFSS'[i],on:s.workouts.some(w=>w.status==='completed'&&workoutDay(w)===iso),today:iso===today()}});
  return <div className="home-screen a3-home">
    <header className="a3-greet"><span className="a3-eyebrow">{dateLabel}</span><h1>{firstName?<>{greeting},<br/>{firstName}.</>:`${greeting}.`}</h1></header>
 
@@ -1491,8 +1495,7 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    ex:s.exercises.find(e=>e.id===we.exerciseId)
  })).filter(x=>!!x.ex) as Array<{we:Workout['exercises'][number];index:number;ex:Exercise}>;
 
- const requirements=validEntries.flatMap(({we,ex})=>(ex.equipment||[])
-   .filter(item=>item&&item!=='none'&&item!=='bodyweight')
+ const requirements=validEntries.flatMap(({we,ex})=>requiredEquipment(ex)
    .map(item=>({exerciseId:we.exerciseId,exerciseName:ex.name,item,key:`${we.exerciseId}::${item}`}))
  );
 
@@ -1540,27 +1543,6 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
    [w.guidedSession?.sessionEquipment]
  );
 
- const alternativeRank=(source:Exercise,candidate:Exercise)=>{
-   const samePattern=candidate.pattern===source.pattern;
-   const sameLoad=candidate.loadSemantics===source.loadSemantics;
-   const sameFamily=candidate.family===source.family;
-   const lowerEquipment=candidate.equipment.length<source.equipment.length;
-   const unavailableCandidate=candidate.equipment.some(e=>sessionUnavailable.has(e));
-   const fit=equipmentFit(candidate,s.profile?.equipment);
-
-   if(unavailableCandidate||fit==='unavailable')return -10000;
-
-   let score=0;
-   if(fit==='available')score+=1000;
-   else if(fit==='unknown')score+=500;
-   if(samePattern)score+=120;
-   if(sameLoad)score+=80;
-   if(sameFamily)score+=50;
-   if(candidate.alternatives.includes(source.id))score+=30;
-   if(lowerEquipment)score+=10;
-   return score;
- };
-
  const alternativeReason=(source:Exercise,candidate:Exercise)=>{
    const samePattern=candidate.pattern===source.pattern;
    const sameLoad=candidate.loadSemantics===source.loadSemantics;
@@ -1572,34 +1554,18 @@ function PreWorkout({s,id,onStart,onBack,update}:{s:AppState;id:string;onStart:(
  };
 
  const alternativeConsequence=(source:Exercise,candidate:Exercise)=>{
-   const comparable=
-     candidate.pattern===source.pattern &&
-     candidate.loadSemantics===source.loadSemantics &&
-     candidate.repRange[1]-candidate.repRange[0]===source.repRange[1]-source.repRange[0];
+   const comparable=isEquivalentSubstitution(source,candidate);
 
    return comparable
      ? 'Comparable movement — progression baseline can carry forward'
      : 'New baseline — APEX will recalibrate load and progression';
  };
 
- const getAlternatives=(source:Exercise,limit=3)=>{
-   const candidates=source.alternatives
-     .map(id=>s.exercises.find(e=>e.id===id))
-     .filter((e):e is Exercise=>Boolean(e));
-
-   const fallback=s.exercises.filter(e=>
-     e.id!==source.id &&
-     !candidates.some(x=>x.id===e.id)
-   );
-
-   return [...candidates,...fallback]
-     .filter(e=>e.id!==source.id)
+ const getAlternatives=(source:Exercise,limit=3)=>
+   rankSubstitutes(source,s.exercises,s.profile?.equipment,[...sessionUnavailable])
+     .map(item=>item.exercise)
      .filter(e=>!rq||`${e.name} ${e.aliases.join(' ')} ${e.pattern} ${e.primaryMuscles.join(' ')}`.toLowerCase().includes(rq.toLowerCase()))
-     .filter(e=>!e.equipment.some(item=>sessionUnavailable.has(item)))
-     .filter(e=>equipmentFit(e,s.profile?.equipment)!=='unavailable')
-     .sort((a,b)=>alternativeRank(source,b)-alternativeRank(source,a))
      .slice(0,limit);
- };
 
  const replacementResults=replaceTarget?getAlternatives(replaceTarget,12):[];
 
@@ -2142,6 +2108,9 @@ function WorkoutView({s,w,update,onExit,onExercise,onDone}:{s:AppState;w:Workout
      if(ss.weight===undefined&&recommendation?.weight!==undefined&&!['bodyweight','none','time','assistance'].includes(activeEx?.loadSemantics||'')){
        ss.weight=snapToAvailableLoad(activeEx!,recommendation.weight,s.profile);
      }
+     if(ss.assistance===undefined&&recommendation?.weight!==undefined&&activeEx?.loadSemantics==='assistance'){
+       ss.assistance=snapToAvailableLoad(activeEx,recommendation.weight,s.profile);
+     }
      if(ss.rir===undefined)ss.rir=recommendation?.targetRir??targetRir;
      if(activeEx)ss.loadDetail=loadDetailForSet(activeEx,ss.weight,ss.loadDetail);
      const at=new Date().toISOString();
@@ -2617,8 +2586,8 @@ const onSetType=(t:SetType)=>mutate(x=>{
            </p>
 
            <div className="a3-list">
-             {(activeEx.equipment||[]).length
-               ?(activeEx.equipment||[]).map(item=>{
+             {requiredEquipment(activeEx).length
+               ?requiredEquipment(activeEx).map(item=>{
                  const status=
                    current.guidedSession?.sessionEquipment?.[item]||
                    'profile_available';
@@ -2714,7 +2683,7 @@ const onSetType=(t:SetType)=>mutate(x=>{
              if(!past.length)return <Empty title="No history for this exercise yet" text="Completed sets for this movement will appear here."/>;
              return <div className="a3-list">{past.map(({w,e})=>{
                const done=e.sets.filter(x=>x.completed&&x.type!=='warmup');
-               const best=Math.max(0,...done.map(x=>x.weight||x.assistance||0));
+               const best=activeEx?(bestLoad(activeEx,done)??0):0;
                const reps=Math.max(0,...done.map(x=>x.reps||0));
                const rirs=done.map(x=>x.rir).filter((x):x is number=>x!==undefined);
                return <div className="a3-card a3-row" key={w.id}><span className="a3-index">{w.scheduledDate.slice(5)}</span><div><strong>{best?formatLoad(activeEx,best):'Bodyweight / time'}</strong><p>{done.length} working sets · best {reps||'—'} reps{rirs.length?` · RIR ${(rirs.reduce((a,b)=>a+b,0)/rirs.length).toFixed(1)}`:''}</p></div></div>})}</div>
@@ -3942,14 +3911,14 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const selected=exerciseOptions.find(e=>e.id===exerciseId)||exerciseOptions[0];
  const historyAll=selected?done.flatMap(w=>w.exercises.filter(e=>e.exerciseId===selected.id).map(e=>({w,e}))):[];
  const rangeDays=exRange==='1M'?30:exRange==='3M'?90:exRange==='6M'?180:exRange==='1Y'?365:Infinity;
- const rangeCut=Number.isFinite(rangeDays)?new Date(Date.now()-rangeDays*86400000).toISOString().slice(0,10):'';
+ const rangeCut=Number.isFinite(rangeDays)?addDaysLocal(todayLocal(),-rangeDays):'';
  const historyRange=historyAll.filter(({w})=>w.scheduledDate>=rangeCut);
  const history=historyRange.slice(-8);
- const bestOf=(e:{sets:SetLog[]})=>Math.max(0,...e.sets.filter(x=>x.completed&&x.type!=='warmup').map(x=>x.weight||x.assistance||0));
+ const bestOf=(e:{sets:SetLog[]})=>selected?(bestLoad(selected,e.sets)??0):0;
  const evidenceSeries=historyRange.map(({e})=>bestOf(e)).filter(v=>v>0);
  const evidenceChange=evidenceSeries.length>1?Math.round((evidenceSeries[evidenceSeries.length-1]-evidenceSeries[0])/evidenceSeries[0]*1000)/10:undefined;
  const evidenceBest=evidenceSeries.length?Math.max(...evidenceSeries):0;
- const bestReps=historyRange.flatMap(({e})=>e.sets.filter(x=>x.completed&&x.type!=='warmup'&&(x.weight||x.assistance||0)===evidenceBest)).reduce((m,x)=>Math.max(m,x.reps||0),0);
+ const bestReps=historyRange.flatMap(({e})=>e.sets.filter(x=>isWorkingSet(x)&&selected&&(setLoad(selected,x)??0)===evidenceBest)).reduce((m,x)=>Math.max(m,x.reps||0),0);
  const total=done.reduce((a,w)=>a+volumeForWorkout(w,s.exercises),0);
  const muscle=useMemo(()=>{const m:Record<string,number>={};done.slice(-8).forEach(w=>w.exercises.forEach(we=>{const e=s.exercises.find(x=>x.id===we.exerciseId);e?.primaryMuscles.forEach(x=>m[x]=(m[x]||0)+we.sets.filter(z=>z.completed&&z.type!=='warmup').length)}));return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10)},[done,s.exercises]);
  const top=s.achievements.slice(-5).reverse();
@@ -3965,7 +3934,7 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const previousBodyEntry=bodyEntries.length>1?bodyEntries[bodyEntries.length-2]:undefined;
  const bodyWeightChange=latestBodyEntry&&previousBodyEntry?latestBodyEntry.weightKg!-previousBodyEntry.weightKg!:undefined;
  const bodyDays=bodyRange==='7D'?7:bodyRange==='30D'?30:bodyRange==='3M'?90:365;
- const bodyCut=new Date(Date.now()-bodyDays*86400000).toISOString().slice(0,10);
+ const bodyCut=addDaysLocal(todayLocal(),-bodyDays);
  const bodyRangeEntries=bodyEntries.filter(x=>x.date>=bodyCut);
  const bodySeries=bodyRangeEntries.map(x=>wt(x.weightKg as number));
  const shortDate=(d:string)=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
@@ -4038,7 +4007,7 @@ function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
         <div className="a3-list">
           {history.map(({w,e},i)=>{
             const doneSets=e.sets.filter(x=>x.completed&&x.type!=='warmup');
-            const best=Math.max(0,...doneSets.map(x=>x.weight||x.assistance||0));
+            const best=selected?(bestLoad(selected,doneSets)??0):0;
             const reps=Math.max(0,...doneSets.map(x=>x.reps||0));
             const rirValues=doneSets.map(x=>x.rir).filter((x):x is number=>x!==undefined);
             const avgRir=rirValues.length?(rirValues.reduce((a,b)=>a+b,0)/rirValues.length).toFixed(1):null;
@@ -4138,16 +4107,18 @@ function Coach({s,update,onNav}:{s:AppState;update?:(f:(x:AppState)=>AppState)=>
     const currentExercise=currentWorkout?.exercises?.[0];
     const exercise=currentExercise?s.exercises.find(e=>e.id===currentExercise.exerciseId):undefined;
     const currentSet=currentExercise?.sets?.find(set=>!set.completed);
-    const evidence=coachEvidenceFromState(s,today());
-    return {context:evidence.context,plateaus:evidence.plateaus,state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:currentWorkout?.id,workout:currentWorkout,exerciseId:exercise?.id,exercise,workoutExercise:currentExercise,setId:currentSet?.id,set:currentSet,recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),recentExerciseEntryIds:[],userInput,now:new Date().toISOString()};
+    const evidence=coachEvidenceFromState(s,today(),exercise);
+    return {context:evidence.context,plateaus:evidence.plateaus,signals:evidence.signals,state:s,profile:s.profile,goals:s.goals,primaryGoal:s.profile?.primaryGoal,planId:s.plan?.id,workoutId:currentWorkout?.id,workout:currentWorkout,exerciseId:exercise?.id,exercise,workoutExercise:currentExercise,setId:currentSet?.id,set:currentSet,recentWorkoutIds:[...s.workouts].sort((a,b)=>b.scheduledDate.localeCompare(a.scheduledDate)).slice(0,10).map(w=>w.id),recentExerciseEntryIds:[],userInput,now:new Date().toISOString()};
   };
   const live=coach(buildContext());
   const ask=()=>{
     const t=q.trim();
     if(!t)return;
-    const result=coach(buildContext(t));
-    const d=result.decision;
-    const text=[result.explanation,d.prescription?.instruction?`Next: ${d.prescription.instruction}`:'',d.confidence?`Confidence: ${d.confidence}`:'',d.confidenceReason?`Why: ${d.confidenceReason}`:''].filter(Boolean).join('\n');
+    const result=answerCoachQuestion(s,t,buildContext(t));
+    const responseText=/^\s*(next|decision)\s*:/i.test(result.text)
+      ?result.text
+      :`Next: ${result.text}`;
+    const text=[responseText,result.safety?`Safety: ${result.safety}`:'',result.missing?.length?`Missing: ${result.missing.join(' ')}`:'',`Confidence: ${result.confidence}`].filter(Boolean).join('\n');
     setMessages(m=>[...m,{from:'user',text:t},{from:'apex',text}]);setQ('');
   };
   const activeWorkout=s.activeWorkoutId?s.workouts.find(w=>w.id===s.activeWorkoutId):s.workouts.find(w=>w.status==='in_progress');
@@ -4163,6 +4134,7 @@ function Coach({s,update,onNav}:{s:AppState;update?:(f:(x:AppState)=>AppState)=>
       <h2>{displayText(live.decision.prescription?.instruction||'Continue with the current training structure when the supplied evidence supports doing so.')}</h2>
       <p>{displayText(live.explanation)}</p>
       {live.decision.confidenceReason&&<div className="a3-decision-reason"><Icon name="shield" size={15}/><span>{displayText(live.decision.confidenceReason)}</span></div>}
+      {live.decision.safety.status!=='clear'&&<div className="a3-decision-reason"><Icon name="shield" size={15}/><span>{displayText(live.decision.safety.reason)}</span></div>}
     </section>
 
     {live.decision.candidates.some(c=>c.id==='review_plateau'||c.id==='lighter_session_option')&&<section className="a3-block" aria-label="Coach options">
@@ -4170,6 +4142,8 @@ function Coach({s,update,onNav}:{s:AppState;update?:(f:(x:AppState)=>AppState)=>
       <div className="a3-list">{live.decision.candidates.filter(c=>c.id==='review_plateau'||c.id==='lighter_session_option').map(c=><div className="a3-card a3-stack" key={c.id}><strong>{displayText(c.title)}</strong><p className="a3-muted">{displayText(c.description)}</p></div>)}</div>
     </section>}
     {update&&<RecoveryCheckInCard s={s} update={update}/>}
+
+    <section className="a3-block" aria-label="Coach evidence"><div className="a3-head"><h2>Evidence used</h2><span className="a3-eyebrow">TRACEABLE</span></div><div className="a3-list">{live.evidence.slice(0,5).map(item=><div className="a3-card a3-stack" key={item.id}><strong>{displayText(item.statement)}</strong><small className="a3-muted">{item.source} · {item.quality} quality{item.recency?` · ${item.recency}`:''}</small></div>)}</div></section>
 
     <div className="a3-stats a3-stats-1">
       <div className="a3-card a3-stat"><span className="a3-eyebrow">Session</span><strong>{activeWorkout?.name||'None active'}</strong><small>{currentSet?`${currentSet.type||'working'} set · ${currentSet.reps||'—'} reps · RIR ${currentSet.rir??'—'}`:'Using your latest record'}</small></div>
@@ -4214,21 +4188,23 @@ function RecoveryCheckInCard({s,update}:{s:AppState;update:(f:(x:AppState)=>AppS
   const date=today();
   const existing=(s.recoveryLog||[]).find(x=>x.date===date);
   const [sleep,setSleep]=useState(existing?.sleepHours!==undefined?String(existing.sleepHours):'');
-  const [scale,setScale]=useState<Record<string,number|undefined>>({sleepQuality:existing?.sleepQuality,soreness:existing?.soreness,fatigue:existing?.fatigue});
+  const [scale,setScale]=useState<Record<string,number|undefined>>({sleepQuality:existing?.sleepQuality,soreness:existing?.soreness,fatigue:existing?.fatigue,stress:existing?.stress,readiness:existing?.readiness});
+  const [recentIllness,setRecentIllness]=useState(Boolean(existing?.recentIllness));
   const [saved,setSaved]=useState(Boolean(existing));
-  const labels:Record<string,string>={sleepQuality:'Sleep quality',soreness:'Soreness',fatigue:'Fatigue'};
+  const labels:Record<string,string>={sleepQuality:'Sleep quality',soreness:'Soreness',fatigue:'Fatigue',stress:'Stress',readiness:'Readiness'};
   const save=()=>{
     const hours=sleep.trim()===''?undefined:Math.min(24,Math.max(0,Number(sleep)));
-    update(x=>({...x,recoveryLog:upsertRecoveryCheckIn(x.recoveryLog,{date,sleepHours:hours,...scale})}));
+    update(x=>({...x,recoveryLog:upsertRecoveryCheckIn(x.recoveryLog,{date,sleepHours:hours,recentIllness,...scale})}));
     setSaved(true);
   };
-  const any=sleep.trim()!==''||Object.values(scale).some(v=>v!==undefined);
+  const any=sleep.trim()!==''||recentIllness||Object.values(scale).some(v=>v!==undefined);
   return <section className="a3-card a3-stack" aria-label="Recovery check-in">
     <div className="a3-head"><div><span className="a3-eyebrow">RECOVERY CHECK-IN</span><h2>How do you feel today?</h2></div></div>
     <p className="a3-muted">Optional context for your coach. It is evidence, not an instruction: it never changes your prescription on its own.</p>
     <label>Sleep last night (hours)<input className="a3-input" type="number" inputMode="decimal" min={0} max={24} step={0.5} aria-label="Sleep hours" value={sleep} onChange={e=>{setSaved(false);setSleep(e.target.value===''?'':String(Math.min(24,Math.max(0,+e.target.value))))}}/></label>
     {RECOVERY_SCALE_FIELDS.filter(k=>k in labels).map(k=><div key={k} role="group" aria-label={labels[k]}><span className="a3-eyebrow">{labels[k]} · 1 low – 5 high</span>
       <div className="a3-choices weight-range-control">{[1,2,3,4,5].map(v=><button key={v} type="button" aria-pressed={scale[k]===v} className={scale[k]===v?'selected':''} aria-label={`${labels[k]} ${v}`} onClick={()=>{setSaved(false);setScale(x=>({...x,[k]:x[k]===v?undefined:v}))}}>{v}</button>)}</div></div>)}
+    <label><input type="checkbox" checked={recentIllness} onChange={e=>{setSaved(false);setRecentIllness(e.target.checked)}}/> Recent illness is affecting today’s training context</label>
     <button className="a3-cta" disabled={!any||saved} onClick={save}>{saved?'Check-in saved':'Save check-in'}</button>
   </section>
 }

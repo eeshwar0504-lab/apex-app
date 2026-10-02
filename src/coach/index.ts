@@ -7,6 +7,7 @@ export {
 
 export {runCoachDecision} from './decisionPipeline';
 export {coachEvidenceFromState} from './signals';
+export {answerCoachQuestion, classifyCoachQuestion} from './askCoach';
 
 export type {
   AdaptationScope,
@@ -16,6 +17,7 @@ export type {
   CoachConfidence,
   CoachContext,
   CoachContextSignals,
+  CoachStateSignals,
   CoachDecision,
   CoachDecisionRequest,
   CoachEvaluation,

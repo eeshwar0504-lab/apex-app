@@ -32,7 +32,8 @@ function watchConsole(page: Page) {
 function shiftedState(seed: number, weeks: number, archetype = 'consistent_beginner') {
   const sim = runSimulation(makeScenario({ archetype, seed, weeks }));
   const days = weeks * 7;
-  const offset = Math.round((Date.now() - Date.UTC(2026, 0, 5)) / 86400000) - days;
+  const now = new Date();
+  const offset = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(2026, 0, 5)) / 86400000) - days; // calendar days are local
   const shift = (s: string) => { const d = new Date(Date.parse(s.slice(0, 10) + 'T00:00:00Z') + offset * 86400000); return d.toISOString().slice(0, 10) + s.slice(10); };
   const walk = (v: any): any => {
     if (typeof v === 'string') return /^\d{4}-\d{2}-\d{2}/.test(v) ? shift(v) : v;
@@ -44,7 +45,7 @@ function shiftedState(seed: number, weeks: number, archetype = 'consistent_begin
   state.activeRoute = 'home';
   // the app always keeps an upcoming planned session: add today's real one
   const E = loadEngine();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay(0).iso;
   const planned = E.training.createWorkout('UPPER A', today, state.plan.exerciseSets.upper.slice(0, 7), E.exercisesMod.EXERCISES, state.plan.id, 'scheduled', 1);
   planned.originalPlanVersion = 1; planned.currentPlanVersion = 1;
   state.workouts.push(planned);
@@ -141,9 +142,12 @@ test('unit switching: canonical kg untouched, labels follow the unit, Log Set sh
   await expect(page.getByText('Weight (lb)')).toBeVisible();
   await page.getByRole('button', { name: 'Back to set' }).click();
   await page.getByRole('button', { name: 'Exit workout' }).click();
+  // starting the workout legitimately carries the recommendation into the planned sets (first hydration);
+  // from here on only the unit may change, never a stored kg value
+  const afterStart = await canonical();
   await tab(page, 'You');
   await page.locator('#settings-units').getByRole('button', { name: /Metric/ }).click();
-  expect(await canonical()).toBe(before);
+  expect(await canonical()).toBe(afterStart);
   await tab(page, 'Train'); // the in-progress workout resumes exactly where it was left
   await page.getByRole('button', { name: 'Log set' }).click();
   await expect(page.getByText('Weight (kg)')).toBeVisible();
@@ -205,7 +209,7 @@ test('nutrition: logged meal persists after reload; settings/theme/units navigat
   await page.getByRole('button', { name: 'Add meal' }).click();
   await page.reload();
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
-  const day = await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); const t = new Date().toISOString().slice(0, 10); return s.nutrition?.log?.[t]; }, STATE_KEY);
+  const day = await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); const n = new Date(); const t = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; return s.nutrition?.log?.[t]; }, STATE_KEY);
   expect(day?.proteinG).toBeGreaterThanOrEqual(40);
   await tab(page, 'You');
   for (const t of ['Crimson', 'Aurora', 'Apex']) { await page.locator('#settings-appearance').getByRole('radio', { name: new RegExp(t) }).click(); }
@@ -273,7 +277,7 @@ test('recovery check-in: stored through the validated boundary, given to the Coa
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
   const before = await readState(page);
   const plannedBefore = JSON.stringify(before.workouts.filter((w: any) => w.status === 'planned'));
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = localDay(0).iso;
   const earlier = (before.recoveryLog || []).filter((c: any) => c.date !== todayIso);
   await page.getByRole('button', { name: /Ask Coach/i }).first().click();
   await expect(page.getByRole('heading', { name: 'APEX Coach' })).toBeVisible();
@@ -307,8 +311,8 @@ test('recovery check-in: stored through the validated boundary, given to the Coa
 test('plateau evidence: the Coach explains it with options and does not touch the plan', async ({ page }) => {
   const errors = watchConsole(page);
   const { state } = shiftedState(13, 3);
-  const today = Date.now();
-  const iso = (d: number) => new Date(today - d * 86400000).toISOString().slice(0, 10);
+
+  const iso = (d: number) => localDay(d).iso; // calendar days are local
   const flat = [9, 6, 3, 1].map((d, i) => ({
     id: 'plateau-' + i, planId: state.plan.id, name: 'UPPER A', scheduledDate: iso(d), status: 'completed', source: 'scheduled', version: 1, completedAt: iso(d) + 'T18:00:00.000Z', updatedAt: iso(d) + 'T18:00:00.000Z',
     exercises: [{ exerciseId: 'machine_chest_press', order: 0, prescribedSets: 3, repRange: [8, 12], restSec: 90, status: 'completed', sets: [0, 1, 2].map((n) => ({ id: 'pl' + i + n, type: 'working', weight: 30, reps: 9, rir: 2, completed: true })) }],
@@ -333,8 +337,8 @@ test('plateau evidence: the Coach explains it with options and does not touch th
 test('return to training: a 30-day gap is explained in the app and the load is lower than the last worked load', async ({ page }) => {
   const errors = watchConsole(page);
   const { state } = shiftedState(17, 3);
-  const today = Date.now();
-  const iso = (d: number) => new Date(today - d * 86400000).toISOString().slice(0, 10);
+
+  const iso = (d: number) => localDay(d).iso; // calendar days are local
   // last exposure to the first planned exercise was 30 days ago at 60 kg, top of range (would normally progress)
   const planned = state.workouts.find((w: any) => w.status === 'planned');
   const firstId = planned.exercises[0].exerciseId;
@@ -412,4 +416,95 @@ test('malformed saved data is preserved untouched and is never offered as recove
   await expect(page.getByRole('button', { name: 'Recover what can be read' })).toHaveCount(0);
   await expect(page.getByText(/cannot be repaired automatically/)).toBeVisible();
   expect(await page.evaluate((k) => localStorage.getItem(k), REJECTED_KEY)).toBe('{"workouts":[{"id":"w1","exer');
+});
+
+/* ------------------------------------------------------------------ Phase 1 correctness: real-browser checks ------------------------------------------------------------------ */
+
+/** Local calendar day N days ago, and a local-noon timestamp inside it (independent of the machine's zone). */
+const localDay = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return { iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, noon: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).toISOString() }; };
+
+test('Phase 1 correctness: the progression decision reaches the set screen and follows the athlete own load list', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(23, 3);
+  const planned = state.workouts.find((w: any) => w.status === 'planned');
+  const firstId = planned.exercises[0].exerciseId;
+  expect(firstId).toBe('machine_chest_press');
+  // the planned workout still carries the load it was created with (a 10 kg calibration)
+  expect(planned.exercises[0].sets.every((x: any) => x.weight === 10)).toBe(true);
+  const last = localDay(3);
+  state.workouts = state.workouts.filter((w: any) => w.status !== 'completed');
+  state.workouts.push({ id: 'hist-0', planId: state.plan.id, name: 'UPPER A', scheduledDate: last.iso, status: 'completed', source: 'scheduled', version: 1, completedAt: last.noon, updatedAt: last.noon,
+    exercises: [{ exerciseId: firstId, order: 0, prescribedSets: 3, repRange: [8, 12], restSec: 90, status: 'completed', sets: [0, 1, 2].map((n) => ({ id: 'h' + n, type: 'working', weight: 25, reps: 12, rir: 2, completed: true })) }] });
+  state.achievements = [];
+  state.profile.primaryGoal = 'general'; state.profile.goals = ['general']; // the catalogue range is the baseline this scenario reasons about
+  state.profile.loadIncrementsKg = { machine: [10, 15, 25, 30] }; // asymmetric: 25 -> 27.5 used to tie and snap back to 25
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await tab(page, 'Train');
+  await startTodaysWorkout(page);
+  let body = await page.locator('body').innerText();
+  expect(body).toMatch(/30 kg stack/);
+  expect(body).not.toMatch(/10 kg stack/);
+  await page.getByRole('button', { name: /START SET/i }).first().click();
+  body = await page.locator('body').innerText();
+  expect(body).toMatch(/30 kg stack/);
+  const active = await readState(page);
+  const w = active.workouts.find((x: any) => x.status === 'in_progress');
+  expect(w.exercises[0].sets.every((x: any) => x.weight === 30)).toBe(true);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+for (const [goal, range, load, action] of [['strength', '5–9 reps', '27.5 kg stack', 'increase'], ['general', '8–12 reps', '25 kg stack', 'hold'], ['fitness', '10–14 reps', '22.5 kg stack', 'reduce']] as const) {
+  test(`goal programming (${goal}): the same 9-rep history prescribes ${action} against the ${range} target, on screen and in the saved workout`, async ({ page }) => {
+    const errors = watchConsole(page);
+    const { state } = shiftedState(23, 3);
+    const planned = state.workouts.find((w: any) => w.status === 'planned');
+    const firstId = planned.exercises[0].exerciseId;
+    expect(firstId).toBe('machine_chest_press');
+    const last = localDay(3);
+    state.workouts = state.workouts.filter((w: any) => w.status !== 'completed');
+    state.workouts.push({ id: 'hist-0', planId: state.plan.id, name: 'UPPER A', scheduledDate: last.iso, status: 'completed', source: 'scheduled', version: 1, completedAt: last.noon, updatedAt: last.noon,
+      exercises: [{ exerciseId: firstId, order: 0, prescribedSets: 3, repRange: [8, 12], restSec: 90, status: 'completed', sets: [0, 1, 2].map((n) => ({ id: 'h' + n, type: 'working', weight: 25, reps: 9, rir: 2, completed: true })) }] });
+    state.achievements = [];
+    state.profile.primaryGoal = goal; state.profile.goals = [goal];
+    delete state.profile.loadIncrementsKg;
+    const historyBefore = JSON.stringify(state.workouts.filter((w: any) => w.status === 'completed'));
+    await seed(page, state);
+    await page.goto('/');
+    await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+    await tab(page, 'Train');
+    await startTodaysWorkout(page);
+    const body = await page.locator('body').innerText();
+    expect(body).toContain(range);
+    expect(body).toContain(load);
+    await page.getByRole('button', { name: /START SET/i }).first().click();
+    const active = await readState(page);
+    const w = active.workouts.find((x: any) => x.status === 'in_progress');
+    expect(w.exercises[0].repRange).toEqual(range.startsWith('5') ? [5, 9] : range.startsWith('10') ? [10, 14] : [8, 12]);
+    expect(JSON.stringify(active.workouts.filter((x: any) => x.status === 'completed'))).toBe(historyBefore); // history is never rewritten
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+}
+
+test.describe('IST midnight boundary', () => {
+  test.use({ timezoneId: 'Asia/Kolkata' });
+
+  test('at 00:30 IST the calendar day is the LOCAL day in the week strip and in nutrition logging', async ({ page }) => {
+    const errors = watchConsole(page);
+    // 2026-03-14T19:00:00Z is 00:30 on 15 March in India (the UTC date is still the 14th)
+    await page.clock.setFixedTime(new Date('2026-03-14T19:00:00Z'));
+    await resetApp(page);
+    await completeOnboarding(page);
+    await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+    const today = await page.evaluate(() => Array.from(document.querySelectorAll('.a3-week-days span.today')).map((e) => e.getAttribute('aria-label') || e.getAttribute('title') || e.textContent));
+    expect(today.length).toBe(1);
+    expect(String(today[0])).toContain('2026-03-15');
+    await page.getByRole('button', { name: /Nutrition/ }).first().click();
+    await page.getByRole('button', { name: '+ 250 ml' }).click();
+    const st = await readState(page);
+    expect(Object.keys(st.nutrition.log)).toEqual(['2026-03-15']);
+    expect(st.workouts.every((w: any) => w.scheduledDate >= '2026-03-15')).toBe(true);
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
 });
