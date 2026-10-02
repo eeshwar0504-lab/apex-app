@@ -158,6 +158,7 @@ function merge(raw:any):AppState{
     :'system',
   highContrast:Boolean(incomingPreferences.highContrast),
   theme:['apex','classic','steel','aurora','crimson'].includes(String(incomingPreferences.theme))?incomingPreferences.theme:'apex',
+  aiMode:['off','rule-based','local-model'].includes(String(incomingPreferences.aiMode))?incomingPreferences.aiMode:'off',
   units:normalizeUnits(incomingPreferences.units),
   notifications
  };

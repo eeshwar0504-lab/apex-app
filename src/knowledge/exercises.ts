@@ -58,6 +58,7 @@ export const EXERCISES:Exercise[]=[
 
 common({
   id:'machine_chest_press',
+  progressions:['dumbbell_bench_press'],
   name:'Machine Chest Press',
   aliases:['chest press','machine press','pec press'],
   family:'horizontal press',
@@ -167,6 +168,7 @@ common({
 
 common({
   id:'assisted_pullup',
+  safetyConsiderations:[{kind:'equipment_check',note:'Check the assistance setting before each set; lower assistance is harder.',modification:'Increase the assistance if you cannot keep the movement controlled.'}],
   name:'Assisted Pull-Up',
   aliases:['assisted pull up','pull-up machine'],
   family:'vertical pull',
@@ -187,6 +189,7 @@ common({
 
 common({
   id:'dumbbell_shoulder_press',
+  safetyConsiderations:[{kind:'range_of_motion',note:'Press through a range you can control and keep the dumbbells stable at the bottom.',modification:'Use the machine shoulder press or a lighter pair of dumbbells.'}],
   name:'Dumbbell Shoulder Press',
   aliases:['db shoulder press','seated db press'],
   family:'vertical press',
@@ -205,6 +208,7 @@ common({
 
 common({
   id:'machine_shoulder_press',
+  progressions:['dumbbell_shoulder_press'],
   name:'Machine Shoulder Press',
   aliases:['shoulder press machine'],
   family:'vertical press',
@@ -394,6 +398,7 @@ common({
 
 common({
   id:'bodyweight_squat',
+  progressions:['goblet_squat'],
   name:'Bodyweight Squat',
   aliases:['air squat','squat'],
   family:'squat',
@@ -415,6 +420,7 @@ common({
 
 common({
   id:'split_squat',
+  safetyConsiderations:[{kind:'balance',note:'A single-leg position that asks for balance as well as strength.',modification:'Hold a stable support with one hand while you learn the movement.'}],
   name:'Split Squat',
   aliases:['bodyweight split squat','rear foot split squat'],
   family:'unilateral squat',
@@ -437,6 +443,7 @@ common({
 
 common({
   id:'step_up',
+  safetyConsiderations:[{kind:'balance',note:'A single-leg movement; the step and bench must be stable.',modification:'Lower the step or hold a stable support.'}],
   name:'Step-Up',
   aliases:['step ups'],
   family:'unilateral squat',
@@ -458,6 +465,7 @@ common({
 
 common({
   id:'leg_curl_machine',
+  progressions:['nordic_curl'],
   name:'Leg Curl Machine',
   aliases:['leg curl','hamstring curl'],
   family:'knee flexion',
@@ -476,6 +484,7 @@ common({
 
 common({
   id:'nordic_curl',
+  safetyConsiderations:[{kind:'load_control',note:'A demanding lengthening movement for the back of the thigh; build the range and repetitions gradually.',modification:'Use the machine leg curl, or limit the range you lower through.'}],
   name:'Nordic Curl',
   aliases:['nordic hamstring curl'],
   family:'knee flexion',
@@ -656,6 +665,7 @@ common({
 
 common({
   id:'barbell_bench_press',
+  safetyConsiderations:[{kind:'setup',note:'Set the safety arms or have a spotter when working close to your limit.',modification:'Use the dumbbell or machine press when no spotter or safety arms are available.'}],
   name:'Barbell Bench Press',
   aliases:['bench press','flat bench'],
   family:'horizontal press',
@@ -677,6 +687,7 @@ common({
 
 common({
   id:'dumbbell_bench_press',
+  progressions:['barbell_bench_press'],
   name:'Dumbbell Bench Press',
   aliases:['db bench press'],
   family:'horizontal press',
@@ -697,6 +708,7 @@ common({
 
 common({
   id:'romanian_deadlift',
+  safetyConsiderations:[{kind:'technique_sensitive',note:'The hip hinge is technique sensitive; use a load at which the position stays controlled through the whole set.',modification:'Reduce the load or the range until every repetition looks the same.',guidance:'If the hip hinge is new to you, a qualified coach can check your technique.'}],
   name:'Romanian Deadlift',
   aliases:['RDL'],
   family:'hip hinge',
@@ -717,6 +729,8 @@ common({
 
 common({
   id:'hip_thrust',
+  safetyConsiderations:[{kind:'setup',note:'Pad the bar and set the bench so neither can slide during the set.',modification:'Start with bodyweight or a lighter bar to practise the position.'}],
+  progressions:['romanian_deadlift'],
   name:'Hip Thrust',
   aliases:['barbell hip thrust'],
   family:'hip extension',
@@ -736,6 +750,7 @@ common({
 
 common({
   id:'leg_calf_bodyweight',
+  progressions:['standing_calf_raise'],
   name:'Single-Leg Calf Raise',
   aliases:['single leg calf raise'],
   family:'plantar flexion',

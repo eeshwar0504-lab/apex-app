@@ -22,7 +22,9 @@ function newestSourceTime() {
       else if (p.endsWith('.ts')) t = Math.max(t, fs.statSync(p).mtimeMs);
     }
   };
-  ['engine', 'core', 'data', 'knowledge', 'coach', 'native'].forEach((d) => {
+  // the AI layer is compiled too (src/aiGateway.ts, aiContract.ts, aiGrounding.ts and src/aiProviders): a change there must rebuild the cache
+  fs.readdirSync(path.join(root, 'src')).filter((f) => /^ai[A-Za-z]*\.ts$/.test(f)).forEach((f) => { t = Math.max(t, fs.statSync(path.join(root, 'src', f)).mtimeMs); });
+  ['engine', 'core', 'data', 'knowledge', 'coach', 'native', 'aiProviders'].forEach((d) => {
     const p = path.join(root, 'src', d);
     if (fs.existsSync(p)) walk(p);
   });
@@ -61,7 +63,7 @@ function loadEngine() {
       path.join(root, 'node_modules', 'typescript', 'bin', 'tsc'),
       'src/engine/training.ts', 'src/engine/intelligence.ts', 'src/engine/guidedSession.ts', 'src/engine/analytics.ts',
       'src/knowledge/exercises.ts', 'src/data/repository.ts', 'src/data/units.ts', 'src/data/integrity.ts',
-      'src/coach/index.ts', 'src/engine/recovery.ts', 'src/engine/notifications.ts', 'src/knowledge/knowledgeGraph.ts',
+      'src/coach/index.ts', 'src/engine/recovery.ts', 'src/engine/notifications.ts', 'src/knowledge/knowledgeGraph.ts', 'src/engine/profileEdit.ts', 'src/engine/goalEdit.ts', 'src/engine/journalEdit.ts', 'src/engine/workoutEdit.ts', 'src/engine/exerciseSafety.ts', 'src/engine/exerciseGraph.ts', 'src/aiGateway.ts', 'src/aiGrounding.ts', 'src/aiContract.ts',
       '--target', 'ES2022', '--module', 'commonjs', '--moduleResolution', 'node', '--skipLibCheck',
       '--esModuleInterop', '--rootDir', root, '--outDir', out,
     ], { cwd: root, stdio: 'pipe' });
@@ -94,6 +96,15 @@ function loadEngine() {
     knowledgeGraph: req('src/knowledge/knowledgeGraph.js'),
     notifications: req('src/engine/notifications.js'),
     goalProgram: req('src/engine/goalProgram.js'),
+    profileEdit: req('src/engine/profileEdit.js'),
+    goalEdit: req('src/engine/goalEdit.js'),
+    journalEdit: req('src/engine/journalEdit.js'),
+    workoutEdit: req('src/engine/workoutEdit.js'),
+    exerciseSafety: req('src/engine/exerciseSafety.js'),
+    exerciseGraph: req('src/engine/exerciseGraph.js'),
+    aiGateway: req('src/aiGateway.js'),
+    aiGrounding: req('src/aiGrounding.js'),
+    aiContract: req('src/aiContract.js'),
     coachMod: req('src/coach/index.js'),
     exercisesMod: req('src/knowledge/exercises.js'),
     integrity: req('src/data/integrity.js'),

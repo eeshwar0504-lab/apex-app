@@ -23,7 +23,9 @@ export const todayLocal = (): string => localDate();
 export function dayNumber(day: string | undefined): number | undefined {
   if (typeof day !== 'string' || !ISO_DAY.test(day)) return undefined;
   const t = Date.parse(`${day}T00:00:00Z`);
-  return Number.isFinite(t) ? Math.round(t / 86400000) : undefined;
+  // Date.parse rolls impossible days over (2026-02-30 -> 2026-03-02); a real calendar day must survive the round trip
+  if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== day) return undefined;
+  return Math.round(t / 86400000);
 }
 
 /** Add whole calendar days to a calendar day. Zone and DST independent. */

@@ -12,6 +12,7 @@ import type {
   SafetyStatus,
 } from './types';
 import type {GoalKind} from '../core/types';
+import {variationOptions} from '../engine/exerciseGraph';
 
 const nowIso = (context: CoachContext): string => context.now;
 
@@ -358,6 +359,17 @@ function buildCandidates(
 
   if (plateaus.length) {
     const names = plateaus.slice(0, 3).map((item) => item.exerciseName).join(', ');
+    /* Variations are options read from the exercise graph (equipment-compatible); the Coach lists them and never applies one. */
+    const variations = plateaus.slice(0, 3).flatMap((item) => {
+      const ex = context.state.exercises.find((e) => e.id === item.exerciseId);
+      if (!ex) return [];
+      const options = variationOptions(ex, context.state.exercises, context.state.profile?.equipment);
+      const parts = [
+        ...(options.progressions.length ? [`a harder variation: ${options.progressions.map((e) => e.name).join(', ')}`] : []),
+        ...(options.regressions.length ? [`an easier variation: ${options.regressions.map((e) => e.name).join(', ')}`] : []),
+      ];
+      return parts.length ? [`For ${ex.name} the exercise graph lists ${parts.join(' and ')}.`] : [];
+    });
     extra.push({
       id: 'review_plateau',
       action: 'review',
@@ -366,6 +378,7 @@ function buildCandidates(
         `Review ${names}: completed reps have not changed across recent comparable sessions. ` +
         'APEX has not changed your plan. Options: keep the current load and aim for one more clean rep; ' +
         'check sleep, nutrition and recovery; check technique and range of motion; or choose a variation from the exercise alternatives. ' +
+        (variations.length ? `${variations.join(' ')} These are options only; APEX has not switched your exercise. ` : '') +
         'Identical output can also mean you are still building repeatable performance, so this is a signal, not a diagnosis.',
       objectiveFit: 1,
       sustainabilityFit: 1,

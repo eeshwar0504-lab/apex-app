@@ -1,5 +1,20 @@
 import { dayNumber, dayOfTimestamp, workoutDay } from '../data/dates';
 import { goalTargetRir, programExercise } from './goalProgram';
+import { comparisonScore, equipmentFit, exerciseFitsEquipment, isEquivalentSubstitution, rankComparableExercises } from './exerciseGraph';
+export {
+  comparable,
+  comparisonScore,
+  equipmentFit,
+  exerciseFitsEquipment,
+  isEquivalentSubstitution,
+  rankComparableExercises,
+  rankSubstitutes,
+  requiredEquipment,
+  smartAlternatives,
+  substituteScore,
+  usesNoEquipment
+} from './exerciseGraph';
+export type { EquipmentFit } from './exerciseGraph';
 import { MAX_PLAUSIBLE_LOAD_KG, MAX_PLAUSIBLE_REPS, MAX_PLAUSIBLE_SECONDS } from './limits';
 import type {
   Exercise,
@@ -71,12 +86,7 @@ export interface PerformanceSummary {
   avgRir?: number;
 }
 
-export interface ExerciseComparison {
-  exercise: Exercise;
-  score: number;
-  confidence: 'low' | 'medium' | 'high';
-  reasons: string[];
-}
+export type {ExerciseComparison} from './exerciseGraph';
 
 const roundTo = (n: number, step: number) =>
   step > 0
@@ -596,163 +606,6 @@ export function adjacentAvailableLoad(
   const step = availability.incrementKg || ex.incrementKg;
   if (!step || current === undefined) return undefined;
   return sanitizeRecommendedLoad(ex, current + (direction === 'up' ? step : -step));
-}
-
-/* ============================================================
-   EXERCISE COMPARABILITY
-   ============================================================ */
-
-/**
- * Returns a graded similarity score instead of a simple
- * comparable / not-comparable decision.
- *
- * This prevents APEX from blindly transferring load between
- * unrelated exercises.
- */
-export function comparisonScore(
-  a: Exercise,
-  b: Exercise
-): number {
-  if (a.id === b.id) {
-    return 1;
-  }
-
-  let score = 0;
-
-  if (a.family === b.family) {
-    score += 0.30;
-  }
-
-  if (a.pattern === b.pattern) {
-    score += 0.25;
-  }
-
-  const primaryOverlap = a.primaryMuscles.filter(
-    muscle => b.primaryMuscles.includes(muscle)
-  ).length;
-
-  if (primaryOverlap > 0) {
-    score += Math.min(
-      0.20,
-      primaryOverlap * 0.08
-    );
-  }
-
-  const secondaryOverlap = a.secondaryMuscles.filter(
-    muscle => b.secondaryMuscles.includes(muscle)
-  ).length;
-
-  if (secondaryOverlap > 0) {
-    score += Math.min(
-      0.08,
-      secondaryOverlap * 0.04
-    );
-  }
-
-  if (a.loadSemantics === b.loadSemantics) {
-    score += 0.10;
-  }
-
-  if (a.unilateral === b.unilateral) {
-    score += 0.04;
-  }
-
-  const equipmentOverlap = a.equipment.filter(
-    equipment => b.equipment.includes(equipment)
-  ).length;
-
-  if (equipmentOverlap > 0) {
-    score += Math.min(
-      0.03,
-      equipmentOverlap * 0.015
-    );
-  }
-
-  return Math.min(1, score);
-}
-
-/**
- * Backwards-compatible boolean helper.
- */
-export function comparable(
-  a: Exercise,
-  b: Exercise
-): boolean {
-  return comparisonScore(a, b) >= 0.50;
-}
-
-/**
- * Ranks exercises that could provide useful comparative evidence.
- */
-export function rankComparableExercises(
-  target: Exercise,
-  exercises: Exercise[],
-  availableIds?: Set<string>
-): ExerciseComparison[] {
-  return exercises
-    .filter(ex => ex.id !== target.id)
-    .map(ex => {
-      const score = comparisonScore(target, ex);
-
-      const reasons: string[] = [];
-
-      if (target.family === ex.family) {
-        reasons.push('same exercise family');
-      }
-
-      if (target.pattern === ex.pattern) {
-        reasons.push('same movement pattern');
-      }
-
-      const primaryOverlap =
-        target.primaryMuscles.filter(
-          muscle => ex.primaryMuscles.includes(muscle)
-        );
-
-      if (primaryOverlap.length) {
-        reasons.push(
-          `shared primary muscle: ${primaryOverlap
-            .slice(0, 2)
-            .join(', ')}`
-        );
-      }
-
-      if (target.loadSemantics === ex.loadSemantics) {
-        reasons.push('same load semantics');
-      }
-
-      if (target.unilateral === ex.unilateral) {
-        reasons.push('same unilateral/bilateral structure');
-      }
-
-      if (availableIds?.has(ex.id)) {
-        reasons.push('available in current exercise set');
-      }
-
-      const confidence: ExerciseComparison['confidence'] =
-        score >= 0.70
-          ? 'high'
-          : score >= 0.50
-            ? 'medium'
-            : 'low';
-
-      return {
-        exercise: ex,
-        score,
-        confidence,
-        reasons
-      };
-    })
-    .filter(item => item.score >= 0.30)
-    .sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-
-      return a.exercise.name.localeCompare(
-        b.exercise.name
-      );
-    });
 }
 
 /* ============================================================
@@ -1901,9 +1754,11 @@ function chooseByPattern(
 }
 
 /** Training days per week: a whole number from 2 to 6; anything invalid (NaN, Infinity, text) becomes 3. */
+export const TRAINING_DAYS_MIN = 2;
+export const TRAINING_DAYS_MAX = 6;
 export function sanitizeTrainingDays(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 3;
-  return Math.max(2, Math.min(6, Math.round(value)));
+  return Math.max(TRAINING_DAYS_MIN, Math.min(TRAINING_DAYS_MAX, Math.round(value)));
 }
 
 export function buildPlan(
@@ -2610,132 +2465,6 @@ export function createRescheduled(
 }
 
 /* ============================================================
-   EQUIPMENT
-   ============================================================ */
-
-export type EquipmentFit =
-  | 'available'
-  | 'unknown'
-  | 'unavailable';
-
-/**
- * The one equipment-compatibility rule (plan building, substitutions, the library and the session brief all use it):
- * an exercise is usable when it needs no equipment, when it is bodyweight, or when at least one of the pieces of
- * equipment it lists is available. Matching is by exact, case-insensitive name.
- */
-export function usesNoEquipment(ex: Exercise): boolean {
-  return ex.equipment.length === 0 || ex.equipment.includes('bodyweight');
-}
-
-/**
- * The equipment an exercise actually needs the athlete to have. "bodyweight" and "none" are not equipment: they are
- * the absence of a requirement, so they are never listed, confirmed or counted as missing. An exercise that can be
- * done with bodyweight (alone or as one option) needs nothing.
- */
-export function requiredEquipment(ex: Exercise): string[] {
-  if (usesNoEquipment(ex)) return [];
-  return ex.equipment.filter(item => item && item !== 'none');
-}
-
-export function exerciseFitsEquipment(ex: Exercise, available: readonly string[]): boolean {
-  if (usesNoEquipment(ex)) return true;
-  const normalized = new Set(available.map(value => String(value).toLowerCase().trim()));
-  return ex.equipment.some(required => normalized.has(required.toLowerCase().trim()));
-}
-
-export function equipmentFit(
-  ex: Exercise,
-  available:
-    | string[]
-    | undefined
-): EquipmentFit {
-
-  // a movement that needs no equipment is available whether or not the athlete has listed any
-  if (usesNoEquipment(ex)) {
-    return 'available';
-  }
-
-  if (
-    !available ||
-    !available.length
-  ) {
-    return 'unknown';
-  }
-
-  return exerciseFitsEquipment(ex, available)
-    ? 'available'
-    : 'unavailable';
-}
-
-/**
- * The one substitution score. Equipment fit dominates, then how much of the movement is preserved
- * (same pattern, same way of measuring load, same family), then whether the catalogue lists the pair.
- */
-export function substituteScore(
-  source: Exercise,
-  candidate: Exercise,
-  available: readonly string[] | undefined
-): number {
-  const fit = equipmentFit(candidate, available ? [...available] : undefined);
-  let score = fit === 'available' ? 1000 : fit === 'unknown' ? 500 : 0;
-  if (candidate.pattern === source.pattern) score += 120;
-  if (candidate.loadSemantics === source.loadSemantics) score += 80;
-  if (candidate.family === source.family) score += 50;
-  if (candidate.alternatives.includes(source.id) || source.alternatives.includes(candidate.id)) score += 30;
-  if (candidate.equipment.length < source.equipment.length) score += 10;
-  // a swap that keeps the prescription meaningful (same pattern, load meaning and rep-range width) outranks one that resets the baseline
-  if (isEquivalentSubstitution(source, candidate)) score += 100;
-  return score;
-}
-
-/**
- * Every usable replacement for an exercise, best first: the catalogue's listed alternatives plus every other
- * exercise, minus anything the athlete cannot use (profile equipment) or has marked unavailable for this session.
- * Ties are broken by id so the order never depends on how the catalogue happens to be stored.
- */
-export function rankSubstitutes(
-  source: Exercise,
-  exercises: Exercise[],
-  available: readonly string[] | undefined,
-  unavailableItems: readonly string[] = []
-): { exercise: Exercise; score: number; equivalent: boolean }[] {
-  const blocked = new Set(unavailableItems.map(item => item.toLowerCase().trim()));
-  return exercises
-    .filter(candidate => candidate.id !== source.id)
-    .filter(candidate => !candidate.equipment.some(item => blocked.has(item.toLowerCase().trim())))
-    .filter(candidate => equipmentFit(candidate, available ? [...available] : undefined) !== 'unavailable')
-    .map(candidate => ({
-      exercise: candidate,
-      score: substituteScore(source, candidate, available),
-      equivalent: isEquivalentSubstitution(source, candidate)
-    }))
-    .sort((x, y) => y.score - x.score || x.exercise.id.localeCompare(y.exercise.id));
-}
-
-/** The catalogue's listed alternatives for an exercise, best first, including ones the equipment rules exclude. */
-export function smartAlternatives(
-  ex: Exercise,
-  exercises: Exercise[],
-  available:
-    | string[]
-    | undefined
-) {
-
-  return ex.alternatives
-    .map(id => exercises.find(exercise => exercise.id === id))
-    .filter((exercise): exercise is Exercise => Boolean(exercise))
-    .map(exercise => ({
-      exercise,
-      fit: equipmentFit(exercise, available),
-      samePattern: exercise.pattern === ex.pattern,
-      sameLoad: exercise.loadSemantics === ex.loadSemantics,
-      similarity: comparisonScore(ex, exercise),
-      score: substituteScore(ex, exercise, available)
-    }))
-    .sort((a, b) => b.score - a.score || b.similarity - a.similarity || a.exercise.id.localeCompare(b.exercise.id));
-}
-
-/* ============================================================
    RESCHEDULING / SET MANAGEMENT
    ============================================================ */
 
@@ -2993,18 +2722,6 @@ export function reorderWorkoutExercise(
 /* ============================================================
    EXERCISE REPLACEMENT
    ============================================================ */
-
-/**
- * The one substitution-equivalence rule: a replacement carries the old prescription forward only when it moves the
- * same pattern, measures load the same way and has the same rep-range width. Anything else starts a new baseline.
- */
-export function isEquivalentSubstitution(oldEx: Exercise, newEx: Exercise): boolean {
-  return (
-    oldEx.pattern === newEx.pattern &&
-    oldEx.loadSemantics === newEx.loadSemantics &&
-    oldEx.repRange[1] - oldEx.repRange[0] === newEx.repRange[1] - newEx.repRange[0]
-  );
-}
 
 export function replaceWorkoutExercise(
   workout: Workout,

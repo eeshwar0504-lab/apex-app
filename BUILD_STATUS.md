@@ -1,6 +1,10 @@
-# APEX 3.1.2 build status
+# APEX 4.0.0 build status
 
-## Release 3.1.2
+## Release 4.0.0
+
+Major release on top of 3.1.2. Android versionCode 7. Core correctness (custom load lists, one assisted representation, fatigue/recovery path, timed exercises, input validation, warm-up semantics, goal-aware programming, local-date model, one equipment rule and substitution ranking); Coach boundary work; data/platform integrity; profile, goal and journal editing, library actions, confirmation flows, accessibility and the PWA decision (not a PWA, `docs/PWA_DECISION.md`); exercise graph with progressions/regressions, safety metadata and one similarity/ranking mechanism; an optional, grounded, untrusted AI explanation layer behind a strict deterministic boundary (`docs/AI_BOUNDARY.md`, off by default, no cloud UI, no keys). Native Capacitor SQLite and Android runtime remain unverified by the Node test harness.
+
+## Release 3.1.2 (previous)
 
 QA-fix release on top of 3.1.1. Android versionCode 6. Fixes `reduce` so it lowers the load; adds a documented return-to-training rule (`docs/RETURN_TO_TRAINING.md`); surfaces plateau evidence and an optional recovery check-in in the Coach as evidence only; abandons zero-set workouts instead of completing them; preserves and recovers unreadable saved data; hardens engine volume/PR helpers against invalid values. Native Capacitor SQLite and Android runtime remain unverified by the Node test harness.
 

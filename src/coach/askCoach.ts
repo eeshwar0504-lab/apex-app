@@ -35,7 +35,7 @@ function evidence(id: string, statement: string, confidence: CoachConfidence = '
  return {id, statement, source: 'history', state: 'known', quality: confidence === 'high' ? 'high' : 'medium', pattern: 'signal', confidence, role: 'supporting', recency: 'recent', direction: 'neutral'};
 }
 
-function exerciseForQuestion(state: AppState, question: string, context: CoachContext): Exercise | undefined {
+export function exerciseForQuestion(state: AppState, question: string, context: CoachContext): Exercise | undefined {
  const q = question.toLowerCase();
  return state.exercises.find((item) => q.includes(item.name.toLowerCase())) || context.exercise;
 }

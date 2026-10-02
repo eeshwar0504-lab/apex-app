@@ -1,4 +1,6 @@
-import type {AIProviderAdapter, CoachRequest, CoachResponse} from '../aiGateway';
+import type {AIProviderAdapter, CoachRequest, CoachResponse, ProviderAvailability, ProviderCapabilities} from '../aiGateway';
+import type {ProviderInput} from '../aiContract';
+import {ProviderError} from '../aiContract';
 
 export interface LocalProviderOptions {
   endpoint?: string;
@@ -6,19 +8,58 @@ export interface LocalProviderOptions {
   timeoutMs?: number;
 }
 
+const DEFAULT_ENDPOINT = 'http://127.0.0.1:11434';
+
 /**
  * Optional zero-cost local provider for users running Ollama or a compatible
- * local server. Core APEX never requires this provider.
+ * local server. Core APEX never requires this provider. This is a real local language model when a server is running;
+ * when none is reachable it reports itself unavailable and APEX uses its deterministic answer.
  */
 export class LocalOllamaProvider implements AIProviderAdapter {
   readonly id='local' as const;
+  readonly kind='local-model' as const;
+  readonly capabilities: ProviderCapabilities = {structuredOutput: true, requiresNetwork: true, worksOffline: true, isLanguageModel: true};
   constructor(private readonly options:LocalProviderOptions={}) {}
 
-  async complete(request:CoachRequest):Promise<CoachResponse>{
-    const endpoint=(this.options.endpoint||'http://127.0.0.1:11434/api/chat').replace(/\/$/,'');
-    const model=this.options.model||'llama3.2:3b';
+  private base(): string {
+    return (this.options.endpoint||DEFAULT_ENDPOINT).replace(/\/(api\/chat)?\/?$/,'');
+  }
+
+  async availability(): Promise<ProviderAvailability> {
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),this.options.timeoutMs??15000);
+    const timer=setTimeout(()=>controller.abort(),1500);
+    try{
+      const response=await fetch(`${this.base()}/api/tags`,{signal:controller.signal});
+      return response.ok?{available:true}:{available:false,reason:'unavailable'};
+    }catch{
+      return {available:false,reason:'network'};
+    }finally{clearTimeout(timer);}
+  }
+
+  async generate(input:ProviderInput):Promise<string>{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),this.options.timeoutMs??input.timeoutMs??15000);
+    try{
+      let response:Response;
+      try{
+        response=await fetch(`${this.base()}/api/chat`,{
+          method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({model:this.options.model||'llama3.2:3b',messages:[{role:'system',content:input.system},{role:'user',content:input.user}],stream:false,...(input.expectJson?{format:'json'}:{})}),
+          signal:controller.signal
+        });
+      }catch(error){
+        throw new ProviderError(controller.signal.aborted?'timeout':'network',error instanceof Error?error.message:undefined);
+      }
+      if(!response.ok) throw new ProviderError('http_error',`Local AI provider returned HTTP ${response.status}.`);
+      const data:any=await response.json().catch(()=>undefined);
+      const text=typeof data?.message?.content==='string'?data.message.content.trim():'';
+      if(!text) throw new ProviderError('empty_response','Local AI provider returned an empty response.');
+      return text;
+    }finally{clearTimeout(timer);}
+  }
+
+  /** Legacy free-text entry point; failures are reported as text and never thrown. */
+  async complete(request:CoachRequest):Promise<CoachResponse>{
     try{
       const context=request.context||{facts:[],recommendations:[],uncertainties:[]};
       const system=[
@@ -26,20 +67,11 @@ export class LocalOllamaProvider implements AIProviderAdapter {
         'The deterministic APEX training engine is authoritative.',
         'Use only the supplied context. Do not invent measurements, exercise facts, diagnoses, or recommendations.',
         'If the supplied context is insufficient, say so.',
-        'Separate your answer into Facts, Inference, Recommendation, and Uncertainty when relevant.',
         `FACTS: ${context.facts.join(' | ')}`,
         `RECOMMENDATIONS: ${context.recommendations.join(' | ')}`,
         `UNCERTAINTIES: ${context.uncertainties.join(' | ')}`
       ].join('\n');
-      const response=await fetch(`${endpoint}/api/chat`,{
-        method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:request.prompt}],stream:false}),
-        signal:controller.signal
-      });
-      if(!response.ok) throw new Error(`Local AI provider returned HTTP ${response.status}.`);
-      const data:any=await response.json();
-      const text=typeof data?.message?.content==='string'?data.message.content.trim():'';
-      if(!text) throw new Error('Local AI provider returned an empty response.');
+      const text=await this.generate({system,user:request.prompt,context:undefined as never,expectJson:false,timeoutMs:this.options.timeoutMs??15000});
       return {text,provider:'local',grounded:true,disclaimer:'Generated by an optional local provider from the supplied APEX context. The deterministic training engine remains authoritative.'};
     }catch(error){
       return {
@@ -47,6 +79,6 @@ export class LocalOllamaProvider implements AIProviderAdapter {
         provider:'local',grounded:true,
         disclaimer:error instanceof Error?error.message:'Local provider unavailable.'
       };
-    }finally{clearTimeout(timer);}
+    }
   }
 }

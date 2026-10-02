@@ -29,6 +29,8 @@ test.describe('APEX product workflows',()=>{
     const beforeCount=await exercises.count();
     expect(beforeCount).toBeGreaterThan(0);
     await exercises.first().getByRole('button',{name:'Remove'}).click();
+    // removing an exercise asks first (Phase 4 confirmation flow)
+    await page.getByRole('dialog',{name:'Remove this exercise?'}).getByRole('button',{name:'Remove',exact:true}).click();
     await expect(exercises).toHaveCount(beforeCount-1);
     await editor.getByRole('button',{name:'Done'}).click();
     await expect(version).not.toHaveText(before||'');

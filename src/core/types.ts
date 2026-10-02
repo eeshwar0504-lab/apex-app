@@ -269,6 +269,24 @@ export interface Goal {
     | 'paused';
 }
 
+export type SafetyConsiderationKind =
+  | 'technique_sensitive'
+  | 'setup'
+  | 'load_control'
+  | 'equipment_check'
+  | 'range_of_motion'
+  | 'balance';
+
+/** A descriptive note about a movement. Never a diagnosis, never advice about a person's health (see exerciseSafety.ts). */
+export interface SafetyConsideration {
+  kind: SafetyConsiderationKind;
+  note: string;
+  /** The change that goes with the note. */
+  modification?: string;
+  /** Only where the exercise data warrants it: a suggestion to ask a qualified coach. */
+  guidance?: string;
+}
+
 export interface Exercise {
   id: string;
   name: string;
@@ -306,6 +324,7 @@ export interface Exercise {
   progressions?: string[];
   regressions?: string[];
   contraindicationNotes?: string[];
+  safetyConsiderations?: SafetyConsideration[];
 
   loadDescription?: string;
 
@@ -672,6 +691,9 @@ export interface AppState {
     theme?: 'apex' | 'classic' | 'steel' | 'aurora' | 'crimson';
 
     units?: 'metric' | 'imperial';
+
+    /** Optional AI explanations. Off by default; cloud is never selectable here (it needs explicit configuration). */
+    aiMode?: 'off' | 'rule-based' | 'local-model';
 
     notifications: {
       enabled: boolean;

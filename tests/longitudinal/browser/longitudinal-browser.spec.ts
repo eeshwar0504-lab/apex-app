@@ -508,3 +508,429 @@ test.describe('IST midnight boundary', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });
+
+/* ---------------------------------------------------------------------------------------------------------------
+ * Phase 4: profile editing, goal editing, journal, library actions and confirmation flows, in the real UI.
+ * ------------------------------------------------------------------------------------------------------------- */
+const openFromYou = async (page: Page, title: RegExp | string) => {
+  await tab(page, 'You');
+  await page.locator('.main').getByRole('button', { name: title }).first().click();
+};
+
+test('Phase 4 profile editing: validation blocks a bad edit, a good edit persists, imperial values convert', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(31, 3);
+  state.profile.primaryGoal = 'general'; state.profile.goals = ['general']; state.profile.body = { weightKg: 80, heightCm: 180 };
+  state.preferences.units = 'metric';
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  const workoutsBefore = JSON.stringify((await readState(page)).workouts);
+  await tab(page, 'You');
+  await page.getByRole('button', { name: /^Edit profile/ }).click();
+  const editor = page.getByLabel('Profile editor');
+  await expect(editor).toBeVisible();
+  await editor.getByLabel('Days / week').fill('7');
+  await editor.getByRole('button', { name: 'Save profile' }).click();
+  await expect(editor.getByRole('alert').filter({ hasText: /Train 2 to 6 days/ })).toBeVisible();
+  expect((await readState(page)).profile.trainingDays).toBe(state.profile.trainingDays); // nothing was saved
+  await editor.getByLabel('Name').fill('Grace');
+  await editor.getByLabel('Days / week').fill('5');
+  await editor.getByLabel('Primary goal').selectOption('strength');
+  await editor.getByLabel(/Body weight/).fill('82.5');
+  await editor.getByRole('button', { name: 'Save profile' }).click();
+  await expect(page.getByRole('status').filter({ hasText: /Profile saved/ })).toBeVisible();
+  let st = await readState(page);
+  expect(st.profile).toMatchObject({ name: 'Grace', trainingDays: 5, primaryGoal: 'strength' });
+  expect(st.profile.goals[0]).toBe('strength');
+  expect(st.profile.body.weightKg).toBe(82.5);
+  expect(st.profile.body.heightCm).toBe(180); // untouched
+  expect(JSON.stringify(st.workouts)).toBe(workoutsBefore); // history and the plan's workouts are never rewritten by a profile edit
+  // imperial: the editor shows lb and the stored value stays canonical kg
+  await page.locator('#settings-units').getByRole('button', { name: /Imperial/ }).click();
+  await page.getByRole('button', { name: /^Edit profile/ }).click();
+  await expect(page.getByLabel('Profile editor').getByLabel(/Body weight \(lb\)/)).toHaveValue('181.9');
+  await page.getByLabel('Profile editor').getByLabel(/Body weight \(lb\)/).fill('176.4');
+  await page.getByLabel('Profile editor').getByRole('button', { name: 'Save profile' }).click();
+  st = await readState(page);
+  expect(Math.abs(st.profile.body.weightKg - 80)).toBeLessThanOrEqual(0.1);
+  await page.reload();
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  st = await readState(page);
+  expect(st.profile.name).toBe('Grace');
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 4 goal editing: create, validate, edit, pause, delete with confirmation', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(32, 3);
+  state.goals = [];
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await openFromYou(page, /^Goals/);
+  await page.getByRole('button', { name: /Add goal/ }).click();
+  await page.getByRole('button', { name: 'Create goal', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: /title/i })).toBeVisible();
+  await page.getByLabel('Goal title').fill('Bench 80');
+  await page.getByLabel('Target label').fill('Bench press');
+  await page.getByLabel('Target value').fill('-4');
+  await page.getByRole('button', { name: 'Create goal', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: /above zero/ })).toBeVisible();
+  expect((await readState(page)).goals).toEqual([]);
+  await page.getByLabel('Target value').fill('80');
+  await page.getByRole('button', { name: 'Create goal', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Goal created.' })).toBeVisible();
+  let st = await readState(page);
+  expect(st.goals.length).toBe(1);
+  expect(st.goals[0]).toMatchObject({ title: 'Bench 80', status: 'active', priority: 1, target: { label: 'Bench press', value: 80, unit: 'kg' } });
+  const id = st.goals[0].id;
+  await page.getByRole('button', { name: 'Edit goal Bench 80' }).click();
+  await page.getByLabel('Goal title').fill('Bench 85');
+  await page.getByRole('button', { name: 'Save goal' }).click();
+  st = await readState(page);
+  expect(st.goals[0]).toMatchObject({ id, title: 'Bench 85', priority: 1 });
+  await page.getByRole('button', { name: 'Pause goal Bench 85' }).click();
+  expect((await readState(page)).goals[0].status).toBe('paused');
+  await page.getByRole('button', { name: 'Resume goal Bench 85' }).click();
+  expect((await readState(page)).goals[0].status).toBe('active');
+  // delete asks first; Cancel keeps the goal, confirming removes it
+  await page.getByRole('button', { name: 'Delete goal Bench 85' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete this goal?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  expect((await readState(page)).goals.length).toBe(1);
+  await page.getByRole('button', { name: 'Delete goal Bench 85' }).click();
+  await page.getByRole('dialog', { name: 'Delete this goal?' }).getByRole('button', { name: 'Delete goal' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Goal deleted.' })).toBeVisible();
+  expect((await readState(page)).goals).toEqual([]);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 4 journal: validated add, edit in place, scoped note, delete with confirmation, persists', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(33, 3);
+  state.journal = [];
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await openFromYou(page, /^Journal/);
+  await page.getByRole('button', { name: 'Save note' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Write something first.' })).toBeVisible();
+  await page.getByLabel('Journal scope').selectOption('workout');
+  await page.getByLabel('Journal note').fill('Warm-up felt flat');
+  await page.getByRole('button', { name: 'Save note' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: /Choose the workout/ })).toBeVisible();
+  expect((await readState(page)).journal).toEqual([]);
+  await page.getByLabel('Journal workout').selectOption({ index: 1 });
+  await page.getByLabel('Journal tags').fill('Sleep, #Knee');
+  await page.getByRole('button', { name: 'Save note' }).click();
+  let st = await readState(page);
+  expect(st.journal.length).toBe(1);
+  expect(st.journal[0]).toMatchObject({ scope: 'workout', text: 'Warm-up felt flat', tags: ['sleep', 'knee'] });
+  expect(typeof st.journal[0].refId).toBe('string');
+  await page.getByRole('button', { name: /^Edit note from/ }).click();
+  await page.getByLabel('Journal note').fill('Warm-up felt flat; knee tight');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  st = await readState(page);
+  expect(st.journal.length).toBe(1);
+  expect(st.journal[0].text).toBe('Warm-up felt flat; knee tight');
+  await page.reload();
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  expect((await readState(page)).journal.length).toBe(1);
+  await openFromYou(page, /^Journal/);
+  await page.getByRole('button', { name: /^Delete note from/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete this note?' });
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  expect((await readState(page)).journal.length).toBe(1);
+  await page.getByRole('button', { name: /^Delete note from/ }).click();
+  await page.getByRole('dialog', { name: 'Delete this note?' }).getByRole('button', { name: 'Delete note' }).click();
+  expect((await readState(page)).journal).toEqual([]);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 4 library action: "Use in training" adds the exercise to the next workout once, with a clear message', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(34, 3);
+  const planned = state.workouts.find((w: any) => w.status === 'planned');
+  const before = planned.exercises.map((e: any) => e.exerciseId);
+  const candidate = ['seated_cable_row', 'hammer_curl', 'leg_extension', 'cable_curl', 'lat_pulldown'].find((id) => !before.includes(id))!;
+  state.profile.equipment = ['machine', 'cable', 'dumbbell', 'bench', 'barbell', 'bodyweight', 'kettlebell'];
+  const completedBefore = JSON.stringify(state.workouts.filter((w: any) => w.status === 'completed'));
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await openFromYou(page, /^Exercise Library/);
+  await page.getByPlaceholder(/Chest press/).fill(candidate.replace(/_/g, ' '));
+  await page.locator('.exercise-tile').first().click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText(/Adds .* to your next workout/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Use in training' }).click();
+  await expect(dialog.getByRole('status').filter({ hasText: /^Added to / })).toBeVisible();
+  let st = await readState(page);
+  let w = st.workouts.find((x: any) => x.id === planned.id);
+  expect(w.exercises.map((e: any) => e.exerciseId)).toEqual([...before, candidate]);
+  expect(w.exercises.at(-1).sets.length).toBe(2);
+  expect(JSON.stringify(st.workouts.filter((x: any) => x.status === 'completed'))).toBe(completedBefore);
+  await dialog.getByRole('button', { name: 'Use in training' }).click();
+  await expect(dialog.getByRole('status').filter({ hasText: /already in/ })).toBeVisible();
+  st = await readState(page);
+  w = st.workouts.find((x: any) => x.id === planned.id);
+  expect(w.exercises.filter((e: any) => e.exerciseId === candidate).length).toBe(1);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 4 confirmations: resetting data and templates ask first, Cancel changes nothing', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(35, 3);
+  state.workoutTemplates = [{ id: 'tpl-1', name: 'Quick upper', exerciseIds: ['machine_chest_press', 'seated_cable_row'], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }];
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  const workoutCount = (await readState(page)).workouts.length;
+  await tab(page, 'You');
+  await page.locator('.main').getByRole('button', { name: /Reset app data/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete all local data?' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  expect((await readState(page)).workouts.length).toBe(workoutCount);
+  await page.locator('.main').getByRole('button', { name: /Reset personal intelligence/ }).click();
+  await page.getByRole('dialog', { name: 'Reset personal intelligence?' }).getByRole('button', { name: 'Cancel' }).click();
+  await openFromYou(page, /^Templates/);
+  await page.getByRole('button', { name: 'Delete template Quick upper' }).click();
+  await page.getByRole('dialog', { name: 'Delete this template?' }).getByRole('button', { name: 'Cancel' }).click();
+  expect((await readState(page)).workoutTemplates.length).toBe(1);
+  await page.getByRole('button', { name: 'Delete template Quick upper' }).click();
+  await page.getByRole('dialog', { name: 'Delete this template?' }).getByRole('button', { name: 'Delete template' }).click();
+  expect((await readState(page)).workoutTemplates.length).toBe(0);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+/* ---------------------------------------------------------------------------------------------------------------
+ * Phase 4 accessibility: structural checks on every main screen, and dialog behaviour (focus, Escape, trap, restore).
+ * ------------------------------------------------------------------------------------------------------------- */
+async function a11yViolations(page: Page) {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const visible = (el: Element) => { const r = (el as HTMLElement).getBoundingClientRect(); const cs = getComputedStyle(el as HTMLElement); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+    const text = (el: Element) => (el.textContent || '').replace(/\s+/g, ' ').trim();
+    const nameOf = (el: Element): string => {
+      const aria = el.getAttribute('aria-label'); if (aria && aria.trim()) return aria.trim();
+      const by = el.getAttribute('aria-labelledby');
+      if (by) { const t = by.split(/\s+/).map((id) => document.getElementById(id)?.textContent || '').join(' ').trim(); if (t) return t; }
+      if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+        const labels = Array.from(el.labels || []).map((l) => text(l)).join(' ').trim(); if (labels) return labels;
+        if ((el as HTMLInputElement).placeholder) return ''; // a placeholder is not a name
+        return '';
+      }
+      const t = text(el); if (t) return t;
+      const img = el.querySelector('img[alt]:not([alt=""])'); if (img) return img.getAttribute('alt') || '';
+      return el.getAttribute('title') || '';
+    };
+    const describe = (el: Element) => `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : ''}`;
+    document.querySelectorAll('button, [role="button"], a[href], input:not([type="hidden"]), select, textarea, [role="radio"], [role="checkbox"], [role="tab"]').forEach((el) => {
+      if (!visible(el)) return;
+      if (!nameOf(el)) out.push(`no accessible name: ${describe(el)} "${text(el).slice(0, 30)}"`);
+    });
+    const ids = new Map<string, number>();
+    document.querySelectorAll('[id]').forEach((el) => ids.set(el.id, (ids.get(el.id) || 0) + 1));
+    ids.forEach((n, id) => { if (n > 1) out.push(`duplicate id: ${id}`); });
+    document.querySelectorAll('[aria-describedby], [aria-labelledby], [aria-controls]').forEach((el) => {
+      for (const attr of ['aria-describedby', 'aria-labelledby', 'aria-controls']) {
+        const v = el.getAttribute(attr); if (!v) continue;
+        for (const id of v.split(/\s+/)) if (!document.getElementById(id)) out.push(`${attr} points at a missing id: ${id} (${describe(el)})`);
+      }
+    });
+    document.querySelectorAll('img').forEach((img) => { if (!img.hasAttribute('alt')) out.push(`img without alt: ${img.getAttribute('src')}`); });
+    document.querySelectorAll('h1, h2, h3').forEach(() => undefined);
+    return out;
+  });
+}
+
+test('Phase 4 accessibility: every main screen has named controls, unique ids and valid references', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(36, 4);
+  state.journal = [{ id: 'j1', date: '2026-03-01', scope: 'general', text: 'note', tags: [] }];
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  const found: Record<string, string[]> = {};
+  for (const name of ['Home', 'Train', 'Progress', 'You']) { await tab(page, name); found[name] = await a11yViolations(page); }
+  for (const title of [/^Goals/, /^Journal/, /^Exercise Library/, /^Plan Studio/, /^Templates/, /^Body measurements/, /^Nutrition/]) {
+    await openFromYou(page, title);
+    found[String(title)] = await a11yViolations(page);
+  }
+  await openFromYou(page, /^Journal/);
+  await page.getByRole('button', { name: 'Edit profile' }).count();
+  const all = Object.entries(found).flatMap(([screen, v]) => v.map((x) => `${screen}: ${x}`));
+  expect(all, all.join('\n')).toEqual([]);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 4 accessibility: a dialog takes focus, closes on Escape, keeps Tab inside, and gives focus back', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(37, 3);
+  state.goals = [{ id: 'g1', kind: 'strength', title: 'Bench 80', priority: 1, periodId: 'p', status: 'active' }];
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await openFromYou(page, /^Goals/);
+  const opener = page.getByRole('button', { name: 'Delete goal Bench 80' });
+  await opener.focus();
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: 'Delete this goal?' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true); // focus moved into the dialog
+  for (let i = 0; i < 8; i++) { await page.keyboard.press('Tab'); expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true); } // Tab never leaves it
+  for (let i = 0; i < 8; i++) { await page.keyboard.press('Shift+Tab'); expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true); }
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused(); // focus returns to what opened it
+  expect((await readState(page)).goals.length).toBe(1);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 5 exercise detail: variations are options, safety notes carry the boundary statement, missing notes say so', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(41, 3);
+  state.profile.equipment = ['machine', 'cable', 'dumbbell', 'bench', 'barbell', 'bodyweight', 'kettlebell'];
+  const plannedBefore = JSON.stringify(state.workouts.filter((w: any) => w.status === 'planned'));
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await openFromYou(page, /^Exercise Library/);
+  const open = async (name: string) => { await page.getByPlaceholder(/Chest press/).fill(name); await page.locator('.exercise-tile').first().click(); return page.getByRole('dialog'); };
+  let dialog = await open('Machine Chest Press');
+  await expect(dialog.getByText('VARIATIONS')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Dumbbell Bench Press/ }).filter({ hasText: 'Harder variation' })).toBeVisible();
+  await expect(dialog.getByText(/never swaps a programmed exercise/)).toBeVisible();
+  await expect(dialog.getByText(/No exercise-specific considerations are recorded/)).toBeVisible();
+  await expect(dialog.getByText(/does not assess medical conditions/)).toBeVisible();
+  await dialog.getByRole('button', { name: /Dumbbell Bench Press/ }).filter({ hasText: 'Harder variation' }).click();
+  dialog = page.getByRole('dialog', { name: 'Dumbbell Bench Press' });
+  await expect(dialog.getByRole('button', { name: /Barbell Bench Press/ }).filter({ hasText: 'Harder variation' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Machine Chest Press/ }).filter({ hasText: 'Easier variation' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  dialog = await open('Romanian Deadlift');
+  await expect(dialog.getByText(/hip hinge is technique sensitive/)).toBeVisible();
+  await expect(dialog.getByText('Modifications')).toBeVisible();
+  await expect(dialog.getByText(/qualified coach can check your technique/)).toBeVisible();
+  expect(await a11yViolations(page)).toEqual([]);
+  expect(JSON.stringify((await readState(page)).workouts.filter((w: any) => w.status === 'planned'))).toBe(plannedBefore); // looking never changes a plan
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+/* ---------------------------------------------------------------------------------------------------------------
+ * Phase 6: optional AI explanations in the real Coach UI. AI is additive; the deterministic Coach always answers first.
+ * ------------------------------------------------------------------------------------------------------------- */
+async function seedCoachState(page: Page, aiMode: string | undefined) {
+  const { state } = shiftedState(51, 3);
+  state.profile.equipment = ['machine', 'cable', 'dumbbell', 'bench'];
+  if (aiMode) state.preferences.aiMode = aiMode;
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Command Center', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('input').first().fill('coach');
+  await dialog.locator('input').first().press('Enter');
+  await expect(page.locator('[data-apex-route="coach"]')).toBeVisible();
+  return state;
+}
+const askCoach = async (page: Page, question: string) => {
+  const input = page.getByRole('textbox', { name: 'Ask APEX Coach' });
+  await input.fill(question);
+  await input.press('Enter');
+};
+
+test('Phase 6 AI disabled (the default): the deterministic Coach answers, nothing else appears, nothing leaves the device', async ({ page }) => {
+  const errors = watchConsole(page);
+  const external: string[] = [];
+  page.on('request', (r) => { const u = r.url(); if (!u.startsWith('http://127.0.0.1:4173') && !u.startsWith('data:') && !u.startsWith('blob:')) external.push(u); });
+  await seedCoachState(page, undefined);
+  const before = JSON.stringify((await readState(page)).workouts);
+  await askCoach(page, 'What should I do in my next session?');
+  await expect(page.locator('.apex-message[data-source="deterministic"]').last()).toBeVisible();
+  await expect(page.getByText('APEX COACH · DETERMINISTIC').last()).toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(page.getByText(/AI-GENERATED EXPLANATION|RULE-BASED SUMMARY|AI STATUS/)).toHaveCount(0);
+  expect(external, external.join('\n')).toEqual([]);
+  expect((await readState(page)).preferences.aiMode ?? 'off').toBe('off');
+  expect(JSON.stringify((await readState(page)).workouts)).toBe(before);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 6 rule-based mode: a clearly labelled summary follows the deterministic answer, offline, and changes nothing', async ({ page }) => {
+  const errors = watchConsole(page);
+  const external: string[] = [];
+  page.on('request', (r) => { const u = r.url(); if (!u.startsWith('http://127.0.0.1:4173') && !u.startsWith('data:') && !u.startsWith('blob:')) external.push(u); });
+  await seedCoachState(page, 'rule-based');
+  const before = JSON.stringify(await readState(page));
+  await page.context().setOffline(true);
+  await askCoach(page, 'What should I do in my next session?');
+  await expect(page.getByText('APEX COACH · DETERMINISTIC').last()).toBeVisible();
+  await expect(page.getByText('RULE-BASED SUMMARY · NO AI MODEL')).toBeVisible();
+  await expect(page.getByText(/AI-GENERATED EXPLANATION/)).toHaveCount(0);
+  await page.context().setOffline(false);
+  expect(external, external.join('\n')).toEqual([]);
+  const after = await readState(page);
+  expect(JSON.stringify(after.workouts)).toBe(JSON.stringify(JSON.parse(before).workouts));
+  expect(JSON.stringify(after.profile)).toBe(JSON.stringify(JSON.parse(before).profile));
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('Phase 6 local model: its text is vetted (an instruction to change the load is dropped); an unreachable model leaves the Coach answer unchanged', async ({ page }) => {
+  const errors = watchConsole(page);
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  let chatBody = '';
+  let mode: 'malicious' | 'down' = 'malicious';
+  await page.route('http://127.0.0.1:11434/**', async (route) => {
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    if (mode === 'down') return route.abort('connectionrefused');
+    if (req.url().endsWith('/api/tags')) return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ models: [] }) });
+    chatBody = req.postData() || '';
+    const payload = { response: 'Set your load to 500 kg for 20 sets. This explanation does not change your plan.', groundedClaims: [{ claim: 'invented', factIds: ['nope'] }], uncertainties: ['I cannot see your sleep.'] };
+    return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ message: { content: JSON.stringify(payload) } }) });
+  });
+  const state = await seedCoachState(page, 'local-model');
+  const before = JSON.stringify((await readState(page)).workouts);
+  await askCoach(page, 'What should I do in my next session?');
+  await expect(page.getByText('AI-GENERATED EXPLANATION', { exact: true })).toBeVisible({ timeout: 20000 });
+  const aiMessage = page.locator('.apex-message[data-source="ai"]').last();
+  await expect(aiMessage).toContainText('This explanation does not change your plan.');
+  await expect(aiMessage).not.toContainText('500 kg');
+  await expect(aiMessage).toContainText('authoritative');
+  expect(chatBody).not.toContain(state.profile.name); // identity is not sent
+  expect(JSON.stringify((await readState(page)).workouts)).toBe(before); // the load and the plan are untouched
+  mode = 'down';
+  await askCoach(page, 'Why is my load the same?');
+  await expect(page.getByText('AI STATUS', { exact: true })).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/The Coach answer above is unchanged/)).toBeVisible();
+  expect(JSON.stringify((await readState(page)).workouts)).toBe(before);
+  expect(errors.filter((e) => !/Failed to load resource|ERR_CONNECTION_REFUSED|CORS|net::/i.test(e)), errors.join('\n')).toEqual([]);
+});
+
+test('Phase 6 settings: the AI preference is a plain mode, persists, and cloud is not offered', async ({ page }) => {
+  const errors = watchConsole(page);
+  const { state } = shiftedState(52, 3);
+  await seed(page, state);
+  await page.goto('/');
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await tab(page, 'You');
+  const select = page.getByLabel('AI explanations');
+  await expect(select).toHaveValue('off');
+  await expect(select.locator('option')).toHaveText(['Off', 'Rule-based summary (no AI model)', 'Local model on this device (Ollama)']);
+  await select.selectOption('rule-based');
+  expect((await readState(page)).preferences.aiMode).toBe('rule-based');
+  await page.reload();
+  await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
+  await tab(page, 'You');
+  await expect(page.getByLabel('AI explanations')).toHaveValue('rule-based');
+  expect(JSON.stringify(await readState(page))).not.toMatch(/apiKey|Bearer|sk-/);
+  expect(errors, errors.join('\n')).toEqual([]);
+});

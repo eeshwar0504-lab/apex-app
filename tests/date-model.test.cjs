@@ -127,3 +127,12 @@ test('P3.2 no UTC-date shortcut remains in the app: calendar days come from src/
   walk(root);
   assert.deepEqual(offenders, []);
 });
+
+test('P3.10 a calendar day must be a real day: impossible dates are invalid, not rolled over', () => {
+  const D = E.dates;
+  for (const bad of ['2026-02-30', '2026-02-29', '2026-04-31', '2026-13-01', '2026-00-10', '2026-06-00', '2025-02-29', '2026-6-1', 'today', '', undefined]) assert.equal(D.dayNumber(bad), undefined, String(bad));
+  for (const good of ['2026-02-28', '2024-02-29', '2000-02-29', '2026-12-31', '2026-01-01']) assert.notEqual(D.dayNumber(good), undefined, good);
+  assert.equal(D.dayNumber('2026-03-01') - D.dayNumber('2026-02-28'), 1);
+  assert.equal(D.dayNumber('2024-03-01') - D.dayNumber('2024-02-28'), 2, '2024 is a leap year');
+  assert.equal(D.addDaysLocal('2026-02-30', 1), '2026-02-30', 'an invalid day is returned unchanged, never silently moved');
+});
