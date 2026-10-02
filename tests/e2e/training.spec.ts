@@ -683,4 +683,56 @@ test.describe('APEX training execution', () => {
     await input.press('Enter');
     await expect(page.locator('.a3-stats .a3-stat').first()).toContainText('1');
   });
+
+  test('a heavy lift is warmed up first: warm-ups are labelled, skip the feedback step and are not working sets', async ({ page }) => {
+    test.setTimeout(120_000);
+    // Give the first loaded exercise of every planned workout some heavy history, and put it first.
+    await page.evaluate(() => {
+      const key = 'apex-state-v4';
+      const state = JSON.parse(localStorage.getItem(key) as string);
+      const loaded = (id: string) => {
+        const ex = state.exercises.find((e: any) => e.id === id);
+        return ex && ['stack', 'total', 'per_hand'].includes(ex.loadSemantics);
+      };
+      const d = new Date();
+      d.setDate(d.getDate() - 3);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const past = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+      const seen = new Set<string>();
+      for (const w of state.workouts) {
+        const index = w.exercises.findIndex((e: any) => loaded(e.exerciseId));
+        if (index < 0) continue;
+        const [first] = w.exercises.splice(index, 1);
+        w.exercises.unshift(first);
+        w.exercises.forEach((e: any, i: number) => { e.order = i; });
+        if (seen.has(first.exerciseId)) continue;
+        seen.add(first.exerciseId);
+        const sets = [0, 1, 2].map((i) => ({ id: 'seed-' + first.exerciseId + i, type: 'working', weight: 100, reps: 12, rir: 2, completed: true }));
+        state.workouts.push({ id: 'seed-' + first.exerciseId, planId: w.planId, name: 'Seed', scheduledDate: past, status: 'completed', source: 'scheduled', version: 1, completedAt: past + 'T12:00:00.000Z', updatedAt: past + 'T12:00:00.000Z', exercises: [{ exerciseId: first.exerciseId, order: 0, prescribedSets: 3, repRange: first.repRange, restSec: 90, sets }] });
+      }
+      localStorage.setItem(key, JSON.stringify(state));
+    });
+    await page.reload();
+    await enterActiveSet(page);
+
+    await expect(page.getByText(/WARM-UP 1 \/ \d/)).toBeVisible();
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await page.getByRole('button', { name: 'Save Set' }).first().click();
+    await expect(page.getByText('How did that feel?')).toHaveCount(0);
+    await expect(page.getByText('RECOVER', { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    for (let step = 0; step < 40; step++) {
+      if (await page.getByText(/^SET 1 \/ \d/).first().isVisible().catch(() => false)) break;
+      const skipRest = page.getByRole('button', { name: 'SKIP REST', exact: true });
+      if (await skipRest.isVisible().catch(() => false)) { await skipRest.click(); continue; }
+      const startSet = page.getByRole('button', { name: /START SET/i }).first();
+      if (await startSet.isVisible().catch(() => false)) { await startSet.click(); continue; }
+      const logSet = page.getByRole('button', { name: 'Log set' });
+      if (await logSet.isVisible().catch(() => false)) { await logSet.click(); continue; }
+      const save = page.getByRole('button', { name: 'Save Set' }).first();
+      if (await save.isVisible().catch(() => false)) { await save.click(); continue; }
+      await page.waitForTimeout(150);
+    }
+    await expect(page.getByText(/^SET 1 \/ \d/).first()).toBeVisible();
+  });
 });

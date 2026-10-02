@@ -25,6 +25,7 @@ test('PWA1 every <link rel="manifest"> in index.html points at a file that exist
   for (const href of links) assert.ok(fs.existsSync(path.join(root, 'public', href.replace(/^\//, ''))), `index.html links ${href}, which does not exist`);
   assert.deepEqual(links, [], 'the decision is not to ship a manifest');
   assert.ok(!fs.existsSync(path.join(root, 'public', 'manifest.webmanifest')));
+  assert.ok(!fs.existsSync(path.join(root, 'manifest.webmanifest')), 'no stray manifest at the repository root either');
 });
 
 test('PWA2 no service worker is registered and no install prompt is handled in the app source', () => {

@@ -1,3 +1,4 @@
+const { uiSource } = require('./ui-source.cjs');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -29,8 +30,11 @@ test('repository migrates older persisted state into the current schema',()=>{
 
 test('SQLite schema migrations are tracked natively',()=>{
  const x=read('src/data/sqliteAdapter.ts');
- assert.match(x,/schema_migrations/);
+ const m=read('src/data/sqliteMigrations.ts');
+ assert.match(m,/schema_migrations/,'the version history table is created by the migration runner');
+ assert.match(m,/SQLITE_SCHEMA_VERSION/);
  assert.match(x,/SQLITE_SCHEMA_VERSION/);
+ assert.match(x,/runSqliteMigrations\(/,'the adapter runs the migrations when it opens the database');
 });
 
 test('encrypted backup uses authenticated encryption',()=>{
@@ -114,14 +118,14 @@ test('native notifications are isolated from core training',()=>{
 });
 
 test('app exposes accessibility controls and dialog semantics',()=>{
- const x=read('src/main.tsx');
+ const x=uiSource();
  assert.match(x,/Reduce motion/);
  assert.match(x,/aria-modal="true"/);
  assert.match(x,/aria-label="Ask APEX Coach"/);
 });
 
 test('app exposes keyboard-safe editable control handling',()=>{
- const x=read('src/main.tsx');
+ const x=uiSource();
 
  assert.match(x,/document\.addEventListener\('focusin'/);
  assert.match(x,/scrollIntoView/);
@@ -129,7 +133,7 @@ test('app exposes keyboard-safe editable control handling',()=>{
 });
 
 test('app exposes Android lifecycle recovery handling',()=>{
- const x=read('src/main.tsx');
+ const x=uiSource();
 
  assert.match(x,/appStateChange/);
  assert.match(x,/visibilitychange/);
@@ -139,14 +143,14 @@ test('app exposes Android lifecycle recovery handling',()=>{
 });
 
 test('app records background interruption and recovery events',()=>{
- const x=read('src/main.tsx');
+ const x=uiSource();
 
  assert.match(x,/workout_backgrounded/);
  assert.match(x,/workout_recovered/);
 });
 
 test('app keeps the final header focused on APEX and Search',()=>{
- const x=read('src/main.tsx');
+ const x=uiSource();
 
  assert.match(x,/className="[^"]*\btopbar\b[^"]*"/);
  assert.match(x,/className="[^"]*\bbrand\b[^"]*"/);

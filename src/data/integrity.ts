@@ -1,4 +1,4 @@
-import type {AppState, WorkoutStatus, SetLog} from '../core/types';
+import type {AppState, WorkoutStatus} from '../core/types';
 
 const statuses = new Set<WorkoutStatus>(['planned','in_progress','completed','skipped','missed','rescheduled','extra']);
 const setTypes = new Set(['warmup','working','drop','failure','amrap','rest_pause','myo_reps','tempo','cluster','timed','bodyweight','assisted','unilateral']);

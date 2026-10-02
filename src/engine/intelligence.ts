@@ -2,7 +2,7 @@ import type {AppState, Observation, Workout} from '../core/types';
 import type {CoachContext, CoachResult} from '../coach/types';
 import {runCoachDecision} from '../coach/decisionPipeline';
 import {volumeForWorkout, summarizeSets, workloadFatigue, chronologicalCompleted, progression, isWorkingSet} from './training';
-import {localDate,addDaysLocal,workoutDay} from '../data/dates';
+import {localDate,addDaysLocal,workoutDay,dayOfTimestamp} from '../data/dates';
 import {coachEvidenceFromState} from '../coach/signals';
 
 export type EvidenceGrade='high'|'medium'|'low';
@@ -52,7 +52,7 @@ export function buildObservations(s:AppState):Observation[]{
 }
 
 export function adaptationsForWorkout(s:AppState,w:Workout):Adaptation[]{
- const out:Adaptation[]=[]; const read=readiness(s);
+ const out:Adaptation[]=[];
  for(const we of w.exercises){
    const ex=s.exercises.find(e=>e.id===we.exerciseId); if(!ex)continue;
    const history=exerciseHistory(s,ex.id).filter(x=>x.workout.id!==w.id).slice(-4);
@@ -207,7 +207,7 @@ export function buildCoachContext(
         .map(item=>`${item.workout.id}:${item.entry.exerciseId}`)
     : [];
 
-  const coachEvidence=coachEvidenceFromState(s, (options.now||new Date().toISOString()).slice(0,10), exercise);
+  const coachEvidence=coachEvidenceFromState(s, dayOfTimestamp(options.now||new Date().toISOString())||localDate(), exercise);
 
   return {
     state:s,

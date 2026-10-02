@@ -3,6 +3,7 @@
  * Phase 5 / Objective 28: structured safety metadata. Descriptive and conservative, separate from load and progression,
  * and never a medical claim. Missing metadata says so instead of implying safety.
  */
+const { uiSource } = require('./ui-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -108,7 +109,7 @@ test('SM7 the deterministic engine and the Coach pipeline do not read safety met
 });
 
 test('SM8 the exercise screen shows the recorded notes, the modifications and the boundary statement', () => {
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src/main.tsx'), 'utf8');
+  const main = uiSource();
   assert.match(main, /explainSafety\(ex\)/);
   assert.match(main, /note\.boundary/);
   assert.match(main, /note\.modifications/);

@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 
+const { uiSource } = require('./ui-source.cjs');
 const root=path.resolve(__dirname,'..');
 
 const read=(file)=>
@@ -11,13 +12,9 @@ const read=(file)=>
     'utf8'
   );
 
-const notifications=read(
-  'src/native/localNotifications.ts'
-);
+const notifications=read('src/native/localNotifications.ts')+read('src/engine/notifications.ts');
 
-const main=read(
-  'src/main.tsx'
-);
+const main=uiSource();
 
 const pkg=JSON.parse(
   read('package.json')

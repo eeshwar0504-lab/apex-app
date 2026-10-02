@@ -1,0 +1,309 @@
+[
+  {
+    "name": "machine chest press, 60 kg stack",
+    "id": "machine_chest_press",
+    "working": 60,
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 30,
+          "reps": 8,
+          "fraction": 0.5
+        },
+        {
+          "kind": "ramp",
+          "load": 45,
+          "reps": 5,
+          "fraction": 0.75
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "machine chest press after a barbell press (prepared)",
+    "id": "machine_chest_press",
+    "working": 60,
+    "prepared": [
+      "chest",
+      "triceps",
+      "front delts"
+    ],
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 40,
+          "reps": 5,
+          "fraction": 0.7
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "barbell back squat, 100 kg, 20 kg bar",
+    "id": "barbell_back_squat",
+    "working": 100,
+    "profile": {
+      "barbellBarKg": 20
+    },
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 40,
+          "reps": 8,
+          "fraction": 0.4
+        },
+        {
+          "kind": "ramp",
+          "load": 60,
+          "reps": 6,
+          "fraction": 0.6
+        },
+        {
+          "kind": "ramp",
+          "load": 80,
+          "reps": 3,
+          "fraction": 0.8
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "barbell back squat, 30 kg, 20 kg bar (nothing under the bar)",
+    "id": "barbell_back_squat",
+    "working": 30,
+    "profile": {
+      "barbellBarKg": 20
+    },
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 22.5,
+          "reps": 3,
+          "fraction": 0.8
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "barbell bench press on a custom plate list",
+    "id": "barbell_bench_press",
+    "working": 60,
+    "profile": {
+      "loadIncrementsKg": {
+        "barbell": [
+          20,
+          30,
+          40,
+          50,
+          60,
+          70,
+          80
+        ]
+      }
+    },
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 30,
+          "reps": 8,
+          "fraction": 0.5
+        },
+        {
+          "kind": "ramp",
+          "load": 40,
+          "reps": 5,
+          "fraction": 0.75
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "barbell bench press where the list has nothing light enough for 50%",
+    "id": "barbell_bench_press",
+    "working": 80,
+    "profile": {
+      "loadIncrementsKg": {
+        "barbell": [
+          60,
+          65,
+          70,
+          75,
+          80
+        ]
+      }
+    },
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 60,
+          "reps": 5,
+          "fraction": 0.75
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "dumbbell bench press on real dumbbells",
+    "id": "dumbbell_bench_press",
+    "working": 32,
+    "profile": {
+      "loadIncrementsKg": {
+        "dumbbell": [
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32
+        ]
+      }
+    },
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 16,
+          "reps": 8,
+          "fraction": 0.5
+        },
+        {
+          "kind": "ramp",
+          "load": 24,
+          "reps": 5,
+          "fraction": 0.75
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "light lateral raise",
+    "id": "dumbbell_lateral_raise",
+    "working": 4,
+    "expect": {
+      "sets": [],
+      "reason": "light_load"
+    }
+  },
+  {
+    "name": "bicep curl, first for the biceps",
+    "id": "dumbbell_bicep_curl",
+    "working": 10,
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 6,
+          "reps": 6,
+          "fraction": 0.6
+        }
+      ],
+      "reason": "isolation_prep"
+    }
+  },
+  {
+    "name": "leg press, heavy total load",
+    "id": "leg_press",
+    "working": 100,
+    "expect": {
+      "sets": [
+        {
+          "kind": "ramp",
+          "load": 40,
+          "reps": 8,
+          "fraction": 0.4
+        },
+        {
+          "kind": "ramp",
+          "load": 60,
+          "reps": 6,
+          "fraction": 0.6
+        },
+        {
+          "kind": "ramp",
+          "load": 80,
+          "reps": 3,
+          "fraction": 0.8
+        }
+      ],
+      "reason": "ramp"
+    }
+  },
+  {
+    "name": "assisted pull-up, 30 kg assistance",
+    "id": "assisted_pullup",
+    "working": 30,
+    "expect": {
+      "sets": [
+        {
+          "kind": "assisted",
+          "load": 35,
+          "reps": 5
+        }
+      ],
+      "reason": "assisted_prep"
+    }
+  },
+  {
+    "name": "assisted pull-up on a custom list",
+    "id": "assisted_pullup",
+    "working": 30,
+    "profile": {
+      "loadIncrementsKg": {
+        "assisted_pullup": [
+          10,
+          20,
+          30,
+          40,
+          50
+        ]
+      }
+    },
+    "expect": {
+      "sets": [
+        {
+          "kind": "assisted",
+          "load": 50,
+          "reps": 5
+        }
+      ],
+      "reason": "assisted_prep"
+    }
+  },
+  {
+    "name": "push-up (bodyweight)",
+    "id": "push_up",
+    "working": 0,
+    "expect": {
+      "sets": [
+        {
+          "kind": "movement",
+          "reps": 5
+        }
+      ],
+      "reason": "movement_prep"
+    }
+  },
+  {
+    "name": "plank (timed)",
+    "id": "plank",
+    "expect": {
+      "sets": [],
+      "reason": "no_load"
+    }
+  }
+]

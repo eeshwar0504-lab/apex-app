@@ -67,8 +67,8 @@ test('AI gateway exposes grounded uncertainty rather than unrestricted authority
  assert.match(x,/deterministic engine remains authoritative/);
 });
 
-test('coach gateway preserves the deterministic training boundary',()=>{
- const x=read('src/engine/coachGateway.ts');
+test('coach preserves the deterministic training boundary',()=>{
+ const x=read('src/coach/coach.ts')+read('src/coach/askCoach.ts')+read('src/coach/decisionPipeline.ts');
  assert.ok(
    /grounded/i.test(x) ||
    /deterministic/i.test(x) ||

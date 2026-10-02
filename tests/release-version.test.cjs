@@ -4,6 +4,7 @@
  * package.json is the source; the lock file root, Android versionName, the app label, the README and BUILD_STATUS follow it,
  * and the in-app version text is read from package.json rather than typed in.
  */
+const { uiSource } = require('./ui-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,8 +12,8 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
-const RELEASE = '4.0.0';
-const PREVIOUS_VERSION_CODE = 6; // 3.1.2
+const RELEASE = '4.1.0';
+const PREVIOUS_VERSION_CODE = 7; // 4.0.0
 
 test('Release version: package.json is the release version', () => {
   assert.equal(JSON.parse(read('package.json')).version, RELEASE);
@@ -35,8 +36,8 @@ test('Release version: Android versionName matches and versionCode moved forward
 });
 
 test('Release version: the app reports the packaged version and the docs name the release', () => {
-  assert.match(read('src/main.tsx'), /import pkg from '\.\.\/package\.json'/);
-  assert.match(read('src/main.tsx'), /APEX \$\{pkg\.version\} summary/);
+  assert.match(uiSource(), /import pkg from '(?:\.\.\/)+package\.json'/);
+  assert.match(uiSource(), /APEX \$\{pkg\.version\} summary/);
   assert.match(read('README.md'), new RegExp(`^# APEX ${RELEASE.replace(/\./g, '\\.')}`));
   assert.match(read('BUILD_STATUS.md'), new RegExp(`^# APEX ${RELEASE.replace(/\./g, '\\.')} build status`));
 });

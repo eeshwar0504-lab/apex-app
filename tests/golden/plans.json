@@ -1,0 +1,323 @@
+{
+ "_about": "Golden exercise selection per profile (4 training days). Keys are equipment/experience/goal. Equipment sets are defined in tests/exercise-selection.test.cjs. A change here means a deliberate change to which exercises plans choose: review it, explain it in docs/KNOWLEDGE (selection section) and update this file in the same change.",
+ "full/beginner/general": {
+  "upper": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "cable_triceps_pushdown",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "leg_press",
+   "kettlebell_deadlift",
+   "leg_curl_machine",
+   "leg_extension",
+   "calf_raise_machine",
+   "plank"
+  ],
+  "full": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "leg_press",
+   "kettlebell_deadlift",
+   "leg_curl_machine"
+  ]
+ },
+ "full/intermediate/general": {
+  "upper": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "cable_triceps_pushdown",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "leg_press",
+   "romanian_deadlift",
+   "leg_curl_machine",
+   "leg_extension",
+   "calf_raise_machine",
+   "plank"
+  ],
+  "full": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "leg_press",
+   "romanian_deadlift",
+   "leg_curl_machine"
+  ]
+ },
+ "full/intermediate/strength": {
+  "upper": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "cable_triceps_pushdown",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "leg_press",
+   "romanian_deadlift",
+   "leg_curl_machine",
+   "leg_extension",
+   "calf_raise_machine",
+   "pallof_press"
+  ],
+  "full": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "leg_press",
+   "romanian_deadlift",
+   "leg_curl_machine"
+  ]
+ },
+ "full/beginner/strength": {
+  "upper": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "cable_triceps_pushdown",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "leg_press",
+   "kettlebell_deadlift",
+   "leg_curl_machine",
+   "leg_extension",
+   "calf_raise_machine",
+   "pallof_press"
+  ],
+  "full": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "leg_press",
+   "kettlebell_deadlift",
+   "leg_curl_machine"
+  ]
+ },
+ "limited/beginner/general": {
+  "upper": [
+   "dumbbell_bench_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "cable_triceps_pushdown",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "goblet_squat",
+   "hip_thrust",
+   "nordic_curl",
+   "standing_calf_raise",
+   "plank"
+  ],
+  "full": [
+   "dumbbell_bench_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "goblet_squat",
+   "hip_thrust",
+   "nordic_curl"
+  ]
+ },
+ "limited/intermediate/hypertrophy": {
+  "upper": [
+   "barbell_bench_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "cable_triceps_pushdown",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "goblet_squat",
+   "romanian_deadlift",
+   "nordic_curl",
+   "standing_calf_raise",
+   "pallof_press"
+  ],
+  "full": [
+   "barbell_bench_press",
+   "lat_pulldown",
+   "seated_cable_row",
+   "goblet_squat",
+   "romanian_deadlift",
+   "nordic_curl"
+  ]
+ },
+ "home/beginner/general": {
+  "upper": [
+   "dumbbell_bench_press",
+   "one_arm_dumbbell_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "overhead_triceps_extension",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "goblet_squat",
+   "glute_bridge",
+   "nordic_curl",
+   "standing_calf_raise",
+   "plank"
+  ],
+  "full": [
+   "dumbbell_bench_press",
+   "one_arm_dumbbell_row",
+   "dumbbell_shoulder_press",
+   "goblet_squat",
+   "glute_bridge",
+   "nordic_curl"
+  ]
+ },
+ "minimal/beginner/general": {
+  "upper": [
+   "push_up",
+   "bodyweight_squat",
+   "glute_bridge",
+   "nordic_curl"
+  ],
+  "lower": [
+   "bodyweight_squat",
+   "glute_bridge",
+   "nordic_curl",
+   "leg_calf_bodyweight",
+   "plank"
+  ],
+  "full": [
+   "push_up",
+   "bodyweight_squat",
+   "glute_bridge",
+   "nordic_curl"
+  ]
+ },
+ "machine/beginner/general": {
+  "upper": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "chest_supported_row",
+   "machine_shoulder_press"
+  ],
+  "lower": [
+   "leg_press",
+   "hip_thrust",
+   "leg_curl_machine",
+   "leg_extension",
+   "calf_raise_machine",
+   "plank"
+  ],
+  "full": [
+   "machine_chest_press",
+   "lat_pulldown",
+   "chest_supported_row",
+   "leg_press",
+   "hip_thrust",
+   "leg_curl_machine"
+  ]
+ },
+ "barbell/intermediate/strength": {
+  "upper": [
+   "barbell_bench_press",
+   "barbell_row",
+   "overhead_barbell_press"
+  ],
+  "lower": [
+   "barbell_back_squat",
+   "romanian_deadlift",
+   "nordic_curl",
+   "leg_calf_bodyweight",
+   "plank"
+  ],
+  "full": [
+   "barbell_bench_press",
+   "barbell_row",
+   "overhead_barbell_press",
+   "barbell_back_squat",
+   "romanian_deadlift",
+   "nordic_curl"
+  ]
+ },
+ "barbell/beginner/general": {
+  "upper": [
+   "push_up",
+   "barbell_row",
+   "overhead_barbell_press"
+  ],
+  "lower": [
+   "bodyweight_squat",
+   "hip_thrust",
+   "nordic_curl",
+   "leg_calf_bodyweight",
+   "plank"
+  ],
+  "full": [
+   "push_up",
+   "barbell_row",
+   "overhead_barbell_press",
+   "bodyweight_squat",
+   "hip_thrust",
+   "nordic_curl"
+  ]
+ },
+ "kb/beginner/general": {
+  "upper": [
+   "push_up",
+   "goblet_squat",
+   "kettlebell_deadlift",
+   "nordic_curl"
+  ],
+  "lower": [
+   "goblet_squat",
+   "kettlebell_deadlift",
+   "nordic_curl",
+   "leg_calf_bodyweight",
+   "plank"
+  ],
+  "full": [
+   "push_up",
+   "goblet_squat",
+   "kettlebell_deadlift",
+   "nordic_curl"
+  ]
+ },
+ "dbbench/beginner/general": {
+  "upper": [
+   "dumbbell_bench_press",
+   "one_arm_dumbbell_row",
+   "dumbbell_shoulder_press",
+   "dumbbell_bicep_curl",
+   "overhead_triceps_extension",
+   "dumbbell_lateral_raise"
+  ],
+  "lower": [
+   "goblet_squat",
+   "hip_thrust",
+   "nordic_curl",
+   "standing_calf_raise",
+   "plank"
+  ],
+  "full": [
+   "dumbbell_bench_press",
+   "one_arm_dumbbell_row",
+   "dumbbell_shoulder_press",
+   "goblet_squat",
+   "hip_thrust",
+   "nordic_curl"
+  ]
+ }
+}

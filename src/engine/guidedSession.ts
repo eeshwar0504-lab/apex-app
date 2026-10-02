@@ -5,8 +5,13 @@ import {
   snapToAvailableLoad,
   setLoad,
   recommendedRest,
-  loadDetailForSet,
 } from './training';
+import { WARMUP_RULES } from './warmup';
+
+const WARMUP_REST_SEC = WARMUP_RULES.restSec;
+
+/** A set the athlete still has to do: not completed, and not a warm-up they skipped (a skipped warm-up never blocks a session). */
+const pending = (set: SetLog) => !set.completed && !(set.type === 'warmup' && set.disposition === 'skipped');
 
 export type GuidedPhase =
   | 'prep'
@@ -18,6 +23,7 @@ export type GuidedPhase =
   | 'exercise_complete'
   | 'complete';
 
+type RestPreference = Parameters<typeof recommendedRest>[1];
 type GuidedSession = NonNullable<Workout['guidedSession']>;
 
 export type GuidedTransitionResult = {
@@ -69,7 +75,7 @@ export function normalizeGuidedPosition(workout: Workout): Workout {
       const exercise = c.exercises[i];
       if (exercise.status === 'skipped') continue;
 
-      const nextSet = exercise.sets.findIndex((set) => !set.completed);
+      const nextSet = exercise.sets.findIndex(pending);
       if (nextSet >= 0) {
         return { exerciseIndex: i, setIndex: nextSet };
       }
@@ -82,7 +88,8 @@ export function normalizeGuidedPosition(workout: Workout): Workout {
   if (
     !currentExercise ||
     currentExercise.status === 'skipped' ||
-    currentExercise.sets[setIndex]?.completed
+    currentExercise.sets[setIndex]?.completed ||
+    (currentExercise.sets[setIndex] !== undefined && !pending(currentExercise.sets[setIndex]) && currentExercise.sets[setIndex].type === 'warmup')
   ) {
     const next = findNext(exerciseIndex);
     const first = next || findNext(0);
@@ -112,7 +119,7 @@ export function nextIncompleteSet(
   if (!exercise) return -1;
 
   return exercise.sets.findIndex(
-    (set, index) => index > afterSetIndex && !set.completed,
+    (set, index) => index > afterSetIndex && pending(set),
   );
 }
 
@@ -124,7 +131,7 @@ export function nextIncompleteExercise(
     (exercise, index) =>
       index > afterExerciseIndex &&
       exercise.status !== 'skipped' &&
-      exercise.sets.some((set) => !set.completed),
+      exercise.sets.some(pending),
   );
 }
 
@@ -170,6 +177,29 @@ export function completeSet(
   set.completed = true;
   set.timestamp = at;
 
+  /*
+   * A warm-up is not training evidence, so it never opens the "how did that feel" step (that feedback adjusts the working
+   * load). It goes straight to a short rest, and nothing about the working prescription is touched.
+   */
+  if (set.type === 'warmup') {
+    c.guidedSession = {
+      ...gs,
+      completedSetIds: Array.from(new Set([...(gs.completedSetIds || []), set.id])),
+      phase: 'rest',
+      exerciseIndex,
+      setIndex,
+      updatedAt: at,
+      version: gs.version + 1,
+    };
+    Object.assign(c.guidedSession as any, {
+      restStartedAt: at,
+      restTargetSec: WARMUP_REST_SEC,
+      workStartedAt: undefined,
+      workTargetSec: undefined,
+    });
+    return c;
+  }
+
   c.guidedSession = {
     ...gs,
     completedSetIds: Array.from(
@@ -198,6 +228,7 @@ export function applySetFeedback(
   profile: any,
   targetRir?: number,
   at = new Date().toISOString(),
+  preferences?: { restPreference?: RestPreference; restCustomSec?: number },
 ): Workout {
   const c = structuredClone(workout);
   const gs = completeGuidedSession(c.guidedSession);
@@ -300,8 +331,8 @@ export function applySetFeedback(
     restStartedAt: at,
     restTargetSec: recommendedRest(
       exercise,
-      profile?.restPreference,
-      profile?.restCustomSec,
+      preferences?.restPreference ?? 'adaptive',
+      preferences?.restCustomSec,
       activeSet.rir,
     ),
     workStartedAt: undefined,
@@ -395,9 +426,7 @@ export function advanceToNextExercise(
   const requested = Number((gs as any).nextExerciseIndex);
 
   if (Number.isInteger(requested) && requested >= 0) {
-    const nextSet = c.exercises[requested]?.sets.findIndex(
-      (set) => !set.completed,
-    );
+    const nextSet = c.exercises[requested]?.sets.findIndex(pending);
 
     if (nextSet !== undefined && nextSet >= 0) {
       c.guidedSession = {
@@ -419,9 +448,7 @@ export function advanceToNextExercise(
   );
 
   if (fallback >= 0) {
-    const nextSet = c.exercises[fallback].sets.findIndex(
-      (set) => !set.completed,
-    );
+    const nextSet = c.exercises[fallback].sets.findIndex(pending);
 
     c.guidedSession = {
       ...gs,

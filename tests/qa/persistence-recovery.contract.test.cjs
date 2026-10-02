@@ -1,3 +1,4 @@
+const { uiSource } = require('../ui-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,7 +19,7 @@ test('Persistence contract: SQLite adapter exists', () => {
 });
 
 test('Recovery contract: workout checkpoint/pause/resume/reopen semantics exist', () => {
-  const s = read('src/engine/training.ts') + read('src/main.tsx');
+  const s = read('src/engine/training.ts') + uiSource();
   for (const term of [/checkpoint/i,/pause/i,/resume/i,/reopen|recover/i]) assert.match(s, term);
 });
 

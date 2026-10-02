@@ -171,7 +171,8 @@ test('8-week simulated history renders across Home, Progress, History, Nutrition
   await expect(page.locator('.a3-home.a3-progress .a3-row').first()).toBeVisible();
   await page.getByRole('tab', { name: 'Overview' }).click();
   await noOverflow(page);
-  const sessions = await page.locator('.a3-progress .a3-stat').first().innerText();
+  // the overall card ("Sessions ... done"); the weekly analytics card above it has a Sessions stat of its own
+  const sessions = await page.locator('.a3-progress .a3-stat').filter({ hasText: /Sessions/ }).filter({ hasText: /done/ }).first().innerText();
   expect(sessions).toContain(String(sim.stats.workouts));
 
   await page.getByRole('tab', { name: 'PRs' }).click();
@@ -356,13 +357,15 @@ test('return to training: a 30-day gap is explained in the app and the load is l
   expect(body).toMatch(/Return to training after 30 days/);
   expect(body).toMatch(/55 kg stack/);
   // set-ready screen: the set itself must carry the same load (not a stale pre-filled one)
-  await page.getByRole('button', { name: /START SET/i }).first().click();
+  await reachFirstWorkingSet(page);
   body = await page.locator('body').innerText();
   expect(body).toMatch(/55 kg stack/);
   expect(body).not.toMatch(/10 kg stack/);
   const active = await readState(page);
   const w = active.workouts.find((x: any) => x.status === 'in_progress');
-  expect(w.exercises[0].sets.every((x: any) => x.weight === 55)).toBe(true);
+  const working = w.exercises[0].sets.filter((x: any) => x.type !== 'warmup'); // warm-ups carry their own lighter loads
+  expect(working.length).toBeGreaterThan(0);
+  expect(working.every((x: any) => x.weight === 55)).toBe(true);
   expect(errors, errors.join('\n')).toEqual([]);
 });
 
@@ -446,14 +449,32 @@ test('Phase 1 correctness: the progression decision reaches the set screen and f
   let body = await page.locator('body').innerText();
   expect(body).toMatch(/30 kg stack/);
   expect(body).not.toMatch(/10 kg stack/);
-  await page.getByRole('button', { name: /START SET/i }).first().click();
+  await reachFirstWorkingSet(page);
   body = await page.locator('body').innerText();
   expect(body).toMatch(/30 kg stack/);
   const active = await readState(page);
   const w = active.workouts.find((x: any) => x.status === 'in_progress');
-  expect(w.exercises[0].sets.every((x: any) => x.weight === 30)).toBe(true);
+  const working = w.exercises[0].sets.filter((x: any) => x.type !== 'warmup');
+  expect(working.length).toBeGreaterThan(0);
+  expect(working.every((x: any) => x.weight === 30)).toBe(true);
   expect(errors, errors.join('\n')).toEqual([]);
 });
+
+/* Heavy lifts start with warm-up sets (Phase 13). Log them, and the rests between, until the first working set is on screen. */
+async function reachFirstWorkingSet(page: Page) {
+  for (let step = 0; step < 40; step++) {
+    if (await page.getByText(/^SET 1 \/ \d/).first().isVisible().catch(() => false)) return;
+    const skipRest = page.getByRole('button', { name: 'SKIP REST', exact: true });
+    if (await skipRest.isVisible().catch(() => false)) { await skipRest.click(); continue; }
+    const startSet = page.getByRole('button', { name: /START SET/i }).first();
+    if (await startSet.isVisible().catch(() => false)) { await startSet.click(); continue; }
+    const logSet = page.getByRole('button', { name: 'Log set' });
+    if (await logSet.isVisible().catch(() => false)) { await logSet.click(); continue; }
+    const save = page.getByRole('button', { name: 'Save Set' }).first();
+    if (await save.isVisible().catch(() => false)) { await save.click(); continue; }
+    await page.waitForTimeout(150);
+  }
+}
 
 for (const [goal, range, load, action] of [['strength', '5–9 reps', '27.5 kg stack', 'increase'], ['general', '8–12 reps', '25 kg stack', 'hold'], ['fitness', '10–14 reps', '22.5 kg stack', 'reduce']] as const) {
   test(`goal programming (${goal}): the same 9-rep history prescribes ${action} against the ${range} target, on screen and in the saved workout`, async ({ page }) => {

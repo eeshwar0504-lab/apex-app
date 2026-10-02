@@ -4,8 +4,10 @@
 
 ## Evidence (state of the repository when this was decided)
 
-* There was no web app manifest and no service worker. `index.html` linked `/manifest.webmanifest`, a file that never
-  existed, so every load requested a missing resource. That dead link is removed.
+* There was no served web app manifest and no service worker. `index.html` linked `/manifest.webmanifest`, but the only
+  copy was a stray file at the repository root, outside `public/`, so the build never published it and every load
+  requested a missing resource. The dead link was removed, and the stray root file was deleted in Phase 7 so the
+  repository itself now matches this decision.
 * A half-started install-prompt type and unused state in `src/main.tsx` were removed with it.
 * The app's persistence is `localStorage` (`apex-state-v4`) with a native SQLite single-row store on Android. Neither is
   designed for a browser install: browsers may evict `localStorage` for sites that are not installed or are under storage

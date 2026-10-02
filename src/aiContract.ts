@@ -14,6 +14,9 @@ import {MEDICAL_CLAIM_PATTERN} from './engine/exerciseSafety';
  * can write training state, and a test enforces that.
  */
 
+/** The version of this contract (the context a provider receives and the one output shape it may return). A reply that names another version is rejected. */
+export const AI_CONTRACT_VERSION = 1;
+
 export type Confidence = 'low' | 'medium' | 'high';
 
 export interface GroundedFact {
@@ -78,7 +81,7 @@ export interface AIStructuredOutput {
   requestedClarification?: string;
 }
 
-const ALLOWED_KEYS = new Set(['response', 'groundedClaims', 'uncertainties', 'requestedClarification']);
+const ALLOWED_KEYS = new Set(['contractVersion', 'response', 'groundedClaims', 'uncertainties', 'requestedClarification']);
 export const AI_LIMITS = {responseMax: 1200, claimsMax: 12, claimMax: 300, uncertaintiesMax: 8, uncertaintyMax: 300, clarificationMax: 300};
 
 export type ParseResult = {ok: true; output: AIStructuredOutput} | {ok: false; reason: 'not_json' | 'not_object' | 'forbidden_field' | 'bad_shape' | 'too_long'; detail: string};
@@ -95,6 +98,7 @@ export function parseAIOutput(raw: unknown): ParseResult {
   const record = parsed as Record<string, unknown>;
   const extra = Object.keys(record).filter(key => !ALLOWED_KEYS.has(key));
   if (extra.length) return {ok: false, reason: 'forbidden_field', detail: `fields outside the contract: ${extra.sort().join(', ')}`};
+  if (record.contractVersion !== undefined && record.contractVersion !== AI_CONTRACT_VERSION) return {ok: false, reason: 'bad_shape', detail: `unsupported contract version ${String(record.contractVersion).slice(0, 20)}`};
   const response = text(record.response, AI_LIMITS.responseMax);
   if (!response) return {ok: false, reason: 'bad_shape', detail: 'response must be non-empty text'};
   if (response.length > AI_LIMITS.responseMax) return {ok: false, reason: 'too_long', detail: 'response is too long'};
@@ -125,7 +129,7 @@ export function parseAIOutput(raw: unknown): ParseResult {
   };
 }
 
-export type RemovalReason = 'prescription_value' | 'prescription_directive' | 'medical_claim' | 'invented_history' | 'exercise_not_a_candidate' | 'exercise_unavailable';
+export type RemovalReason = 'invented_recovery' | 'conflicting_decision' | 'irrelevant' | 'prescription_value' | 'prescription_directive' | 'medical_claim' | 'invented_history' | 'exercise_not_a_candidate' | 'exercise_unavailable';
 
 export interface VettedAIOutput {
   /** Text safe to show: only sentences that passed every check. Empty when nothing survived. */
@@ -143,6 +147,29 @@ const IMPERATIVE_NOW = /\b(i've|i have|i will|i'll|let me)\s+(set|changed|update
 const MEDICAL_SAFETY = /\b(medically|clinically)\s+(safe|fine|cleared)\b|\b(safe|fine|ok(?:ay)?)\s+(for you|to (do|continue|train))\b|\b(is|are)\s+(not\s+)?(un)?safe\b|\bno\s+risk\b|\bcleared\s+(to|for)\b/i;
 /** Named conditions and injuries. The AI may not introduce one the grounded context does not already contain: that would be a diagnosis. */
 const CONDITION_TERMS = /\b(injur\w*|tear|torn|strain(?:ed)?|sprain(?:ed)?|tendin\w*|impingement|herniat\w*|slipped disc|fractur\w*|arthrit\w*|rotator cuff|sciatica|bursitis|syndrome|disorder|osteo\w*|hypertension|diabet\w*)\b/i;
+/** Recovery data the AI was never given (check-in values are not part of any grounded context): a figure about sleep, heart rate, HRV or readiness is invented unless the context states it. */
+const RECOVERY_FIGURE = /\b(hrv|heart rate|resting heart|sleep(?:ing)?|slept|readiness|soreness|recovery score|fatigue score|stress)\b[^.!?]{0,50}?\d|\d+(?:\.\d+)?\s?(?:hours?|hrs?|bpm|ms)\b/i;
+
+/** Decisions the engine owns. A sentence that asserts one is kept only if the grounded context says the same (same stance); otherwise it contradicts or invents an engine decision. */
+const DECISION_TOPICS: {topic: RegExp; assertion: RegExp}[] = [
+  {topic: /\b(deload|lighter week|recovery week)\b/i, assertion: /\b(recommend\w*|should|need\w*|must|time (?:for|to)|advis\w*|suggest\w*|required)\b/i},
+  {topic: /\b(progress|progression|increase (?:the )?(?:load|weight)|add weight|move up|heavier)\b/i, assertion: /\b(ready|time to|should|can now|you(?:'re| are) (?:progressing|improving)|hold|holding|keep)\b/i},
+  {topic: /\b(plateau\w*|stall\w*|stuck)\b/i, assertion: /\b(you(?:'re| are)|is|are|have|has|been|isn't|aren't|not)\b/i}
+];
+const NEGATION = /\b(not|no|isn't|aren't|doesn't|don't|without|never|hold|holding|keep|unchanged)\b/i;
+const stanceOf = (sentence: string) => (NEGATION.test(sentence) ? 'neg' : 'pos');
+function decisionStances(contextText: string): Map<number, Set<string>> {
+  const out = new Map<number, Set<string>>();
+  const sentences = contextText.split(/(?<=[.!?])\s+/);
+  DECISION_TOPICS.forEach((rule, index) => {
+    const set = new Set<string>();
+    for (const sentence of sentences) if (rule.topic.test(sentence)) set.add(stanceOf(sentence));
+    out.set(index, set);
+  });
+  return out;
+}
+const words = (value: string) => new Set((value.toLowerCase().match(/[a-z]{4,}/g) || []));
+
 const DATE_TOKEN = /\b\d{4}-\d{2}-\d{2}\b/g;
 const RELATIVE_HISTORY = /\b(last|previous|yesterday|on)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|session|workout|week)\b/i;
 
@@ -181,6 +208,10 @@ export function vetAIOutput(output: AIStructuredOutput, context: GroundedAIConte
   const allowed = new Map<string, GroundedCandidate>();
   for (const candidate of context.candidates) allowed.set(candidate.id, candidate);
   if (context.exercise) allowed.set(context.exercise.id, {id: context.exercise.id, name: context.exercise.name, relation: 'current'});
+  const stances = decisionStances(contextText);
+  // a recovery figure is only acceptable if the context itself states that figure about recovery; a number that happens to occur elsewhere does not count
+  const recoveryNumbers = numbersOf(contextText.split(/(?<=[.!?])\s+/).filter(sentence => RECOVERY_FIGURE.test(sentence)).join(' '));
+  const contextWords = words(contextText);
   const byName = [...options.exercises].sort((a, b) => b.name.length - a.name.length);
 
   const removed: VettedAIOutput['removed'] = [];
@@ -189,12 +220,23 @@ export function vetAIOutput(output: AIStructuredOutput, context: GroundedAIConte
   for (const sentence of sentences) {
     const lower = normalize(sentence);
     let reason: RemovalReason | undefined;
-    if (MEDICAL_SAFETY.test(sentence) || MEDICAL_CLAIM_PATTERN.test(sentence) || (CONDITION_TERMS.test(sentence) && !CONDITION_TERMS.test(contextText))) reason = 'medical_claim';
+    if (RECOVERY_FIGURE.test(sentence) && !(sentence.match(/\d+(?:\.\d+)?/g) || []).every(n => recoveryNumbers.has(String(Number(n))))) reason = 'invented_recovery';
+    else if (MEDICAL_SAFETY.test(sentence) || MEDICAL_CLAIM_PATTERN.test(sentence) || (CONDITION_TERMS.test(sentence) && !CONDITION_TERMS.test(contextText))) reason = 'medical_claim';
     else if (IMPERATIVE_NOW.test(sentence) || isDirective(sentence)) reason = 'prescription_directive';
     else {
       const values = [...sentence.matchAll(NUMBER_WITH_UNIT)].map(m => String(Number(m[1])));
       if (values.some(value => !knownNumbers.has(value))) reason = 'prescription_value';
       else if ((sentence.match(DATE_TOKEN) || []).some(day => !knownDates.has(day)) || (RELATIVE_HISTORY.test(sentence) && !RELATIVE_HISTORY.test(contextText))) reason = 'invented_history';
+      else {
+        DECISION_TOPICS.forEach((rule, index) => {
+          if (reason || !rule.topic.test(sentence) || !rule.assertion.test(sentence)) return;
+          if (!stances.get(index)!.has(stanceOf(sentence))) reason = 'conflicting_decision';
+        });
+        if (!reason && sentence.split(/\s+/).length >= 6) {
+          const own = words(sentence);
+          if (own.size >= 3 && ![...own].some(w => contextWords.has(w))) reason = 'irrelevant';
+        }
+      }
     }
     if (!reason) {
       for (const ex of byName) {

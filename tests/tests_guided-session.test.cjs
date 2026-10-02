@@ -162,3 +162,21 @@ test('after feedback, the next set is selected before the next exercise',()=>{
 });
 
 console.log('guided-session tests: PASS');
+
+test('rest after set feedback honours state.preferences (restPreference / restCustomSec), not the profile',()=>{
+  const ex={id:'ex1',name:'Test Machine',equipment:['machine'],loadSemantics:'machine',repRange:[8,12],restSec:90};
+  const rest=(preferences,profile={})=>{
+    let w=workout([set('s1'),set('s2'),set('s3')]);
+    w=engine.completeSet(w,0,0,'2026-09-26T10:01:00.000Z');
+    return engine.applySetFeedback(w,ex,0,0,'right',profile,2,'2026-09-26T10:02:00.000Z',preferences).guidedSession.restTargetSec;
+  };
+  assert.equal(rest({restPreference:'short'}),60);
+  assert.equal(rest({restPreference:'standard'}),90);
+  assert.equal(rest({restPreference:'long'}),120);
+  assert.equal(rest({restPreference:'custom',restCustomSec:100}),100);
+  assert.equal(rest(undefined),90,'no preferences: the adaptive default');
+  assert.equal(rest({restPreference:'adaptive'}),90);
+  // a stray restPreference on the profile object is never the authority
+  assert.equal(rest({restPreference:'long'},{restPreference:'short',restCustomSec:45}),120);
+  assert.equal(rest(undefined,{restPreference:'long'}),90);
+});

@@ -5,11 +5,8 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 
-const readMain = () =>
-  fs.readFileSync(
-    path.join(root, 'src/main.tsx'),
-    'utf8'
-  );
+const { uiSource } = require('./ui-source.cjs');
+const readMain = () => uiSource();
 
 test(
   'onboarding requires explicit core choices instead of fake defaults',
@@ -118,7 +115,7 @@ test(
     );
 
     assert.ok(
-      src.includes('createWorkout'),
+      src.includes('generateRollingWorkouts'),
       'plan creation should invoke workout generation'
     );
   }

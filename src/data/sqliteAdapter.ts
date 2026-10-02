@@ -13,13 +13,16 @@ import {
   SQLiteConnection,
   type SQLiteDBConnection,
 } from '@capacitor-community/sqlite';
+import { SQLITE_SCHEMA_VERSION, runSqliteMigrations } from './sqliteMigrations';
 
-export const SQLITE_SCHEMA_VERSION = 4;
+export { SQLITE_SCHEMA_VERSION };
 
 export class ApexSQLiteStore {
   private readonly connection = new SQLiteConnection(CapacitorSQLite);
 
   private db?: SQLiteDBConnection;
+
+  private openFailure?: unknown;
 
   /**
    * SQLite is a native persistence implementation.
@@ -47,46 +50,33 @@ export class ApexSQLiteStore {
       return undefined;
     }
 
+    if (this.openFailure) {
+      throw this.openFailure;
+    }
+
     if (this.db) {
       return this.db;
     }
 
-    this.db = await this.connection.createConnection(
-      'apex',
-      false,
-      'no-encryption',
-      1,
-      false
-    );
-
-    await this.db.open();
-
-    await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS app_state (
-        id INTEGER PRIMARY KEY CHECK(id=1),
-        schema_version INTEGER NOT NULL,
-        payload TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+    try {
+      const db = await this.connection.createConnection(
+        'apex',
+        false,
+        'no-encryption',
+        1,
+        false
       );
-    `);
 
-    await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        applied_at TEXT NOT NULL
-      );
-    `);
+      await db.open();
 
-    const applied = await this.db.query(
-      'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1'
-    );
-    const highestApplied = Number(applied.values?.[0]?.version ?? 0);
+      // the version history is owned by sqliteMigrations.ts; a database from a newer app throws and is left untouched
+      await runSqliteMigrations(db);
 
-    if (highestApplied < SQLITE_SCHEMA_VERSION) {
-      await this.db.run(
-        'INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)',
-        [SQLITE_SCHEMA_VERSION, new Date().toISOString()]
-      );
+      this.db = db;
+    } catch (error) {
+      // never hand out a connection that did not finish migrating: later reads and writes fail the same way
+      this.openFailure = error;
+      throw error;
     }
 
     return this.db;
@@ -174,12 +164,13 @@ export class ApexSQLiteStore {
         )
         VALUES(
           1,
-          4,
+          ?,
           ?,
           ?
         )
       `,
       [
+        SQLITE_SCHEMA_VERSION,
         payload,
         new Date().toISOString(),
       ]

@@ -66,7 +66,7 @@ function run(ctx) {
       out.push(rec('plateau', 'plateau evidence reaches the Coach: explained with options, honest confidence, user stays in control', reached && res.decision.confidence === 'medium' ? 'pass' : 'fail', { action: res.decision.action, confidence: res.decision.confidence }, seed));
       const unchanged = JSON.stringify(plateauState) === before && JSON.stringify(T.personalizedLoad(chest, plateauState.workouts, plateauState.profile, exercises, '2026-02-05')) === JSON.stringify(loadBefore) && loadBefore.weight === 30 && res.decision.prescription.weight === undefined;
       out.push(rec('plateau', 'a plateau never silently changes state or the prescribed load (load stays 30 during the plateau)', unchanged ? 'pass' : 'fail', { loadBefore: loadBefore.weight }, seed));
-      const mainSrc = require('node:fs').readFileSync(require('node:path').join(require('../load-engine.cjs').root, 'src/main.tsx'), 'utf8');
+      const mainSrc = require('../../ui-source.cjs').uiSource();
       out.push(rec('plateau', 'the Coach screen supplies plateau, recovery and exercise context to evidence collection', /coachEvidenceFromState\(s,today\(\),(?:focusEx|exercise)\)/.test(mainSrc) ? 'pass' : 'fail', {}, seed));
     }
     const breakthrough = T.progression(chest, [...history, set(30, 12, 1), set(30, 12, 1), set(30, 12, 1)]);
@@ -117,7 +117,7 @@ function run(ctx) {
         const without = E.coachMod.coach(base).decision;
         return JSON.stringify(a) === JSON.stringify(b) && withCtx.action === without.action && withCtx.evidence.some((e) => e.id === 'e_recovery');
       })() ? 'pass' : 'fail', {}, seed));
-      const mainSrc2 = require('node:fs').readFileSync(require('node:path').join(require('../load-engine.cjs').root, 'src/main.tsx'), 'utf8');
+      const mainSrc2 = require('../../ui-source.cjs').uiSource();
       out.push(rec('recovery', 'a screen collects the recovery check-in and stores it through the validated boundary', /RecoveryCheckInCard/.test(mainSrc2) && /upsertRecoveryCheckIn/.test(mainSrc2) ? 'pass' : 'fail', {}, seed));
     }
   }
@@ -255,6 +255,179 @@ function run(ctx) {
     out.push(rec('metamorphic', 'reloading persisted state preserves subsequent deterministic behaviour', norm(a) === norm(b) ? 'pass' : 'fail', { roundTrips: a.log.persistenceChecks }, sc.seed));
   }
 
+  /* ---------- rolling workout generation (Phase 9): the real maintainTrainingHorizon over many athletes and weeks ---------- */
+  {
+    const { Rng } = require('../simulator/random.cjs');
+    const R = E.rolling;
+    const equipments = [EQUIPMENT.FULL, EQUIPMENT.LIMITED, EQUIPMENT.HOME, EQUIPMENT.MINIMAL];
+    const goals = ['general', 'strength', 'hypertrophy', 'fat_loss', 'fitness'];
+    const ymd = (n) => E.dates.addDaysLocal('2026-01-05', n);
+    const noon = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd, 12, 0).toISOString(); };
+    const finish = (w) => ({ ...structuredClone(w), status: 'completed', completedAt: noon(w.scheduledDate), updatedAt: noon(w.scheduledDate), exercises: w.exercises.map((e) => ({ ...e, sets: e.sets.map((x) => ({ ...x, completed: true, reps: e.repRange[1], rir: 2, weight: x.weight ?? e.recommendedWeight })) })) });
+
+    function simulate(athleteSeed) {
+      const rng = new Rng(athleteSeed);
+      const goal = rng.pick(goals), equipment = rng.pick(equipments), days = rng.int(2, 6);
+      const profile = { id: 'u', name: 'T', experience: 'beginner', goals: [goal], primaryGoal: goal, trainingDays: days, sessionMinutes: 45, equipment, body: {}, createdAt: noon(ymd(0)) };
+      const programmed = E.goalProgram.programExercises(exercises, goal);
+      const built = T.buildPlan(profile, programmed, [{ kind: goal }]);
+      const plan = { id: 'plan-roll', name: built.name, mode: 'continuous', days: built.days, version: 1, createdAt: noon(ymd(0)), updatedAt: noon(ymd(0)), exerciseSets: built.exerciseSets };
+      let state = { onboardingComplete: true, profile, plan, workouts: [], exercises: programmed, goals: [], preferences: {}, eventLog: [] };
+      const frozen = new Map();
+      const problems = [];
+      const total = Math.max(ctx.weeks, 8) * 7;
+      for (let day = 0; day < total; day++) {
+        const today = ymd(day), now = `${today}T12:00:00.000Z`;
+        state = R.maintainTrainingHorizon(state, { today, now });
+        if (R.maintainTrainingHorizon(state, { today, now }) !== state) problems.push(`day ${day}: a second call changed the state`);
+        const sched = state.workouts.filter((w) => w.source === 'scheduled');
+        const dates = sched.map((w) => w.scheduledDate);
+        if (new Set(dates).size !== dates.length) problems.push(`day ${day}: two scheduled workouts share a date`);
+        if (new Set(state.workouts.map((w) => w.id)).size !== state.workouts.length) problems.push(`day ${day}: duplicate workout id`);
+        for (let k = 0; k < 7; k++) {
+          const d = ymd(day + k);
+          if (R.templateDayFor(plan, d) && !dates.includes(d) && state.workouts.every((w) => w.scheduledDate !== d)) {
+            const trainable = (plan.exerciseSets.full || []).concat(plan.exerciseSets.upper || [], plan.exerciseSets.lower || []).some((id) => { const ex = programmed.find((e) => e.id === id); return ex && E.exerciseGraph.exerciseFitsEquipment(ex, equipment); });
+            if (trainable) problems.push(`day ${day}: template slot ${d} is not filled`);
+          }
+        }
+        for (const w of state.workouts) for (const e of w.exercises) {
+          const ex = programmed.find((x) => x.id === e.exerciseId);
+          if (w.status === 'planned' && w.scheduledDate >= today && ex && !E.exerciseGraph.exerciseFitsEquipment(ex, equipment)) problems.push(`day ${day}: ${e.exerciseId} does not fit the equipment`);
+        }
+        for (const [id, json] of frozen) if (JSON.stringify(state.workouts.find((w) => w.id === id)) !== json) problems.push(`day ${day}: completed workout ${id} changed`);
+        // the athlete's day: train, skip, miss, or have a future workout vanish
+        for (const w of state.workouts.filter((x) => x.scheduledDate === today && x.status === 'planned')) {
+          const roll = rng.float();
+          if (roll < 0.6) state = { ...state, workouts: state.workouts.map((x) => (x.id === w.id ? finish(x) : x)) };
+          else if (roll < 0.7) state = { ...state, workouts: state.workouts.map((x) => (x.id === w.id ? { ...x, status: 'skipped', updatedAt: now } : x)) };
+        }
+        if (rng.chance(0.05)) { const future = state.workouts.filter((x) => x.scheduledDate > today && x.status === 'planned'); if (future.length) { const gone = rng.pick(future); state = { ...state, workouts: state.workouts.filter((x) => x.id !== gone.id) }; } }
+        for (const w of state.workouts) if (w.status === 'completed' && !frozen.has(w.id)) frozen.set(w.id, JSON.stringify(w));
+      }
+      return { state, problems, days, goal, completed: frozen.size };
+    }
+
+    const athletes = 12;
+    let completed = 0;
+    const failures = [];
+    for (let i = 0; i < athletes; i++) {
+      const r = simulate(seed + 3100 + i);
+      completed += r.completed;
+      if (r.problems.length) failures.push({ athlete: i, days: r.days, goal: r.goal, first: r.problems.slice(0, 3) });
+    }
+    out.push(rec('rolling', `${athletes} athletes, ${Math.max(ctx.weeks, 8)} weeks of daily maintenance (${completed} sessions completed): the horizon is always filled, nothing is duplicated, completed history never changes, a repeated call is a no-op, equipment is respected`, failures.length ? 'fail' : 'pass', { failures: failures.slice(0, 3), completed }, seed + 3100));
+
+    const a = simulate(seed + 3100), b = simulate(seed + 3100);
+    out.push(rec('rolling', 'deterministic: the same athlete and clock produce byte-identical workouts and ids', JSON.stringify(a.state.workouts) === JSON.stringify(b.state.workouts) ? 'pass' : 'fail', {}, seed + 3100));
+  }
+
+  /* ---------- longitudinal progression (Phase 11): weeks of one exercise through progress, a wall, a layoff and the way back ---------- */
+  {
+    const curl = exercises.find((e) => e.id === 'dumbbell_bicep_curl');
+    const prof = { id: 'u', name: 'S', experience: 'beginner', goals: ['hypertrophy'], primaryGoal: 'hypertrophy', trainingDays: 3, sessionMinutes: 60, equipment: ['dumbbell'], body: {}, createdAt: '2026-01-01T00:00:00.000Z', loadIncrementsKg: { dumbbell: [6, 8, 10, 12, 14, 16] } };
+    const start = '2026-01-05';
+    const day = (n) => E.dates.addDaysLocal(start, n);
+    const noon = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd, 12, 0).toISOString(); };
+    const simulate = () => {
+      const history = [];
+      const log = [];
+      const problems = [];
+      let seq = 0;
+      const sets = (load, reps) => [0, 1, 2].map(() => ({ id: 's' + (++seq), type: 'working', weight: load, reps, rir: 2, completed: true }));
+      const train = (d, reps) => {
+        const rec = T.personalizedLoad(curl, history, prof, exercises, d);
+        log.push({ d, outcome: rec.longitudinal.outcome, reason: rec.longitudinal.reason, weight: rec.weight, stalls: rec.longitudinal.state.consecutiveStalls });
+        const load = rec.weight ?? 6;
+        history.push({ id: 'w' + (++seq), planId: 'p', name: 'S', scheduledDate: d, status: 'completed', source: 'scheduled', version: 1, completedAt: noon(d), updatedAt: noon(d), exercises: [{ exerciseId: curl.id, order: 0, prescribedSets: 3, repRange: curl.repRange, restSec: 60, sets: sets(load, reps(load)) }] });
+        return rec;
+      };
+      const frozen = () => history.map((w) => JSON.stringify(w));
+      // the first ten days: the athlete reaches the top of the range, so the existing rule adds a load each time
+      for (let i = 0; i < 5; i++) train(day(i * 2), (load) => (load >= 12 ? 9 : 12));
+      const beforeWall = frozen();
+      // then the athlete hits a wall at 12 kg and repeats 9 reps for the rest of ten weeks
+      for (let i = 5; i < 36; i++) train(day(i * 2), () => 9);
+      // history is never rewritten by later decisions
+      if (JSON.stringify(history.slice(0, 5).map((w) => JSON.stringify(w))) !== JSON.stringify(beforeWall)) problems.push('earlier workouts changed');
+      // a five-week layoff, then back
+      const back = day(36 * 2 + 36);
+      const reentry = train(back, () => 9);
+      const after = train(day(36 * 2 + 40), () => 9);
+      return { log, problems, reentry, after, last: log.at(-1) };
+    };
+    const a = simulate();
+    const phases = a.log.slice(5, 36).map((x) => x.reason);
+    const problems = [...a.problems];
+    if (a.log.slice(0, 8).some((x) => x.outcome === 'PLATEAU' || x.outcome === 'CONSIDER_VARIATION')) problems.push('a plateau was declared before three stalled sessions');
+    const firstPlateau = a.log.findIndex((x) => x.outcome === 'PLATEAU');
+    if (firstPlateau !== 8) problems.push('the plateau should be declared on the fourth session at the wall (three stalls), got index ' + firstPlateau);
+    if (!a.log.some((x) => x.reason === 'persistent_plateau' || x.reason === 'variation_available')) problems.push('the wall never became a persistent plateau');
+    if (a.log.slice(5, 36).some((x) => x.weight > 12)) problems.push('the load rose during the wall');
+    if (a.log.some((x) => x.weight !== undefined && ![6, 8, 10, 12, 14, 16].includes(x.weight))) problems.push('a load outside the athlete list was prescribed');
+    if (a.reentry.longitudinal.outcome !== 'CONSERVATIVE_REENTRY') problems.push('no conservative re-entry after the layoff: ' + a.reentry.longitudinal.outcome);
+    if (!(a.reentry.weight < 12)) problems.push('re-entry did not lower the load');
+    if (a.after.longitudinal.state.consecutiveStalls !== 0) problems.push('the return session counted as a stall');
+    out.push(rec('longitudinal', 'ten weeks of one lift: progress, a wall (hold, repeated stall, persistent plateau), a five-week layoff and a conservative re-entry; no load outside the list, no plateau while progressing, history untouched', problems.length ? 'fail' : 'pass', { problems, phases: [...new Set(phases)] }, seed + 3300));
+    const b = simulate();
+    out.push(rec('longitudinal', 'deterministic: the same ten weeks give an identical decision sequence', JSON.stringify(a.log) === JSON.stringify(b.log) ? 'pass' : 'fail', {}, seed + 3300));
+  }
+
+  /* ---------- fatigue and deload (Phase 12): ten weeks of normal training, two overreaching weeks, an accepted deload, the way back ---------- */
+  {
+    const press = exercises.find((e) => e.id === 'machine_chest_press');
+    const prof = { id: 'u', name: 'S', experience: 'intermediate', goals: ['hypertrophy'], primaryGoal: 'hypertrophy', trainingDays: 4, sessionMinutes: 60, equipment: ['machine'], body: {}, createdAt: '2026-01-01T00:00:00.000Z', loadIncrementsKg: { machine: [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100] } };
+    const start = '2026-01-05';
+    const day = (n) => E.dates.addDaysLocal(start, n);
+    const noon = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd, 12, 0).toISOString(); };
+    const simulate = () => {
+      let state = { workouts: [], exercises, profile: prof, deloads: undefined };
+      const log = [];
+      let seq = 0;
+      const frozen = new Map();
+      for (let n = 0; n < 70; n++) {
+        const d = day(n);
+        const week = Math.floor(n / 7), dow = n % 7;
+        const trains = week >= 3 && week <= 4 ? dow <= 3 : [0, 2, 4].includes(dow);
+        const status = E.deload.recoveryStatus(state, d);
+        if (status && status.status === 'deload_recommended') {
+          const r = E.deload.startDeload(state, d);
+          state = r.state;
+          log.push({ d, event: 'accepted', recommendedAgain: false });
+        }
+        if (!trains) continue;
+        const rec = T.personalizedLoad(press, state.workouts, prof, exercises, d, state.deloads);
+        const heavy = week >= 3 && week <= 4;
+        const load = heavy ? 80 : rec.weight ?? 40;
+        const sets = rec.deload && rec.deload.setsRemoved ? 2 : 3;
+        const rir = heavy && !(rec.deload && rec.deload.status === 'deload_active') ? 0 : 2;
+        const id = 'w' + (++seq);
+        const workout = { id, planId: 'p', name: 'S', scheduledDate: d, status: 'completed', source: 'scheduled', version: 1, completedAt: noon(d), updatedAt: noon(d), exercises: [{ exerciseId: press.id, order: 0, prescribedSets: sets, repRange: press.repRange, restSec: 90, sets: Array.from({ length: sets }, (_, i) => ({ id: id + 's' + i, type: 'working', weight: rec.deload && rec.deload.status === 'deload_active' ? rec.weight : load, reps: 10, rir, completed: true })) }] };
+        state = { ...state, workouts: [...state.workouts, workout] };
+        log.push({ d, status: rec.deload ? rec.deload.status : 'normal', weight: rec.weight, sets, targetRir: rec.targetRir, baseRir: T.personalizedLoad(press, state.workouts, prof, exercises, d).targetRir, action: rec.action });
+        for (const w of state.workouts) if (!frozen.has(w.id)) frozen.set(w.id, JSON.stringify(w));
+      }
+      const changed = state.workouts.filter((w) => frozen.get(w.id) !== JSON.stringify(w)).length;
+      return { log, state, changed };
+    };
+    const a = simulate();
+    const problems = [];
+    const accepted = a.log.filter((x) => x.event === 'accepted');
+    const sessions = a.log.filter((x) => x.event === undefined);
+    if (accepted.length !== 1) problems.push('expected exactly one accepted deload, got ' + accepted.length);
+    if (accepted[0] && accepted[0].d < day(28)) problems.push('a deload was recommended before the overreaching weeks had run: ' + accepted[0].d);
+    if (sessions.filter((x) => x.d < day(21)).some((x) => x.status !== 'normal')) problems.push('a fatigue status appeared during normal training');
+    const during = sessions.filter((x) => x.status === 'deload_active');
+    if (!during.length) problems.push('no deload sessions');
+    if (during.some((x) => x.sets !== 2 || x.weight > 80 - 10 + 0.001 || x.targetRir !== Math.min(5, x.baseRir + 2))) problems.push('a deload session was not lighter, shorter and easier: ' + JSON.stringify(during[0]));
+    const resumed = sessions.filter((x) => x.status === 'recovery_complete');
+    if (resumed.some((x) => x.action === 'increase')) problems.push('an increase was prescribed inside the resume window');
+    if (a.changed) problems.push('completed workouts changed');
+    if (a.state.deloads.length !== 1) problems.push('deloads recorded: ' + a.state.deloads.length);
+    out.push(rec('deload', 'ten weeks: normal training, two overreaching weeks, one accepted deload (lighter, one fewer set, higher RIR), a resume window with no increase, no second recommendation, history untouched', problems.length ? 'fail' : 'pass', { problems, deloadSessions: during.length, accepted: accepted.map((x) => x.d) }, seed + 3400));
+    const b = simulate();
+    out.push(rec('deload', 'deterministic: the same ten weeks give an identical status and prescription sequence', JSON.stringify(a.log) === JSON.stringify(b.log) ? 'pass' : 'fail', {}, seed + 3400));
+  }
   return out;
 }
 module.exports = { run };

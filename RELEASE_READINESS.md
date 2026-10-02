@@ -1,14 +1,20 @@
-# APEX v2 — Release Readiness
+# APEX 4.1.0 — Release Readiness
 
 ## Current status
-APEX is feature-complete against the 26-phase plan. The remaining release gate is external Android/device certification, which cannot be truthfully simulated in this source sandbox.
+APEX 4.1.0 (versionCode 8) is a release candidate. Automated validation (Node tests, release audit, web build, Playwright, the browser corpus, the longitudinal simulator) is the source of truth for what is verified; current counts are recorded in `BUILD_STATUS.md`, not here. The log below this section is history and its test counts are superseded.
 
-APEX is in final production-hardening and approaching release-candidate validation.
-The application source now includes explicit native notification ownership/deep-link boundaries and additional release-contract tests.
+**Code readiness** is complete for the roadmap (persistence and backup, notifications, AI boundary, UI and motion, release engineering). **Release readiness has two external gates that code cannot close:**
+1. *Android runtime certification.* No emulator or device could be run on the development machine: the emulator needs hardware acceleration (an administrator must enable Windows Hypervisor Platform), and no phone is attached. The native SQLite engine, real notification delivery, the share-sheet backup export, process-death recovery and TalkBack are NOT VERIFIED. `docs/ANDROID_DEVICE_CERTIFICATION.md` records what was attempted and the exact steps to finish.
+2. *Release signing.* The release APK and AAB are produced unsigned. Signing needs the owner's keystore, supplied from outside the repository (`android/keystore.properties` or the `APEX_KEYSTORE_*` variables or CI secrets). No key exists in the repository. The wiring was verified with a throw-away key that was then deleted.
 
-### Verified locally
+Deferred decision: `safetyCheck` in `src/engine/training.ts` is defined and exported but is not called by any runtime path. Whether to connect it to load-setting or remove it is still to be decided.
+
+## Historical log (superseded)
+Everything from here down was written during earlier releases and is kept for the record. Counts such as "40/40" describe that moment only.
+
+### Verified locally (at that time)
 - Missed-workout notification intents now receive a future delivery window rather than an immediate timestamp that could be filtered out.
-- 40/40 Node regression tests pass.
+- 40/40 Node regression tests passed.
 - Deterministic training engine remains authoritative.
 - State integrity validation is active.
 - Encrypted backup path exists.

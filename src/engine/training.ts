@@ -1,6 +1,11 @@
 import { dayNumber, dayOfTimestamp, workoutDay } from '../data/dates';
 import { goalTargetRir, programExercise } from './goalProgram';
-import { comparisonScore, equipmentFit, exerciseFitsEquipment, isEquivalentSubstitution, rankComparableExercises } from './exerciseGraph';
+import { selectForPattern } from './selection';
+import { deriveProgressionState, exposureKinds, plateauIsPersistent, selectVariation, transition } from './longitudinal';
+import { FATIGUE_RULES, assessFatigue, deloadSetCount, deloadTargetRir } from './fatigue';
+import type { ExercisePerformance, FatigueAssessment, SessionRecord } from './fatigue';
+import type { BaseAction, Exposure, LongitudinalDecision } from './longitudinal';
+import {    exerciseGraph, isEquivalentSubstitution, rankComparableExercises } from './exerciseGraph';
 export {
   comparable,
   comparisonScore,
@@ -23,7 +28,6 @@ import type {
   SetType,
   UserProfile,
   Workout,
-  WorkoutExercise,
   PlanDay,
   Plan,
   LoadDetail
@@ -58,6 +62,10 @@ export interface LoadRecommendation {
   action?: ProgressionAction;
   /** Rest recommended by that decision, in seconds (exact-history tier only). */
   recommendedRest?: number;
+  /** The longitudinal progression decision for this exercise (Phase 11). Classification and reason only: it never changes `weight`. */
+  longitudinal?: LongitudinalDecision;
+  /** Fatigue/deload status (Phase 12); present unless the status is normal. Only deload_active and the resume window change the prescription. */
+  deload?: { status: string; level: string; trend: string; reasons: string[]; setsRemoved?: number; loadSteps?: number; rirAdded?: number; resuming?: boolean };
 }
 
 export interface LoadAvailability {
@@ -982,15 +990,12 @@ export function trainingGapDays(ex: Exercise, workouts: Workout[], asOf?: string
   return latest === undefined ? undefined : Math.max(0, target - latest);
 }
 
-function returnToTrainingLoad(
-  ex: Exercise,
-  lastWorked: number | undefined,
-  progressed: number | undefined,
-  gapDays: number | undefined,
-  profile?: UserProfile
-): { applied: false } | { applied: true; weight: number; tier: ReturnTier; steps: number; step: number; reason: string } {
-  const { tier, steps } = returnTierForGap(gapDays);
-  if (!steps || lastWorked === undefined) return { applied: false };
+/**
+ * The load `steps` increments below the last worked load (more assistance on assisted movements): one real choice per step on
+ * the athlete's own load list, else the exercise's increment. Never more than half the load. Shared by the return-to-training
+ * rule and the deload prescription so there is one definition of "a step down".
+ */
+export function loadStepsBelow(ex: Exercise, lastWorked: number, steps: number, profile?: UserProfile): number | undefined {
   const availability = loadAvailability(ex, profile);
   const step = availability.incrementKg || (ex.incrementKg > 0 ? ex.incrementKg : 0.5);
   const assisted = ex.loadSemantics === 'assistance';
@@ -1012,6 +1017,22 @@ function returnToTrainingLoad(
     const span = assisted ? steps * step : Math.min(steps * step, lastWorked * 0.5);
     target = sanitizeRecommendedLoad(ex, assisted ? lastWorked + span : lastWorked - span);
   }
+  return target;
+}
+
+function returnToTrainingLoad(
+  ex: Exercise,
+  lastWorked: number | undefined,
+  progressed: number | undefined,
+  gapDays: number | undefined,
+  profile?: UserProfile
+): { applied: false } | { applied: true; weight: number; tier: ReturnTier; steps: number; step: number; reason: string } {
+  const { tier, steps } = returnTierForGap(gapDays);
+  if (!steps || lastWorked === undefined) return { applied: false };
+  const availability = loadAvailability(ex, profile);
+  const step = availability.incrementKg || (ex.incrementKg > 0 ? ex.incrementKg : 0.5);
+  const assisted = ex.loadSemantics === 'assistance';
+  const target = loadStepsBelow(ex, lastWorked, steps, profile);
   if (target === undefined) return { applied: false };
   // Never above the normal prescription (no increase on the return session); assistance is the mirror image.
   const weight = progressed === undefined ? target : assisted ? Math.max(target, progressed) : Math.min(target, progressed);
@@ -1114,13 +1135,14 @@ function comparableExerciseEvidence(
  *
  * APEX never claims a universal "correct" starting weight.
  */
-export function personalizedLoad(
+function prescribedLoad(
   catalogueEx: Exercise,
   workouts: Workout[],
   profile?: UserProfile,
   exercises: Exercise[] = [],
-  /** Date (YYYY-MM-DD or ISO) the load is being prescribed for. Enables return-to-training handling. */
-  asOf?: string
+  asOf?: string,
+  /** The workouts that count as progression evidence: `workouts` without the sessions of an accepted deload. */
+  evidence: Workout[] = workouts
 ): LoadRecommendation {
   const ex = programExercise(catalogueEx, profile?.primaryGoal);
   const targetRir = targetRirForProfile(profile);
@@ -1147,7 +1169,7 @@ export function personalizedLoad(
   }
 
   const availability = loadAvailability(ex, profile);
-  const direct = directExerciseSets(ex, workouts);
+  const direct = directExerciseSets(ex, evidence);
 
   /* 1. Exact exercise evidence is always strongest. */
   if (direct.length) {
@@ -1212,7 +1234,7 @@ export function personalizedLoad(
 
   /* 2. Comparable personal history, only when semantics are compatible. */
   if (exercises.length) {
-    const comparableEvidence = comparableExerciseEvidence(ex, workouts, exercises);
+    const comparableEvidence = comparableExerciseEvidence(ex, evidence, exercises);
     if (comparableEvidence.length) {
       const strongest = comparableEvidence[0];
       const weighted = comparableEvidence.reduce((sum,item) => sum + (item.load as number) * item.comparison.score, 0);
@@ -1298,6 +1320,253 @@ export function personalizedLoad(
     ],
     targetRir
   };
+}
+
+/* ============================================================
+   LONGITUDINAL PROGRESSION (Phase 11; rules in ./longitudinal.ts and docs/TRAINING_SEMANTICS.md §13)
+   ============================================================ */
+
+/**
+ * The exercise's working history as one Exposure per training day (chronological), plus the sets behind them. Derived on
+ * every call from the workouts, so nothing is stored and no workout or set log is ever modified.
+ */
+export function exerciseExposures(
+  catalogueEx: Exercise,
+  workouts: Workout[],
+  goal?: GoalKind
+): { exposures: Exposure[]; sets: SetLog[] } {
+  const ex = programExercise(catalogueEx, goal);
+  const timed = ex.loadSemantics === 'time';
+  const unloaded = timed || ex.loadSemantics === 'bodyweight' || ex.loadSemantics === 'none';
+  const [bottom, top] = ex.repRange;
+  const performance = (set: SetLog) => (timed ? set.seconds ?? 0 : set.reps ?? 0);
+  const days: { day: number; sets: SetLog[] }[] = [];
+  for (const workout of chronologicalCompleted(workouts)) {
+    const sets = workout.exercises
+      .filter(entry => entry.exerciseId === ex.id)
+      .flatMap(entry => entry.sets)
+      .filter(set => isWorkingSet(set) && hasValidPerformance(ex, set) && (unloaded || (setLoad(ex, set) !== undefined && meaningfulLoad(ex, setLoad(ex, set)))));
+    if (!sets.length) continue;
+    const day = dayNumber(workoutDay(workout));
+    const previous = days.at(-1);
+    if (previous && day !== undefined && previous.day === day) previous.sets.push(...sets);
+    else days.push({ day: day ?? previous?.day ?? 0, sets });
+  }
+  const exposures = days.map((entry, index): Exposure => {
+    const last = entry.sets.slice(-3);
+    const load = unloaded ? undefined : bestLoad(ex, entry.sets);
+    const atBest = load === undefined ? entry.sets : entry.sets.filter(set => Math.abs((setLoad(ex, set) as number) - load) < 1e-9);
+    const rirs = entry.sets.map(set => set.rir).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    return {
+      day: entry.day,
+      ...(load !== undefined ? { load } : {}),
+      topPerformance: Math.max(0, ...atBest.map(performance)),
+      atTop: entry.sets.length >= 2 && last.every(set => performance(set) >= top),
+      low: last.filter(set => performance(set) < bottom).length >= 2,
+      ...(rirs.length ? { avgRir: rirs.reduce((a, b) => a + b, 0) / rirs.length } : {}),
+      afterGap: index > 0 && returnTierForGap(entry.day - days[index - 1].day).steps > 0
+    };
+  });
+  return { exposures, sets: days.flatMap(entry => entry.sets) };
+}
+
+/**
+ * The longitudinal decision for one exercise on one date: derived state + the transition table. It reads the same inputs
+ * as the load prescription (history, profile, the return-to-training gap, the workload signal) and never changes a load.
+ */
+export function longitudinalDecision(
+  catalogueEx: Exercise,
+  workouts: Workout[],
+  profile?: UserProfile,
+  exercises: Exercise[] = [],
+  asOf?: string,
+  /** The Phase 12 fatigue assessment for this date, when there is one. HIGH or worse counts as elevated workload. */
+  assessment?: FatigueAssessment,
+  /** The workouts that count as progression evidence (the athlete's deload sessions are left out). */
+  evidence: Workout[] = workouts
+): LongitudinalDecision {
+  const ex = programExercise(catalogueEx, profile?.primaryGoal);
+  const assisted = ex.loadSemantics === 'assistance';
+  const { exposures, sets } = exerciseExposures(ex, evidence, profile?.primaryGoal);
+  const progressionFatigue = workloadFatigue(workouts, exercises);
+  const fatigue = progressionFatigue === 'elevated' || assessment?.level === 'HIGH' || assessment?.level === 'RECOVERY_REQUIRED' ? 'elevated' : 'normal';
+
+  const graph = exercises.length ? exerciseGraph(exercises) : undefined;
+  const relatedIds = graph
+    ? graph.alternativesOf(ex.id).map(item => item.id).sort()
+    : [];
+  const related = relatedIds.map(id => ({
+    exerciseId: id,
+    exposures: chronologicalCompleted(evidence).filter(w => w.exercises.some(entry => entry.exerciseId === id && entry.sets.some(isWorkingSet))).length
+  }));
+
+  const state = deriveProgressionState(exposures, { assisted, related });
+  const baseAction: BaseAction = sets.length
+    ? progression(ex, sets, { goal: profile?.primaryGoal, experience: profile?.experience, fatigue: progressionFatigue }).action
+    : 'calibrate';
+  const options = loadAvailability(ex, profile).options;
+  const latest = latestMeaningfulLoad(ex, sets);
+  const atCeiling = options.length > 0 && latest !== undefined && (assisted ? latest <= options[0] + 1e-9 : latest >= (options.at(-1) as number) - 1e-9);
+  const equipment = profile?.equipment ?? [];
+  const variation = plateauIsPersistent(state)
+    ? selectVariation({ exercise: ex, catalogue: exercises, state, equipment, experience: profile?.experience, atCeiling })
+    : undefined;
+
+  return transition({
+    state,
+    baseAction,
+    returnSteps: returnTierForGap(trainingGapDays(ex, workouts, asOf)).steps,
+    fatigue,
+    timed: ex.loadSemantics === 'time',
+    atCeiling,
+    variation
+  });
+}
+
+/* ============================================================
+   FATIGUE, DELOAD AND RECOVERY (Phase 12; rules in ./fatigue.ts and docs/TRAINING_SEMANTICS.md §14)
+   ============================================================ */
+
+const dayOfStart = (value: string) => dayNumber(dayOfTimestamp(value));
+
+/** True when the workout was done inside a deload the athlete accepted (the window is derived from the stored start day). */
+export function isDeloadWorkout(workout: Workout, deloads: readonly string[] | undefined): boolean {
+  if (!deloads?.length) return false;
+  const day = dayNumber(workoutDay(workout));
+  if (day === undefined) return false;
+  return deloads.some(start => {
+    const first = dayOfStart(start);
+    return first !== undefined && day >= first && day < first + FATIGUE_RULES.deloadDays;
+  });
+}
+
+/** The workouts that count as progression evidence: a deload's lighter sessions are not (and are never edited). */
+export function progressionEvidence(workouts: Workout[], deloads: readonly string[] | undefined): Workout[] {
+  return deloads?.length ? workouts.filter(workout => !isDeloadWorkout(workout, deloads)) : workouts;
+}
+
+const assessmentCache = new WeakMap<Workout[], WeakMap<Exercise[], Map<string, FatigueAssessment>>>();
+
+/**
+ * The fatigue assessment for a date, derived from completed workouts (and the accepted deload start days). Recovery check-ins are
+ * not an input. Undefined without a valid date.
+ */
+export function recoveryAssessment(
+  workouts: Workout[],
+  exercises: Exercise[],
+  asOf: string | undefined,
+  deloads?: readonly string[],
+  goal?: GoalKind
+): FatigueAssessment | undefined {
+  const asOfDay = dayNumber(dayOfTimestamp(asOf));
+  if (asOfDay === undefined) return undefined;
+  const key = `${asOfDay}|${goal ?? ''}|${(deloads ?? []).join(',')}`;
+  let byExercises = assessmentCache.get(workouts);
+  if (!byExercises) { byExercises = new WeakMap(); assessmentCache.set(workouts, byExercises); }
+  let byKey = byExercises.get(exercises);
+  if (!byKey) { byKey = new Map(); byExercises.set(exercises, byKey); }
+  const cached = byKey.get(key);
+  if (cached) return structuredClone(cached); // callers get their own copy: the cache can never be altered from outside
+
+  const completed = chronologicalCompleted(workouts);
+  const sessions: SessionRecord[] = [];
+  for (const workout of completed) {
+    const day = dayNumber(workoutDay(workout));
+    if (day === undefined) continue;
+    const rirs = workout.exercises.flatMap(entry => entry.sets).filter(isWorkingSet).map(set => set.rir).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    sessions.push({ day, volume: volumeForWorkout(workout, exercises), ...(rirs.length ? { avgRir: rirs.reduce((a, b) => a + b, 0) / rirs.length } : {}), ratedSets: rirs.length });
+  }
+  const evidence = progressionEvidence(workouts, deloads);
+  const ids = [...new Set(chronologicalCompleted(evidence).flatMap(workout => workout.exercises.map(entry => entry.exerciseId)))].sort();
+  const performance: ExercisePerformance[] = ids.flatMap(id => {
+    const ex = exercises.find(item => item.id === id);
+    if (!ex) return [];
+    const { exposures } = exerciseExposures(ex, evidence, goal);
+    const kinds = exposureKinds(exposures, ex.loadSemantics === 'assistance');
+    return [{ exerciseId: id, exposures: exposures.map((e, i) => ({ day: e.day, kind: kinds[i] })) }];
+  });
+  const starts = (deloads ?? []).map(dayOfStart).filter((day): day is number => day !== undefined);
+  const assessment = assessFatigue(sessions, performance, asOfDay, starts);
+  byKey.set(key, assessment);
+  return structuredClone(assessment);
+}
+
+/**
+ * The deload's reduced set count: removes uncompleted working sets from the end, one fewer working set in total and never below
+ * one. Warm-ups and completed sets are never touched. Call it once, when the workout's prescription is first hydrated.
+ */
+export function trimSetsForDeload(sets: SetLog[]): SetLog[] {
+  const working = sets.filter(set => set.type !== 'warmup');
+  let excess = working.length - deloadSetCount(working.length);
+  if (excess <= 0) return sets;
+  const drop = new Set<string>();
+  for (let i = sets.length - 1; i >= 0 && excess > 0; i--) {
+    if (sets[i].type !== 'warmup' && !sets[i].completed) { drop.add(sets[i].id); excess--; }
+  }
+  return drop.size ? sets.filter(set => !drop.has(set.id)) : sets;
+}
+
+/**
+ * The authoritative load prescription. The load, action, rest and reason come from prescribedLoad() as before; the wrapper adds
+ * the longitudinal decision (Phase 11, classification only) and the Phase 12 deload layer:
+ *   - deload_active: 2 load steps below the last worked load (never above the normal prescription; the return-to-training rule
+ *     decides instead when it applies), one fewer working set, target RIR + 2. Nothing else changes.
+ *   - recovery_complete: an increase is not prescribed for 7 days (the last worked load is repeated).
+ *   - any other status: no change; the status is only reported.
+ * Sessions inside an accepted deload are not progression evidence.
+ */
+export function personalizedLoad(
+  catalogueEx: Exercise,
+  workouts: Workout[],
+  profile?: UserProfile,
+  exercises: Exercise[] = [],
+  /** Date (YYYY-MM-DD or ISO) the load is being prescribed for. Enables return-to-training handling. */
+  asOf?: string,
+  /** Start days (YYYY-MM-DD) of the deloads the athlete accepted (AppState.deloads). */
+  deloads?: readonly string[]
+): LoadRecommendation {
+  const evidence = progressionEvidence(workouts, deloads);
+  const assessment = recoveryAssessment(workouts, exercises, asOf, deloads, profile?.primaryGoal);
+  let recommendation = prescribedLoad(catalogueEx, workouts, profile, exercises, asOf, evidence);
+  const longitudinal = longitudinalDecision(catalogueEx, workouts, profile, exercises, asOf, assessment, evidence);
+  const plateau = longitudinal.outcome === 'PLATEAU' || longitudinal.outcome === 'CONSIDER_VARIATION';
+  recommendation = {
+    ...recommendation,
+    longitudinal,
+    ...(plateau ? { evidence: [...recommendation.evidence, `Progress: ${longitudinal.state.consecutiveStalls} sessions without progress over ${longitudinal.state.stallSpanDays} days`] } : {})
+  };
+  if (!assessment || assessment.status === 'normal') return recommendation;
+
+  const info = { status: assessment.status, level: assessment.level, trend: assessment.trend, reasons: [...assessment.signals.reasons] };
+  const ex = programExercise(catalogueEx, profile?.primaryGoal);
+  const loaded = recommendation.weight !== undefined && recommendation.kind === 'baseline' && recommendation.action !== undefined && recommendation.action !== 'calibrate'
+    && ex.loadSemantics !== 'bodyweight' && ex.loadSemantics !== 'none' && ex.loadSemantics !== 'time';
+
+  if (assessment.status === 'deload_active') {
+    const assisted = ex.loadSemantics === 'assistance';
+    const latest = latestMeaningfulLoad(ex, directExerciseSets(ex, evidence));
+    let weight = recommendation.weight;
+    if (loaded && latest !== undefined && !recommendation.returnToTraining) {
+      const lowered = loadStepsBelow(ex, latest, FATIGUE_RULES.loadSteps, profile);
+      if (lowered !== undefined) weight = assisted ? Math.max(lowered, recommendation.weight as number) : Math.min(lowered, recommendation.weight as number);
+    }
+    return {
+      ...recommendation,
+      ...(weight !== undefined ? { weight } : {}),
+      ...(loaded && !recommendation.returnToTraining ? { action: 'recover' as const } : {}),
+      targetRir: deloadTargetRir(recommendation.targetRir),
+      reason: `Deload week (${assessment.daysLeft} day${assessment.daysLeft === 1 ? '' : 's'} left): lighter load, one fewer set and a higher target RIR. Normal progression resumes afterwards.`,
+      deload: { ...info, setsRemoved: FATIGUE_RULES.setsRemoved, loadSteps: FATIGUE_RULES.loadSteps, rirAdded: FATIGUE_RULES.rirAdded }
+    };
+  }
+  if (assessment.status === 'recovery_complete' && loaded && recommendation.action === 'increase' && !recommendation.returnToTraining) {
+    const latest = latestMeaningfulLoad(ex, directExerciseSets(ex, evidence));
+    const held = latest === undefined ? undefined : snapToAvailableLoad(ex, latest, profile, 'nearest');
+    if (held !== undefined) {
+      return { ...recommendation, weight: held, action: 'hold', reason: 'Recovery after a deload is complete: repeat your last worked load once more before adding load.', deload: { ...info, resuming: true } };
+    }
+  }
+  return { ...recommendation, deload: info };
 }
 
 /* ============================================================
@@ -1624,45 +1893,6 @@ export function recommendedRest(
    IMMEDIATE SET FEEDBACK
    ============================================================ */
 
-function feedbackDirection(
-  ex: Exercise,
-  feedback:
-    | 'heavy'
-    | 'right'
-    | 'easy'
-): number {
-
-  if (
-    feedback === 'right'
-  ) {
-    return 0;
-  }
-
-  /*
-   * Normal resistance:
-   *
-   * easy  -> increase
-   * heavy -> decrease
-   *
-   * Assistance is inverted:
-   *
-   * easy  -> less assistance
-   * heavy -> more assistance
-   */
-
-  if (
-    ex.loadSemantics ===
-    'assistance'
-  ) {
-    return feedback === 'easy'
-      ? -1
-      : 1;
-  }
-
-  return feedback === 'easy'
-    ? 1
-    : -1;
-}
 
 /**
  * Adjust current working load using:
@@ -1727,31 +1957,8 @@ export function feedbackLoad(
    PLAN BUILDING
    ============================================================ */
 
-function chooseByPattern(
-  exercises: Exercise[],
-  pattern: string,
-  equipment: string[]
-) {
-
-  return (
-    exercises.find(
-      exercise =>
-        exercise.pattern === pattern &&
-        exerciseFitsEquipment(exercise, equipment)
-    ) ||
-    exercises.find(
-      exercise =>
-        exercise.pattern ===
-        pattern
-    ) ||
-    exercises.find(
-      exercise =>
-        exercise.pattern.includes(
-          pattern
-        )
-    )
-  );
-}
+/** A session set with fewer exercises than this uses the full-body set instead. */
+const MIN_SESSION_EXERCISES = 3;
 
 /** Training days per week: a whole number from 2 to 6; anything invalid (NaN, Infinity, text) becomes 3. */
 export const TRAINING_DAYS_MIN = 2;
@@ -1761,20 +1968,18 @@ export function sanitizeTrainingDays(value: unknown): number {
   return Math.max(TRAINING_DAYS_MIN, Math.min(TRAINING_DAYS_MAX, Math.round(value)));
 }
 
+/**
+ * Builds the weekly template and the exercise selection for each session type. Each movement pattern gets one exercise,
+ * chosen by the deterministic ranking in ./selection (equipment fit, suitability, goal, continuity, exposure, coverage,
+ * catalogue connectedness, fewer pieces of equipment, then id). `context` optionally supplies completed history (prior
+ * exposure) and the exercises already in the athlete's plan (continuity); without it the choice depends on the profile alone.
+ */
 export function buildPlan(
   profile: UserProfile,
   exercises: Exercise[],
-  goals: any[] = []
+  goals: any[] = [],
+  context: { history?: readonly Workout[]; incumbents?: readonly string[] } = {}
 ) {
-
-  const available =
-    exercises.filter(
-      exercise =>
-        exerciseFitsEquipment(
-          exercise,
-          profile.equipment
-        )
-    );
 
   const upperPatterns = [
     'horizontal_push',
@@ -1795,39 +2000,32 @@ export function buildPlan(
     'core'
   ];
 
-  const upper =
-    upperPatterns
-      .map(
-        pattern =>
-          chooseByPattern(
-            available,
-            pattern,
-            profile.equipment
-          )
-      )
-      .filter(
-        (
-          exercise
-        ): exercise is Exercise =>
-          Boolean(exercise)
-      );
+  /*
+   * One exercise per pattern, in this fixed order. The muscles an earlier pick covers count against a later candidate
+   * (coverage), so the order is part of the contract; upper and lower sessions are covered separately.
+   */
+  const pickAll = (patterns: string[]) => {
+    const covered: string[] = [];
+    const picks: Exercise[] = [];
+    for (const pattern of patterns) {
+      const exercise = selectForPattern(pattern, exercises, {
+        equipment: profile.equipment ?? [],
+        experience: profile.experience,
+        goal: profile.primaryGoal,
+        history: context.history,
+        incumbents: context.incumbents,
+        covered
+      });
+      if (!exercise) continue;
+      picks.push(exercise);
+      covered.push(...exercise.primaryMuscles);
+    }
+    return picks;
+  };
 
-  const lower =
-    lowerPatterns
-      .map(
-        pattern =>
-          chooseByPattern(
-            available,
-            pattern,
-            profile.equipment
-          )
-      )
-      .filter(
-        (
-          exercise
-        ): exercise is Exercise =>
-          Boolean(exercise)
-      );
+  const upper = pickAll(upperPatterns);
+
+  const lower = pickAll(lowerPatterns);
 
   const full = [
     ...upper.slice(0, 3),
@@ -1912,18 +2110,18 @@ export function buildPlan(
       )} program`,
     days,
     /*
-     * A training day is never empty: with very little equipment (bodyweight or kettlebell only) no upper-body
-     * movement exists, so an UPPER or LOWER day falls back to the full-body set instead of becoming a workout
-     * with zero exercises.
+     * A training day is never empty or a single exercise: with very little equipment (bodyweight or kettlebell only) too
+     * few upper-body movements exist, so an UPPER or LOWER day with fewer than MIN_SESSION_EXERCISES falls back to the
+     * full-body set instead of becoming a workout of zero or one exercise.
      */
     exerciseSets: {
       upper:
-        (upper.length ? upper : full).map(
+        (upper.length >= MIN_SESSION_EXERCISES ? upper : full).map(
           exercise =>
             exercise.id
         ),
       lower:
-        (lower.length ? lower : full).map(
+        (lower.length >= MIN_SESSION_EXERCISES ? lower : full).map(
           exercise =>
             exercise.id
         ),
@@ -2590,13 +2788,17 @@ export function addWorkoutSet(
   if (
     !workoutExercise ||
     !ex ||
-    workoutExercise.sets
+    workoutExercise.sets.filter(set => set.type !== 'warmup')
       .length >= 8
   ) {
     return workout;
   }
 
+  // a set added while a warm-up is selected repeats the last WORKING set, never another warm-up
+  const lastWorking = [...workoutExercise.sets].reverse().find(set => set.type !== 'warmup');
   const templateSet =
+    (template && template.type !== 'warmup' ? template : undefined) ||
+    lastWorking ||
     template ||
     workoutExercise.sets[
       workoutExercise
@@ -2615,7 +2817,7 @@ export function addWorkoutSet(
   );
 
   workoutExercise.prescribedSets =
-    workoutExercise.sets.length;
+    workoutExercise.sets.filter(set => set.type !== 'warmup').length; // warm-ups are not prescribed working sets
 
   output.version++;
   output.updatedAt =
@@ -2642,10 +2844,13 @@ export function removeWorkoutSet(
         exerciseId
     );
 
+  const removing = workoutExercise?.sets.find(set => set.id === setId);
   if (
     !workoutExercise ||
     workoutExercise.sets
-      .length <= 1
+      .length <= 1 ||
+    // the last working set stays: warm-ups alone are not a prescription
+    (removing?.type !== 'warmup' && workoutExercise.sets.filter(set => set.type !== 'warmup').length <= 1)
   ) {
     return workout;
   }
@@ -2657,7 +2862,7 @@ export function removeWorkoutSet(
     );
 
   workoutExercise.prescribedSets =
-    workoutExercise.sets.length;
+    workoutExercise.sets.filter(set => set.type !== 'warmup').length; // warm-ups are not prescribed working sets
 
   output.version++;
   output.updatedAt =
@@ -2797,7 +3002,7 @@ export function replaceWorkoutExercise(
   }
 
   workoutExercise.prescribedSets =
-    workoutExercise.sets.length;
+    workoutExercise.sets.filter(set => set.type !== 'warmup').length; // warm-ups are not prescribed working sets
 
   workoutExercise.repRange =
     newEx.repRange;
@@ -3331,7 +3536,9 @@ export function applyWorkoutAdaptation(
   workout: Workout,
   exercises: Exercise[],
   recent: Workout[],
-  profile?: UserProfile
+  profile?: UserProfile,
+  /** Start days of accepted deloads (AppState.deloads). */
+  deloads?: readonly string[]
 ) {
 
   const output =
@@ -3364,7 +3571,8 @@ export function applyWorkoutAdaptation(
         history,
         profile,
         exercises,
-        workout.scheduledDate
+        workout.scheduledDate,
+        deloads
       );
 
     if (

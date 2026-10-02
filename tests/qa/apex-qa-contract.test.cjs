@@ -1,3 +1,4 @@
+const { uiSource } = require('../ui-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -9,7 +10,7 @@ const exists = (p) => fs.existsSync(path.join(root, p));
 
 const requiredFiles = [
   'package.json','src/main.tsx','src/styles.css','src/core/types.ts',
-  'src/engine/training.ts','src/engine/intelligence.ts','src/engine/coachGateway.ts',
+  'src/engine/training.ts','src/engine/intelligence.ts','src/coach/coach.ts',
   'src/data/repository.ts','src/data/sqliteAdapter.ts','src/data/backupCrypto.ts',
   'src/data/integrity.ts','src/data/accessibility.ts','src/knowledge/exercises.ts',
   'src/knowledge/knowledgeGraph.ts','src/engine/notifications.ts',
@@ -22,7 +23,7 @@ test('QA architecture: all authoritative application layers exist', () => {
 
 test('QA architecture: deterministic training remains authoritative', () => {
   const training = read('src/engine/training.ts');
-  const coach = read('src/engine/coachGateway.ts');
+  const coach = read('src/coach/coach.ts') + read('src/coach/askCoach.ts') + read('src/coach/decisionPipeline.ts');
   const ai = exists('src/aiGateway.ts') ? read('src/aiGateway.ts') : '';
   assert.match(training, /personalizedLoad|recommend|progress|guided/i);
   assert.match(coach, /training|deterministic|authoritative/i);
@@ -30,7 +31,7 @@ test('QA architecture: deterministic training remains authoritative', () => {
 });
 
 test('QA architecture: workout continuity and interruption boundaries exist', () => {
-  const src = read('src/engine/training.ts') + read('src/main.tsx');
+  const src = read('src/engine/training.ts') + uiSource();
   assert.match(src, /pause/i);
   assert.match(src, /resume/i);
   assert.match(src, /background/i);
@@ -69,7 +70,7 @@ test('QA architecture: local-first persistence and backup boundaries exist', () 
 test('QA architecture: accessibility controls are implemented and persisted', () => {
   const access = read('src/data/accessibility.ts');
   const repo = read('src/data/repository.ts');
-  const main = read('src/main.tsx');
+  const main = uiSource();
   assert.match(access, /fontScaleValue|normalizeFontScale/);
   assert.match(access, /reduced|motion/i);
   assert.match(repo, /fontScale/);
@@ -85,7 +86,7 @@ test('QA architecture: notification layer is isolated from training logic', () =
 });
 
 test('QA architecture: Coach surface is grounded and cannot silently replace training authority', () => {
-  const coach = read('src/engine/coachGateway.ts');
+  const coach = read('src/coach/coach.ts') + read('src/coach/askCoach.ts') + read('src/coach/decisionPipeline.ts');
   assert.match(coach, /ground|context|uncertainty|deterministic|training/i);
   assert.match(coach, /recommend|explain|coach/i);
 });

@@ -95,4 +95,31 @@ test.describe('APEX Coach', () => {
     await expect(apexMessage).toBeVisible();
     await expect(apexMessage).toContainText(/Confidence:/i);
   });
+  test('Coach 2.0: the briefing, the weekly card and a contextual question', async ({ page }) => {
+    // Home shows the briefing's next step on the Coach card
+    await expect(page.locator('[data-coach-next]').first()).toContainText(/^Next: /);
+
+    await page.getByRole('button', { name: /Ask Coach/i }).first().click();
+    const briefing = page.getByRole('region', { name: 'Coach briefing' });
+    await expect(briefing).toBeVisible();
+    await expect(briefing.locator('[data-coach-next-step]')).not.toBeEmpty();
+    await expect(briefing).toHaveAttribute('data-coach-status', /insufficient_data|on_track|attention|recovery/);
+
+    const input = page.getByRole('textbox', { name: 'Ask APEX Coach' });
+    await input.fill('How did I do this week?');
+    await input.press('Enter');
+    const reply = page.locator('.apex-message.apex').last();
+    await expect(reply).toContainText(/no completed sessions to review|Week of /);
+    await expect(reply).toContainText(/Confidence:/i);
+
+    await input.fill('When should I deload?');
+    await input.press('Enter');
+    await expect(page.locator('.apex-message.apex').last()).toContainText(/not a medical assessment/);
+
+    // Progress shows the weekly analytics with an explicit comparison state
+    await page.getByRole('button', { name: 'Progress', exact: true }).first().click();
+    const week = page.getByRole('region', { name: 'Weekly analytics' });
+    await expect(week).toBeVisible();
+    await expect(week.locator('[data-week-comparison]')).toContainText(/Not enough data|\+|-/);
+  });
 });

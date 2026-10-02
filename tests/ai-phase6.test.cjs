@@ -7,6 +7,7 @@
  *   33 deterministic boundary  - AI output is text; it cannot mutate state or bypass the engine, equipment or safety rules
  * No test needs a network or an API key: providers are exercised with fakes and a mocked fetch.
  */
+const { uiSource } = require('./ui-source.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -139,7 +140,7 @@ test('A30.6 provider isolation: vendor wire formats live only in aiProviders; th
   const pkg = JSON.parse(read('package.json'));
   for (const dep of ['openai', 'anthropic', '@anthropic-ai/sdk', '@google/generative-ai', 'ollama']) assert.equal(pkg.dependencies[dep], undefined, dep);
   for (const dir of ['src/coach', 'src/engine', 'src/data', 'src/knowledge']) for (const file of fs.readdirSync(path.join(root, dir)).filter((f) => f.endsWith('.ts'))) assert.doesNotMatch(read(`${dir}/${file}`), /aiGateway|aiProviders|aiContract|aiGrounding/, `${dir}/${file} must not depend on the AI layer`);
-  assert.doesNotMatch(read('src/main.tsx'), /aiProviders/, 'the app talks to the gateway, never to a provider');
+  assert.doesNotMatch(uiSource(), /aiProviders/, 'the app talks to the gateway, never to a provider');
 });
 
 test('A30.7 the adapters speak their own wire format to a mocked endpoint and classify failures', async () => {
@@ -480,16 +481,16 @@ test('A33.9 architecture: the AI layer can read the engine but has no way to wri
   const outcome = gateway.slice(gateway.indexOf('export interface AIOutcome'), gateway.indexOf('export const DETERMINISTIC_NOTE'));
   for (const field of ['action', 'mutation', 'patch', 'load', 'prescription', 'workout']) assert.doesNotMatch(outcome, new RegExp(`\\b${field}\\b\\s*[?:]`), `AIOutcome has no ${field} field`);
   // the structured contract is closed
-  assert.deepEqual(['response', 'groundedClaims', 'uncertainties', 'requestedClarification'].sort(), [...read('src/aiContract.ts').match(/ALLOWED_KEYS = new Set\(\[([^\]]+)\]/)[1].matchAll(/'(\w+)'/g)].map((m) => m[1]).sort());
+  assert.deepEqual(['contractVersion', 'response', 'groundedClaims', 'uncertainties', 'requestedClarification'].sort(), [...read('src/aiContract.ts').match(/ALLOWED_KEYS = new Set\(\[([^\]]+)\]/)[1].matchAll(/'(\w+)'/g)].map((m) => m[1]).sort());
   // in the app the AI result is only ever shown as a message
-  const main = read('src/main.tsx');
+  const main = uiSource();
   const uses = [...main.matchAll(/outcome\.[a-zA-Z]+/g)].map((m) => m[0]);
   assert.ok(uses.length > 0);
   assert.doesNotMatch(main.slice(main.indexOf('const explainWithAI'), main.indexOf('const ask=')), /update\(|setS\(|mutate\(/, 'the AI result is not written into state');
 });
 
 test('A33.10 the app shows deterministic Coach text and AI text as different things, and AI is optional in the UI', () => {
-  const main = read('src/main.tsx');
+  const main = uiSource();
   assert.match(main, /APEX COACH · DETERMINISTIC/);
   assert.match(main, /AI-GENERATED EXPLANATION/);
   assert.match(main, /RULE-BASED SUMMARY · NO AI MODEL/);

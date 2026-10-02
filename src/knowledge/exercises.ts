@@ -1,6 +1,5 @@
 import type {Exercise} from '../core/types';
 
-const E=(x:Exercise)=>x;
 
 const common=(
   x:Partial<Exercise> &
@@ -149,6 +148,7 @@ common({
 
 common({
   id:'chest_supported_row',
+  progressions:['barbell_row'],
   name:'Chest-Supported Row',
   aliases:['chest supported row'],
   family:'horizontal pull',
@@ -189,6 +189,7 @@ common({
 
 common({
   id:'dumbbell_shoulder_press',
+  progressions:['overhead_barbell_press'],
   safetyConsiderations:[{kind:'range_of_motion',note:'Press through a range you can control and keep the dumbbells stable at the bottom.',modification:'Use the machine shoulder press or a lighter pair of dumbbells.'}],
   name:'Dumbbell Shoulder Press',
   aliases:['db shoulder press','seated db press'],
@@ -378,6 +379,7 @@ common({
 
 common({
   id:'goblet_squat',
+  progressions:['barbell_back_squat'],
   name:'Goblet Squat',
   aliases:['goblet squat'],
   family:'squat',
@@ -768,6 +770,239 @@ common({
   alternatives:[
     'standing_calf_raise'
   ]
+}),
+
+/* ------------------------------------------------------------------------------------------------------------------
+ * Catalogue 2.0 additions. Each fills a pattern gap that the earlier catalogue left, using only the existing equipment
+ * vocabulary. A progression is declared only where it is the same movement made harder in a way the catalogue can state
+ * (difficulty rises, pattern is kept); everything else is an alternative.
+ * ---------------------------------------------------------------------------------------------------------------- */
+
+common({
+  id:'one_arm_dumbbell_row',
+  safetyConsiderations:[{kind:'setup',note:'Support your free hand on a stable bench or rack so the torso stays still while the dumbbell moves.',modification:'Use a lighter dumbbell, or the chest-supported row, if the torso starts to twist.'}],
+  name:'One-Arm Dumbbell Row',
+  aliases:['single arm dumbbell row','db row','one arm row'],
+  family:'horizontal pull',
+  pattern:'horizontal_pull',
+  primaryMuscles:['mid back'],
+  secondaryMuscles:['lats','biceps','rear delts'],
+  equipment:['dumbbell'],
+  loadSemantics:'per_hand',
+  incrementKg:1,
+  unilateral:true,
+  cues:['Keep the hips and shoulders square','Pull the elbow toward the hip','Lower under control'],
+  setup:['Place one hand and the same-side knee on a bench, or one hand on a stable rack','Hold the dumbbell with a neutral grip and a flat back'],
+  steps:['Brace and keep the torso still','Pull the dumbbell toward the hip','Pause briefly, then lower to full arm extension'],
+  mistakes:['Twisting the torso to lift the weight','Shrugging the shoulder toward the ear'],
+  loadDescription:'Dumbbell load is shown for the one dumbbell in the working hand.',
+  alternatives:['chest_supported_row','seated_cable_row']
+}),
+
+common({
+  id:'barbell_row',
+  safetyConsiderations:[{kind:'technique_sensitive',note:'Holding a flat, braced torso under a barbell is technique sensitive; use a load at which the position stays the same all set.',modification:'Reduce the load, or use the chest-supported row, until every repetition looks the same.'}],
+  name:'Barbell Row',
+  aliases:['bent over row','bent-over barbell row'],
+  family:'horizontal pull',
+  pattern:'horizontal_pull',
+  primaryMuscles:['mid back','lats'],
+  secondaryMuscles:['biceps','rear delts','back'],
+  equipment:['barbell'],
+  loadSemantics:'total',
+  incrementKg:2.5,
+  restSec:150,
+  difficulty:'intermediate',
+  cues:['Hinge until the torso is near flat','Row the bar to the lower ribs','Keep the neck in line with the spine'],
+  setup:['Stand with the bar over mid-foot and hinge to take an overhand grip','Brace the torso before each repetition'],
+  steps:['Lift the bar just clear of the floor or rack','Row it to the lower ribs without changing the torso angle','Lower to straight arms under control'],
+  mistakes:['Standing up as the bar rises','Rounding the back to lift more weight'],
+  loadDescription:'Total external load. For a barbell, this includes the bar plus plates.',
+  alternatives:['chest_supported_row','seated_cable_row','one_arm_dumbbell_row']
+}),
+
+common({
+  id:'push_up',
+  name:'Push-Up',
+  aliases:['pushup','press-up','press up'],
+  family:'horizontal press',
+  pattern:'horizontal_push',
+  primaryMuscles:['chest'],
+  secondaryMuscles:['triceps','front delts','core'],
+  equipment:['bodyweight'],
+  loadSemantics:'bodyweight',
+  incrementKg:0,
+  repRange:[6,20],
+  restSec:75,
+  cues:['Keep a straight line from head to heels','Lower the chest between the hands','Press the floor away'],
+  setup:['Place the hands under the shoulders on the floor or a raised surface','Brace the core and glutes'],
+  steps:['Lower the chest toward the floor with the elbows about 45 degrees from the body','Pause briefly just above the floor','Press back to straight arms'],
+  mistakes:['Letting the hips sag','Flaring the elbows straight out'],
+  loadDescription:'Bodyweight movement. No external kg load is displayed.',
+  alternatives:['machine_chest_press','dumbbell_bench_press','push_up_machine']
+}),
+
+common({
+  id:'overhead_barbell_press',
+  safetyConsiderations:[{kind:'load_control',note:'Keep the bar path over the mid-foot and the ribs down; add load only when every repetition ends in the same stable position.',modification:'Use the dumbbell or machine shoulder press at a lighter load.'}],
+  name:'Overhead Barbell Press',
+  aliases:['barbell shoulder press','standing press','military press'],
+  family:'vertical press',
+  pattern:'vertical_push',
+  primaryMuscles:['front delts'],
+  secondaryMuscles:['side delts','triceps','core'],
+  equipment:['barbell'],
+  loadSemantics:'total',
+  incrementKg:2.5,
+  repRange:[6,10],
+  restSec:150,
+  difficulty:'intermediate',
+  cues:['Squeeze the glutes and brace','Press in a straight line','Finish with the bar over the mid-foot'],
+  setup:['Set the bar at upper-chest height in a rack, hands just outside the shoulders','Step back with the bar resting on the shoulders'],
+  steps:['Brace and press the bar up, moving the head back then through','Lock out with the bar over the mid-foot','Lower to the shoulders under control'],
+  mistakes:['Leaning back to push the bar up','Pressing the bar out in front of the body'],
+  loadDescription:'Total external load. For a barbell, this includes the bar plus plates.',
+  alternatives:['dumbbell_shoulder_press','machine_shoulder_press']
+}),
+
+common({
+  id:'barbell_back_squat',
+  safetyConsiderations:[
+    {kind:'setup',note:'Set the rack safety arms or pins just below the lowest point of your squat before loading the bar.',modification:'Use the goblet squat or leg press if no rack with safeties is available.'},
+    {kind:'technique_sensitive',note:'Bar position, bracing and depth are technique sensitive; learn them with an empty bar or a goblet squat first.',modification:'Reduce the load or the depth until every repetition looks the same.'}
+  ],
+  name:'Barbell Back Squat',
+  aliases:['back squat','barbell squat','squat'],
+  family:'squat',
+  pattern:'squat',
+  primaryMuscles:['quads','glutes'],
+  secondaryMuscles:['hamstrings','core','back'],
+  equipment:['barbell'],
+  loadSemantics:'total',
+  incrementKg:2.5,
+  repRange:[5,10],
+  restSec:150,
+  difficulty:'intermediate',
+  cues:['Brace before you descend','Knees track over the toes','Drive up through the whole foot'],
+  setup:['Set the bar on the upper back in a rack','Stand with the feet about shoulder width and the toes slightly out'],
+  steps:['Unrack and step back','Descend under control to a depth you can hold with a neutral spine','Stand up while keeping the torso angle'],
+  mistakes:['Letting the knees cave in','Rising with the hips first and the chest dropping'],
+  loadDescription:'Total external load. For a barbell, this includes the bar plus plates.',
+  alternatives:['goblet_squat','leg_press','bodyweight_squat']
+}),
+
+common({
+  id:'reverse_lunge',
+  safetyConsiderations:[{kind:'balance',note:'Step back into a space you can control and keep a wall or rack within reach while the movement is new.',modification:'Hold a support, or use the split squat, until the balance is steady.'}],
+  name:'Reverse Lunge',
+  aliases:['dumbbell reverse lunge','backward lunge'],
+  family:'unilateral squat',
+  pattern:'unilateral_squat',
+  primaryMuscles:['quads','glutes'],
+  secondaryMuscles:['hamstrings','core'],
+  equipment:['bodyweight','dumbbell'],
+  loadSemantics:'per_hand',
+  incrementKg:1,
+  unilateral:true,
+  restSec:90,
+  cues:['Step back far enough that the front shin stays upright','Keep the torso tall','Push through the front foot to return'],
+  setup:['Stand tall holding a dumbbell in each hand, or none','Clear the space behind you'],
+  steps:['Step one foot back and lower the back knee toward the floor','Keep most of the weight on the front foot','Push back up and step the feet together'],
+  mistakes:['Taking a step that is too short','Letting the front knee drift inward'],
+  loadDescription:'Dumbbell load is shown per hand. With no dumbbells it is a bodyweight movement.',
+  alternatives:['split_squat','step_up','goblet_squat']
+}),
+
+common({
+  id:'glute_bridge',
+  name:'Glute Bridge',
+  aliases:['bodyweight glute bridge','hip bridge'],
+  family:'hip extension',
+  pattern:'hinge',
+  primaryMuscles:['glutes'],
+  secondaryMuscles:['hamstrings','core'],
+  equipment:['bodyweight'],
+  loadSemantics:'bodyweight',
+  incrementKg:0,
+  repRange:[10,20],
+  restSec:60,
+  progressions:['hip_thrust'],
+  cues:['Feet flat, shins near vertical at the top','Squeeze the glutes at the top','Keep the ribs down'],
+  setup:['Lie on your back with the knees bent and the feet flat, about hip width apart'],
+  steps:['Brace and press through the heels to lift the hips','Pause with the hips in line with the shoulders and knees','Lower under control'],
+  mistakes:['Arching the lower back at the top','Pushing through the toes'],
+  loadDescription:'Bodyweight movement. No external kg load is displayed.',
+  alternatives:['hip_thrust','romanian_deadlift']
+}),
+
+common({
+  id:'kettlebell_deadlift',
+  safetyConsiderations:[{kind:'technique_sensitive',note:'The hip hinge is technique sensitive; use a kettlebell that lets the back stay flat for every repetition.',modification:'Raise the kettlebell on a low platform, or use the glute bridge, until the hinge is consistent.'}],
+  name:'Kettlebell Deadlift',
+  aliases:['kb deadlift','kettlebell hinge'],
+  family:'hip hinge',
+  pattern:'hinge',
+  primaryMuscles:['hamstrings','glutes'],
+  secondaryMuscles:['back','core'],
+  equipment:['kettlebell'],
+  loadSemantics:'total',
+  incrementKg:4,
+  progressions:['barbell_deadlift'],
+  cues:['Push the hips back, not the knees forward','Keep the kettlebell close','Stand tall at the top without leaning back'],
+  setup:['Place the kettlebell between the feet, about shoulder width apart','Hinge to take it with both hands'],
+  steps:['Brace and push the floor away to stand','Squeeze the glutes at the top','Hinge back down and set the kettlebell down under control'],
+  mistakes:['Squatting the weight up with a rounded back','Leaning back at the top'],
+  loadDescription:'Single kettlebell held with both hands. Displayed value is total external load.',
+  alternatives:['romanian_deadlift','hip_thrust','glute_bridge']
+}),
+
+common({
+  id:'barbell_deadlift',
+  safetyConsiderations:[
+    {kind:'technique_sensitive',note:'Setting the back and hips before the bar leaves the floor is technique sensitive; learn it light first.',modification:'Use the kettlebell deadlift or a lighter load until each repetition starts from the same position.'},
+    {kind:'load_control',note:'Add load only when the last repetition of every set looks like the first.',modification:'Hold the load for another session when the position changes late in a set.'}
+  ],
+  name:'Barbell Deadlift',
+  aliases:['deadlift','conventional deadlift'],
+  family:'hip hinge',
+  pattern:'hinge',
+  primaryMuscles:['hamstrings','glutes'],
+  secondaryMuscles:['back','quads','core'],
+  equipment:['barbell'],
+  loadSemantics:'total',
+  incrementKg:2.5,
+  repRange:[5,8],
+  restSec:180,
+  difficulty:'intermediate',
+  cues:['Set the back and brace before pulling','Keep the bar against the legs','Stand tall to finish'],
+  setup:['Stand with the bar over mid-foot, feet about hip width','Hinge down and take an overhand grip just outside the legs'],
+  steps:['Brace and push the floor away','Keep the bar close as it passes the knees','Lock out with the hips and knees, then lower under control'],
+  mistakes:['Jerking the bar off the floor','Rounding the back as the bar leaves the floor'],
+  loadDescription:'Total external load. For a barbell, this includes the bar plus plates.',
+  alternatives:['romanian_deadlift','kettlebell_deadlift','hip_thrust']
+}),
+
+common({
+  id:'pallof_press',
+  safetyConsiderations:[{kind:'setup',note:'Set the cable at chest height and stand far enough from the stack that the resistance pulls you sideways.',modification:'Take a smaller step away from the stack, or use less load.'}],
+  name:'Pallof Press',
+  aliases:['cable pallof press','anti-rotation press'],
+  family:'anti-rotation core',
+  pattern:'core',
+  primaryMuscles:['core'],
+  secondaryMuscles:['obliques','shoulders'],
+  equipment:['cable'],
+  loadSemantics:'stack',
+  incrementKg:2.5,
+  unilateral:true,
+  repRange:[10,15],
+  restSec:60,
+  cues:['Resist the pull of the cable','Keep the hips and shoulders square','Press and return slowly'],
+  setup:['Stand side-on to a cable at chest height','Hold the handle with both hands at the chest and step away until the cable is tight'],
+  steps:['Brace so the cable cannot turn you','Press the handle straight out','Pause with the arms extended, then bring it back to the chest'],
+  mistakes:['Letting the torso rotate toward the stack','Leaning away to counter the load'],
+  loadDescription:'Load is shown from the cable stack. Pulley ratios can vary by equipment.',
+  alternatives:['bird_dog','plank','dead_bug']
 }),
 
 ];

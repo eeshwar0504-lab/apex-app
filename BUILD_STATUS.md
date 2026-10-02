@@ -1,8 +1,115 @@
-# APEX 4.0.0 build status
+# APEX 4.1.0 build status
 
 ## Release 4.0.0
 
 Major release on top of 3.1.2. Android versionCode 7. Core correctness (custom load lists, one assisted representation, fatigue/recovery path, timed exercises, input validation, warm-up semantics, goal-aware programming, local-date model, one equipment rule and substitution ranking); Coach boundary work; data/platform integrity; profile, goal and journal editing, library actions, confirmation flows, accessibility and the PWA decision (not a PWA, `docs/PWA_DECISION.md`); exercise graph with progressions/regressions, safety metadata and one similarity/ranking mechanism; an optional, grounded, untrusted AI explanation layer behind a strict deterministic boundary (`docs/AI_BOUNDARY.md`, off by default, no cloud UI, no keys). Native Capacitor SQLite and Android runtime remain unverified by the Node test harness.
+
+## Phase 7: platform hardening and correctness (after 4.0.0, not yet released or committed)
+
+Version and Android `versionCode` are unchanged (4.0.0 / 7). No new features.
+
+- **Rest preference.** `applySetFeedback` now takes the rest preference from `state.preferences` (it read it from the profile, where it does not exist, so the user's setting was ignored after set feedback).
+- **Local day.** The Coach's "today" (`buildCoachContext`, `answerCoachQuestion`) and two history labels now use the local calendar day, not the UTC date of an ISO string.
+- **Persistence arbitration.** Every save is stamped `savedAt` (it moves only when content changes). The native-versus-local comparison uses it, so edits that carry no timestamp of their own (profile, goals, journal, recovery, preferences) can no longer lose to an older copy. A workout's scheduled day is no longer treated as a mutation time. Data saved before this change still compares by its workout, event and plan timestamps.
+- **SQLite migrations.** `src/data/sqliteMigrations.ts` owns the ordered migration list; `SQLITE_SCHEMA_VERSION` is derived from it and stamped on every row (it was a literal 4). A v4 database is read unchanged; a database from a newer app is left untouched. Tested with a fake database only. Native SQLite is still NOT VERIFIED on a device.
+- **Removed:** the unused `smartRir` preference (old saved data that has it still loads), `src/engine/coachGateway.ts` (no runtime importer), the stray no-extension workflow `.github/workflows/android-apk`, and the root `manifest.webmanifest` (never published; consistent with `docs/PWA_DECISION.md`).
+- **Deferred, unchanged on purpose:** `safetyCheck` in `src/engine/training.ts` is not called by any runtime path. Whether to wire it up or remove it is an open decision.
+- **Docs:** README, RELEASE_READINESS and PWA_DECISION corrected (no invented completion percentage).
+
+Validation after Phase 7: `npm test` 417/417, `npm run verify` (417/417, release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, Playwright (training, coach, product-workflows, body-data) 16/16, longitudinal quick 720 PASS / 0 FAIL (identical to the 4.0.0 commit). Not re-run: the full Playwright suite, the browser corpus, longitudinal standard/endurance/full, and any Android build or device check.
+
+## Phase 9: rolling workout generation (after Phase 7, not yet released or committed)
+
+Version and `versionCode` are unchanged (4.0.0 / 7).
+
+- `src/engine/rolling.ts` is a pure engine module. `maintainTrainingHorizon` marks earlier planned sessions missed (the existing rule) and fills every unfilled template slot in a 7-day window (`preferences.horizonDays`, 7 to 28, no UI). Same state, day and clock give identical workouts and ids; a repeated call returns the same object; completed history is never rewritten. Rules are in `docs/TRAINING_SEMANTICS.md` section 11.
+- `main.tsx` no longer builds workouts: onboarding calls the engine, and a lifecycle effect (after hydration, on workout/plan/profile change, on returning to the foreground, and every minute) keeps the horizon filled. It replaces the mount-only missed-workout pass. Plan Studio shows a day's next upcoming session instead of the first week's.
+- Not changed: exercise selection (first catalogue match), progression, recovery, warm-ups, the plan template (profile edits to training days still do not re-template), SQLite and the repository.
+
+Validation after Phase 9: `npm test` 445/445, `npm run verify` (release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, the Playwright e2e suite 81/81, longitudinal quick 722 PASS / 0 FAIL (720 before, plus two new rolling-generation records). Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phase 10: exercise selection and catalogue 2.0 (after Phase 9, not yet released or committed)
+
+Version and `versionCode` are unchanged (4.0.0 / 7).
+
+- `src/engine/selection.ts` replaces first-match selection in `buildPlan` with a deterministic ranking (equipment fit, suitability, goal, continuity, exposure, catalogue default, muscle coverage, progressability, alternatives, fewer equipment pieces, then id). Candidates must match the pattern and fit the equipment; there is no cross-pattern fallback. Order and rationale: `docs/TRAINING_SEMANTICS.md` section 12. Loads, progression and rep ranges are untouched.
+- The catalogue grows from 35 to 45 exercises (One-Arm Dumbbell Row, Barbell Row, Push-Up, Overhead Barbell Press, Barbell Back Squat, Reverse Lunge, Glute Bridge, Kettlebell Deadlift, Barbell Deadlift, Pallof Press) and gains five justified progression links (12 in total). The graph, knowledge and safety validators report no issues.
+- A UPPER or LOWER session set with fewer than 3 exercises now uses the full-body set (it applied only when empty).
+- Intended plan differences are pinned by `tests/golden/plans.json`; a full-equipment intermediate athlete with the general goal gets the same plan as before. Existing plans and rolling generation are unchanged (they use the stored selection).
+- Not covered: pull-ups, hanging leg raises, dips and trap-bar deadlifts (the equipment vocabulary and the bodyweight-needs-no-equipment rule cannot express them yet).
+
+Validation after Phase 10: `npm test` 475/475, `npm run verify` (release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, the Playwright e2e suite 81/81, longitudinal quick 722 PASS / 0 FAIL. Mutation checks: 13 mutations of the ranking and the minimum-session rule are each caught by the tests. Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phase 11: progression 2.0 (after Phase 10, not yet released or committed)
+
+Version and `versionCode` are unchanged (4.0.0 / 7).
+
+- `src/engine/longitudinal.ts` derives a per-exercise progression state from workout history (nothing is stored) and applies one documented transition table (13 rows; outcomes CONTINUE, PROGRESS, HOLD, PLATEAU, CONSIDER_VARIATION, RECOVER, CONSERVATIVE_REENTRY, each with a reason code and explanation). Rules, thresholds, plateau definition and variation rules are in `docs/TRAINING_SEMANTICS.md` section 13.
+- `personalizedLoad()` now returns `longitudinal` alongside the unchanged load. Loads, actions and rest are identical to before (asserted against `progression()`); rolling generation (Phase 9) and ranking (Phase 10) are untouched and consume it through `applyWorkoutAdaptation`.
+- A persistent plateau (5 stalled exposures over 14+ days) may name a variation from the exercise graph (harder / easier / equivalent alternative) within equipment and experience limits. It is advisory: nothing is swapped automatically.
+- Re-entry reuses the return-to-training gap rule; elevated workload only defers a plateau verdict; history is never rewritten; no persisted field or migration was added.
+- Tests: `tests/progression-longitudinal.test.cjs` (32 tests) and two longitudinal scenarios (ten weeks: progress, a wall, a layoff, re-entry; determinism).
+
+Validation after Phase 11: `npm test` 507/507, `npm run verify` (release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, the Playwright e2e suite 81/81, longitudinal quick 724 PASS / 0 FAIL. Mutation checks: 17 of 18 mutations of the transition table, state derivation, variation rules and integration are caught by the tests; the survivor removes a redundant pattern check in the variation filter (graph validation and the equivalence rule already guarantee it), and a test pins the behaviour. Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phase 12: deload and recovery 2.0 (after Phase 11, not yet released or committed)
+
+Version and `versionCode` are unchanged (4.0.0 / 7).
+
+- `src/engine/fatigue.ts` is a deterministic fatigue model (workload ratio and spike, repeated high effort, dense weeks, stalls, decline) with states NORMAL / ELEVATED / HIGH / RECOVERY_REQUIRED, a deload status (normal, temporary_fatigue, sustained_fatigue, deload_recommended, deload_active, recovery_complete) and a recovery trend. Rules, thresholds and the product-rule disclaimer are in `docs/TRAINING_SEMANTICS.md` section 14. Recovery check-ins are not an input.
+- A deload is started only by the athlete (`startDeload` in `src/engine/deload.ts`, one Home button) and only while the engine recommends one. While active it prescribes 2 load steps lower, one fewer set and RIR + 2 through `personalizedLoad`; deload sessions are not progression evidence; the 7 days after it carry no increase. The existing return-to-training rule is reused (`loadStepsBelow` is shared) and never stacked.
+- A plateau is fatigue only with corroborating load signals; HIGH fatigue with stalls defers the Phase 11 plateau verdict (`RECOVER / recovery_hold`). The Phase 11 table, Phase 9 rolling (one pass-through argument) and Phase 10 ranking are otherwise untouched.
+- Persistence: one optional field, `AppState.deloads` (accepted start days), normalised in the repository and covered by the Phase 7 arbitration tests. No schema change.
+- Tests: `tests/fatigue-deload.test.cjs` (27 tests), a `deloads` case in `tests/phase7-persistence.test.cjs`, and two longitudinal scenarios (ten weeks with an accepted deload; determinism).
+
+Validation after Phase 12: `npm test` 536/536, `npm run verify` (release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, the Playwright e2e suite 81/81, longitudinal quick 726 PASS / 0 FAIL. Mutation checks: 22 of 22 mutations of the fatigue rules, deload prescription, evidence filter, resume and gating are caught by the tests. The Home deload card has no browser test. Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phase 13: warm-up system 2.0 (after Phase 12, not yet released or committed)
+
+Version and `versionCode` are unchanged (4.0.0 / 7).
+
+- `src/engine/warmup.ts` generates warm-ups deterministically from the working load, the exercise load semantics, the athlete's own load list and what earlier exercises in the session already prepared. Rules and equipment semantics are in `docs/TRAINING_SEMANTICS.md` section 15. Machines, dumbbells, barbells (never under a known bar), bodyweight (repetition preparation only), assisted (more assistance, never reversed) and no-load or timed movements are covered; light work gets none.
+- A warm-up is an ordinary set of type `warmup`: no new field, no new persistence. Every analytics path already filters it through `isWorkingSet`, and tests prove identical results with and without heavy warm-ups for progression, longitudinal exposure, volume, PRs, completion counts, fatigue/deload and selection exposure.
+- Session: generated once at first hydration, labelled WARM-UP n / m, completed (short rest, no feedback step), skipped (never blocks the session) or edited (stays on that set; the working load is never touched). Working-set counters, `prescribedSets`, add/remove set and calendar marks count working sets only.
+- Tests: `tests/warmup.test.cjs` (19), `tests/golden/warmups.json` (14 golden cases) and one Playwright test; 22 mutations of the generator and its wiring are caught.
+
+Validation after Phase 13: `npm test` 555/555, `npm run verify` (release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, the Playwright e2e suite 82/82, longitudinal quick 726 PASS / 0 FAIL. Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phases 14-16: weekly analytics, Coach 2.0, Ask Coach 2.0 (after Phase 13, not yet released or committed)
+
+Version and `versionCode` are unchanged (4.0.0 / 7). Rules are in `docs/TRAINING_SEMANTICS.md` section 16.
+
+- Phase 14: `src/engine/weeklyAnalytics.ts` derives a read-only local-calendar week (Monday start): volume and direct/indirect muscle sets (warm-ups and invalid sets excluded), consistency (planned, completed, missed, skipped, adherence, streak), progression (Phase 11 exposure kinds and decisions), recovery (the Phase 12 assessment) and a same-days week comparison with explicit `not_enough_data`. Shown on Progress, Overview.
+- Phase 15: `src/coach/briefing.ts` synthesises the existing engine decisions into at most three prioritised, actionable items with reasons, severity and metrics, or `insufficient_data`. It never writes a load or invents an exercise. Shown on the Coach screen and as one "Next:" line on Home.
+- Phase 16: `src/coach/askContext.ts` is the single structured context (no identity, notes or check-in values); `askCoach.ts` gains weekly review, focus today, deload, exercise change and a richer plateau answer, and a strict contract (answer, evidence, prescription, limitations, next action). The AI grounding now carries the engine prescription and next step as facts; AI stays optional, off by default and unable to change a prescription.
+- No persisted field, no migration, no change to the training engine or to the existing Coach decision pipeline.
+- Tests: `tests/weekly-analytics.test.cjs` (14), `tests/coach-briefing.test.cjs` (17), `tests/ask-coach-2.test.cjs` (17), `tests/coach2-golden.test.cjs` + `tests/golden/coach2.json` (3 athletes), one Playwright test; 25 of 25 mutations of the analytics, briefing priorities and Ask Coach contract are caught.
+
+Validation after Phases 14-16: `npm test` 605/605, `npm run verify` (release audit PASS, 0 warnings), `npm run build`, QA contracts 25/25, the Playwright e2e suite 83/83, longitudinal quick 726 PASS / 0 FAIL. Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phases 17-18: motion system and UI decomposition (after Phase 16, not yet released or committed)
+
+**Phase 17.** `src/apex-motion.css` (loaded last) is the one place for motion tokens (durations, easings, press scale, stagger, distances), shared press feedback (zero-specificity, skips disabled/busy controls), screen/sheet/list/message/rest-timer/progress transitions, a skeleton, focus rings and viewport behaviour. Only transform and opacity are animated. Reduced motion (OS setting or the APEX preference) collapses the tokens, so nothing travels and nothing waits; `ui/motion.ts` reads the same tokens, so script and CSS agree. Sheets now exit through an `is-closing` state (idempotent, so a double tap or Escape plus a tap closes once; focus restoration unchanged). Screens record navigation direction (`data-nav-dir`) so Android back arrives from where you came, and a back press within 140 ms of the last is ignored. Enter animations use fill-mode `backwards` so they no longer hold their end state over `:active`. The Coach shows a skeleton while an optional AI explanation is pending. No engine, data or behaviour change.
+
+**Phase 18.** `src/main.tsx` (4,584 lines) is now the 26-line entry. Extracted: `App.tsx` (shell, routing, state flow), `ui/` (primitives, dialogs, navigation/command sheet, motion, shared formatting, state and set helpers) and `screens/` (Home, Train, Workout, SetEditor, Progress, Coach, You, Nutrition, Library, Onboarding). Code was moved, not rewritten; layering is ui <- screens <- App <- main with no cycles. Source-contract tests read the UI tree through `tests/ui-source.cjs`. Two test edits were forced by the move and keep their intent: the package.json import path, and the onboarding test now checks `generateRollingWorkouts` (its old `createWorkout` match was an unused import that the extraction removed). A dead constant (`PROFILE_EQUIPMENT_OPTIONS`) was dropped.
+
+Tests: `tests/motion-system.test.cjs` (10), `tests/ui-architecture.test.cjs` (6), `tests/e2e/motion.spec.ts` (4). Not re-run: the browser corpus, longitudinal standard/endurance/full, any Android build or device check.
+
+## Phases 19-22 and the final validation (4.1.0 release candidate, after Phase 18)
+
+**Phase 19, persistence and backup.** The backup envelope carries a checksum; restore refuses a damaged, truncated, malformed, empty or newer-than-supported backup (envelope or data version) before anything is replaced, so a restore is all or nothing, and the state it replaced is kept as one undo generation ("Undo last restore" in Settings). Plain-list records (goals, measurements, journal, templates) get the workout list's guarantee: non-objects dropped, exact duplicates dropped, a different record reusing an id re-id'd, a clean list untouched, so hydrate/save cycles never add or remove a record. An unreadable native (SQLite) payload is preserved before the next save can overwrite it (with a recovery notice when nothing local exists); native write failures are recorded and visible through `repository.nativeStatus()`. Tests: `tests/persistence-hardening.test.cjs` (14). The migration runner, arbitration and corrupt-recovery suites from Phase 7 are unchanged.
+
+**Phase 20, notifications.** One scheduler (the existing `notificationIntents` plus the native adapter), now deterministic and de-duplicated: a ledger keeps a fired notification from firing again and a pending one at its first time; the missed-session follow-up is the same evening, then a short window, never late at night; the weekly review is planned for the coming Sunday evening in advance and carries no stale numbers; the training reminder moves to the next session still ahead when today's 07:00 has passed (previously it was lost); an engine deload recommendation becomes one Coach reminder (it never starts a deload). The adapter cancels everything APEX scheduled before it schedules, schedules nothing when off or not permitted, asks for permission once automatically and when the user turns reminders on (never repeatedly), creates a channel, serialises syncs, and re-plans on resume, on a new local day and on schedule changes. A tap opens only a known surface. Tests: `tests/notifications-engine.test.cjs` (14).
+
+**Phase 21, AI.** The contract is versioned (`AI_CONTRACT_VERSION`, an optional `contractVersion` in replies). New sentence-level rejections: invented recovery figures, claims that contradict or invent an engine decision (deload, progression, plateau; same stance as the context is kept), and irrelevant text. Self-reported check-in values never reach a provider, not even inside the Coach answer text. Tests: `tests/ai-adversarial.test.cjs` (15).
+
+**Phase 22, release engineering.** Version 4.1.0, versionCode 8 (the update path and application id are unchanged). Release signing is read from `android/keystore.properties` or `APEX_KEYSTORE_*` variables, never the repository; without them the release APK and AAB are unsigned. Debug builds carry a `-debug` version suffix; the manifest sets `allowBackup=false`, drops the unused biometric permissions, and the FileProvider exposes only the app cache. CI installs from the lockfile (`npm ci`), runs the tests, the release audit and the build, builds the debug APK, release APK and AAB, names them by version and uploads them. The release audit now checks version agreement, signing structure, backup setting and ignore rules. `npm audit`: 0 vulnerabilities after one transitive fix. `noUnusedLocals` is on and the dead code it found (unused stepper helpers, an unused function and locals) was removed. Backup export on Android now goes through Filesystem and Share (a blob download does nothing in the WebView).
+
+**Phase 8, Android certification: BLOCKED by an external dependency.** The SDK tools and an x86_64 system image were installed and an AVD created, but the emulator needs hardware acceleration, which needs an administrator on this machine; an arm64 image is refused on an x86_64 host; no device is attached. Nothing was run on Android. A simulated native bridge (`tests/e2e/native-bridge.spec.ts`, 7) covers the JavaScript wiring only. `docs/ANDROID_DEVICE_CERTIFICATION.md` has the details and the exact steps to finish.
+
+**Browser corpus.** Run for the first time since Phase 13: three specs were stale against intended behaviour (warm-ups now precede the first working set; the Progress tab gained a weekly Sessions card) and were updated, not weakened. 28/28.
+
+Final validation (all on this machine, 2026-10-02/03): `npm test` 664+ pass, 0 fail (re-run in the final pass); `npm run verify` audit PASS, 0 warnings; `npm run build`; QA contracts 25/25; full Playwright suite 92/92 plus the native-bridge additions; browser corpus 28/28; longitudinal quick 726/0, standard 6126 PASS / 0 FAIL / 1 REVIEW, full 30126 PASS / 0 FAIL / 1 REVIEW, endurance 3126 PASS / 0 FAIL / 1 REVIEW (the single REVIEW is the documented, unreachable "engine does not validate NaN set values" item). Debug APK, release APK and AAB build; release signing wiring verified with a throw-away key. Not verified: anything on Android.
 
 ## Release 3.1.2 (previous)
 

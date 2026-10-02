@@ -23,6 +23,10 @@ function redactName(value: string, name: string | undefined): string {
   return value.split(trimmed).join('the user').split(trimmed.toLowerCase()).join('the user');
 }
 
+/** Self-reported check-in values (sleep hours, soreness, readiness, energy, stress) never reach a provider, not even inside the Coach's own answer text. */
+const RECOVERY_VALUES = /\b(?:sleep|soreness|readiness|energy|stress|mood|motivation)\s*:?\s*\d+(?:\.\d+)?\s*(?:h(?:ours?)?\b|\/\s?\d+)?/gi;
+const scrubRecoveryValues = (value: string) => value.replace(RECOVERY_VALUES, match => match.replace(/\d+(?:\.\d+)?(?:\s*(?:h(?:ours?)?\b|\/\s?\d+))?/, 'values not shared'));
+
 function candidatesFor(state: AppState, exercise: Exercise | undefined): GroundedCandidate[] {
   if (!exercise) return [];
   const equipment = state.profile?.equipment;
@@ -48,7 +52,7 @@ function candidatesFor(state: AppState, exercise: Exercise | undefined): Grounde
  */
 export function buildGroundedContext(state: AppState, question: string, now: string, today: string): GroundedAIContext {
   const asked = clip(question, QUESTION_MAX);
-  const hide = (value: string) => redactName(value, state.profile?.name);
+  const hide = (value: string) => scrubRecoveryValues(redactName(value, state.profile?.name));
   const context = buildCoachContext(state, {userInput: asked, now});
   const answer = answerCoachQuestion(state, asked, context);
   const exercise = exerciseForQuestion(state, asked, context);
@@ -58,14 +62,20 @@ export function buildGroundedContext(state: AppState, question: string, now: str
   const unknown: string[] = [];
   for (const item of answer.evidence) {
     if (item.id === 'e_user_input') continue; // the question is already part of the context
-    const fact = {id: item.id, statement: clip(hide(item.statement), AI_LIMITS.claimMax)};
+    /* check-in values (sleep, soreness, readiness) are private health-adjacent data: the provider is told a check-in exists, never its numbers; the Coach's own coarse reading (e_recovery_state) is kept */
+    const statement = item.id === 'e_recovery' ? 'A self-reported recovery check-in exists; its values are not shared.' : item.statement;
+    const fact = {id: item.id, statement: clip(hide(statement), AI_LIMITS.claimMax)};
     if (item.state === 'known') known.push(fact);
     else if (item.state === 'unknown') unknown.push(fact.statement);
     else inferred.push(fact);
   }
   inferred.push({id: 'coach_confidence', statement: `The Coach rates its confidence in this answer as ${answer.confidence}.`});
   if (answer.safety) inferred.push({id: 'coach_safety', statement: clip(hide(answer.safety), AI_LIMITS.claimMax)});
-  for (const missing of answer.missing || []) unknown.push(clip(hide(missing), AI_LIMITS.claimMax));
+  for (const missing of answer.limitations) unknown.push(clip(hide(missing), AI_LIMITS.claimMax));
+  // the engine's own decision and the suggested next step, already decided: the AI may restate them, never change them
+  const rx = answer.prescription;
+  if (rx) known.unshift({id: 'engine_prescription', statement: clip(hide(`The engine's current decision for ${rx.exerciseName}: ${rx.action ?? 'calibrate'}${rx.weight !== undefined && rx.weight > 0 ? ` at ${rx.weight} ${rx.unit}` : ''} (${rx.decision.toLowerCase().replace(/_/g, ' ')}).`), AI_LIMITS.claimMax)});
+  if (answer.nextAction) inferred.push({id: 'coach_next_action', statement: clip(hide(`Suggested next step: ${answer.nextAction.text}`), AI_LIMITS.claimMax)});
   const unique = (list: GroundedFact[]) => list.filter((fact, index) => list.findIndex(other => other.id === fact.id) === index).slice(0, FACTS_MAX);
 
   return {
@@ -84,7 +94,7 @@ export function buildGroundedContext(state: AppState, question: string, now: str
   };
 }
 
-export const OUTPUT_CONTRACT = 'Reply with one JSON object and nothing else: {"response": string, "groundedClaims": [{"claim": string, "factIds": [string]}], "uncertainties": [string], "requestedClarification": string (optional)}. Every grounded claim must cite fact ids from KNOWN or INFERRED. No other fields.';
+export const OUTPUT_CONTRACT = 'Reply with one JSON object and nothing else: {"response": string, "groundedClaims": [{"claim": string, "factIds": [string]}], "uncertainties": [string], "requestedClarification": string (optional), "contractVersion": 1 (optional)}. Every grounded claim must cite fact ids from KNOWN or INFERRED. No other fields.';
 
 export const RULES = [
   'You are the optional explanation layer of APEX. The deterministic APEX training engine and Coach are authoritative; you only explain what they already decided.',

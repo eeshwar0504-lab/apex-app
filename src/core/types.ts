@@ -622,6 +622,12 @@ export interface RecoveryCheckIn {
 
 export interface AppState {
   schemaVersion: number;
+  /**
+   * When this state was last persisted with changed content. Written only by the repository. It lets the native
+   * and local copies be compared even for edits that carry no timestamp of their own (profile, goals, journal,
+   * recovery, preferences).
+   */
+  savedAt?: string;
 
   profile?: UserProfile;
 
@@ -661,12 +667,16 @@ export interface AppState {
 
   recoveryLog?: RecoveryCheckIn[];
 
+  /**
+   * Start days (YYYY-MM-DD) of the deload weeks the athlete accepted. Everything else about fatigue and deloads is derived from
+   * the history (src/engine/fatigue.ts). A deload lasts a fixed 7 days from its start.
+   */
+  deloads?: string[];
+
   preferences: {
     haptics: boolean;
 
     sounds: boolean;
-
-    smartRir: boolean;
 
     restPreference:
       | 'adaptive'
@@ -694,6 +704,8 @@ export interface AppState {
 
     /** Optional AI explanations. Off by default; cloud is never selectable here (it needs explicit configuration). */
     aiMode?: 'off' | 'rule-based' | 'local-model';
+    /** How many days ahead scheduled workouts are kept generated (7..28, default 7). No UI; see src/engine/rolling.ts. */
+    horizonDays?: number;
 
     notifications: {
       enabled: boolean;

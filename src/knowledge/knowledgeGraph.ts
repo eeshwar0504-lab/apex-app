@@ -1,6 +1,6 @@
 import type {Exercise, AppState} from '../core/types';
 import {comparisonScore, isEquivalentSubstitution, rankSubstitutes} from '../engine/training';
-import {exerciseGraph, variationOptions} from '../engine/exerciseGraph';
+import {exerciseGraph} from '../engine/exerciseGraph';
 
 /** The exercise graph is defined once, in the engine (src/engine/exerciseGraph.ts); the knowledge layer re-exports it. */
 export {buildExerciseGraph, exerciseGraph, variationOptions} from '../engine/exerciseGraph';

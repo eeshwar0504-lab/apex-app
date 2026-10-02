@@ -6,13 +6,14 @@ import {isUsableState,inspectState} from './integrity';
 import {normalizeRecoveryLog} from '../engine/recovery';
 import {MAX_PLAUSIBLE_LOAD_KG,MAX_PLAUSIBLE_REPS,MAX_PLAUSIBLE_SECONDS} from '../engine/limits';
 import {normalizeUnits} from './units';
+import {dayNumber} from './dates';
 
 const KEY='apex-state-v4';
 const SCHEMA_VERSION=4;
 
 const fresh=():AppState=>({
  schemaVersion:SCHEMA_VERSION,goals:[],workouts:[],exercises:EXERCISES,achievements:[],measurements:[],journal:[],observations:[],
- preferences:{haptics:true,sounds:false,smartRir:true,restPreference:'adaptive',restCustomSec:120,reducedMotion:false,diagnostics:false,fontScale:'system',highContrast:false,notifications:{enabled:true,workoutReminders:true,missedWorkout:true,weeklyReview:true}},
+ preferences:{haptics:true,sounds:false,restPreference:'adaptive',restCustomSec:120,reducedMotion:false,diagnostics:false,fontScale:'system',highContrast:false,notifications:{enabled:true,workoutReminders:true,missedWorkout:true,weeklyReview:true}},
  activeRoute:'home',onboardingComplete:false,coachMemory:[],workoutTemplates:[],learnedPreferences:{},eventLog:[]
 });
 
@@ -42,17 +43,30 @@ export interface Repository{
  importJson(raw:string):AppState;
  loadAsync():Promise<AppState>;
  saveAsync(s:AppState):Promise<void>;
+ /** Native (SQLite) write health: the last failure is kept so a silent native problem can be shown rather than only logged. */
+ nativeStatus():{lastError:string|null;lastWriteAt:string|null};
+ /** One generation of the state a restore replaced, so a restore of the wrong backup can be undone. */
+ snapshotBeforeRestore(s:AppState):void;
+ preRestoreSnapshot():AppState|null;
 }
 
 /**
- * Return the newest trustworthy timestamp represented by the state.
+ * Return the newest trustworthy mutation time represented by the state.
+ *
+ * savedAt covers every edit, including those that have no timestamp of their own (profile, goals, journal,
+ * recovery, preferences). The event log, workout and plan timestamps are kept so data saved before savedAt existed
+ * still compares sensibly.
  *
  * Active workouts are deliberately included through startedAt/updatedAt so
  * an interrupted session is not mistaken for an old completed record.
+ * A workout's scheduledDate is a calendar day, not a mutation time, and is never used: a planned future workout
+ * would otherwise make a stale copy look newer than today.
  * Malformed entries are ignored rather than allowing recovery itself to fail.
  */
 function stateRevision(s:AppState){
  const stamps:string[]=[];
+
+ if(s?.savedAt)stamps.push(String(s.savedAt));
 
  for(const event of Array.isArray(s?.eventLog)?s.eventLog:[]){
   const value=event?.timestamp;
@@ -61,7 +75,7 @@ function stateRevision(s:AppState){
 
  for(const workout of Array.isArray(s?.workouts)?s.workouts:[]){
   if(!workout||typeof workout!=='object')continue;
-  const value=workout.updatedAt||workout.completedAt||workout.startedAt||workout.scheduledDate;
+  const value=workout.updatedAt||workout.completedAt||workout.startedAt;
   if(value)stamps.push(String(value));
  }
 
@@ -109,6 +123,39 @@ function repairWorkoutValues(workouts:any){
  });
 }
 
+/** Accepted deload start days: valid YYYY-MM-DD strings only, no repeats, in date order. */
+export function normalizeDeloads(raw:unknown):string[]{
+ if(!Array.isArray(raw))return [];
+ return [...new Set(raw.filter((x):x is string=>typeof x==='string'&&dayNumber(x)!==undefined))].sort();
+}
+
+/**
+ * Records kept as plain lists (goals, measurements, journal, templates) get the same guarantee the workout list has: an entry that is
+ * not an object is dropped, an exact duplicate is dropped, and a different record that reuses an id is given a new one. Nothing else
+ * about a record is touched, and a clean list is returned as is, so the function is idempotent and a hydrate/save cycle never adds or
+ * removes a record.
+ */
+export function normalizeRecords<T>(raw:unknown):T[]{
+ if(!Array.isArray(raw))return [];
+ const seen=new Map<string,string>();
+ let changed=false;
+ const out:any[]=[];
+ for(const item of raw){
+  if(!item||typeof item!=='object'||Array.isArray(item)){changed=true;continue;}
+  const rec=item as any;
+  if(typeof rec.id!=='string'||!rec.id){out.push(rec);continue;}
+  const sig=JSON.stringify(rec);
+  const prev=seen.get(rec.id);
+  if(prev===undefined){seen.set(rec.id,sig);out.push(rec);continue;}
+  changed=true;
+  if(prev===sig)continue;
+  let n=1;while(seen.has(rec.id+'_r'+n))n++;
+  const next={...rec,id:rec.id+'_r'+n};
+  seen.set(next.id,JSON.stringify(next));out.push(next);
+ }
+ return changed?out:raw as T[];
+}
+
 export function migratePersistedState(raw:unknown):AppState{
  const incoming=raw&&typeof raw==='object'?raw as Record<string,unknown>:{ };
  const version=typeof incoming.schemaVersion==='number'?incoming.schemaVersion:0;
@@ -130,6 +177,7 @@ export function migratePersistedState(raw:unknown):AppState{
   migrated.eventLog=Array.isArray(incoming.eventLog)?incoming.eventLog:[];
   migrated.workoutTemplates=Array.isArray(incoming.workoutTemplates)?incoming.workoutTemplates:[];
   if(incoming.recoveryLog!==undefined)migrated.recoveryLog=incoming.recoveryLog;
+  if(incoming.deloads!==undefined)migrated.deloads=incoming.deloads;
  }
 
  return merge(migrated);
@@ -163,6 +211,9 @@ function merge(raw:any):AppState{
   notifications
  };
 
+ // smartRir was a preference that nothing ever read; it is dropped from saved data
+ delete (preferences as any).smartRir;
+
  const merged={
   ...base,
   ...incoming,
@@ -176,9 +227,41 @@ function merge(raw:any):AppState{
   eventLog:Array.isArray(incoming.eventLog)?incoming.eventLog:[]
  } as AppState;
  merged.workouts=repairWorkoutValues(merged.workouts);
+ for(const key of ['goals','measurements','journal','workoutTemplates'] as const)(merged as any)[key]=normalizeRecords((merged as any)[key]);
  if(incoming.recoveryLog!==undefined)merged.recoveryLog=normalizeRecoveryLog(incoming.recoveryLog);
+ if(incoming.deloads!==undefined)merged.deloads=normalizeDeloads(incoming.deloads);
 
  return merged;
+}
+
+/**
+ * Stamps a state about to be persisted. The stamp moves only when the content changes (a re-save of an unchanged,
+ * just-loaded state keeps its stamp) and never moves backwards, even if the device clock does.
+ */
+let lastSignature='';
+let lastStamp='';
+const signature=(s:AppState)=>JSON.stringify({...s,savedAt:undefined,exercises:undefined}); // the catalogue is rebuilt from the profile on every load, so it adds nothing to the comparison
+function remember(s:AppState){
+ lastSignature=signature(s);
+ lastStamp=s.savedAt||'';
+}
+function stamp(s:AppState):AppState{
+ const sig=signature(s);
+ if(sig===lastSignature&&lastStamp)return {...s,savedAt:lastStamp};
+ const previous=Math.max(Date.parse(lastStamp)||0,Date.parse(s.savedAt||'')||0);
+ const now=Math.max(Date.now(),previous+1);
+ lastSignature=sig;
+ lastStamp=new Date(now).toISOString();
+ return {...s,savedAt:lastStamp};
+}
+
+/** 53-bit string hash (cyrb53): not security, only a check that a backup file was not truncated or edited by accident. */
+export function backupChecksum(text:string):string{
+ let h1=0xdeadbeef,h2=0x41c6ce57;
+ for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);h1=Math.imul(h1^c,2654435761);h2=Math.imul(h2^c,1597334677);}
+ h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+ h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+ return (4294967296*(2097151&h2)+(h1>>>0)).toString(16);
 }
 
 const sqlite=new ApexSQLiteStore();
@@ -192,10 +275,13 @@ const sqlite=new ApexSQLiteStore();
  */
 let sqliteWriteQueue:Promise<void>=Promise.resolve();
 
+const native={lastError:null as string|null,lastWriteAt:null as string|null};
+
 function queueSqliteWrite(payload:string){
  const operation=sqliteWriteQueue
   .catch(()=>{})
-  .then(()=>sqlite.write(payload));
+  .then(()=>sqlite.write(payload))
+  .then(()=>{native.lastError=null;native.lastWriteAt=new Date().toISOString();},(error)=>{native.lastError=error instanceof Error?error.message:String(error);throw error;});
 
  sqliteWriteQueue=operation.catch(()=>{});
  return operation;
@@ -232,6 +318,23 @@ function preserveRejected(raw:string,reason:RecoveryNotice['reason']){
  }catch{/* storage full or unavailable */}
 }
 
+const NATIVE_REJECTED_KEY=KEY+'-native-rejected';
+const PRE_RESTORE_KEY=KEY+'-pre-restore';
+
+/**
+ * An unreadable native (SQLite) payload is about to be overwritten by the next save, so it is kept first. When the local copy holds
+ * real data the native copy is only kept; when the local copy is empty the native copy may be the only one, so the user is told.
+ */
+function preserveNativeRejected(raw:string,reason:RecoveryNotice['reason'],local:AppState){
+ const localEmpty=!local.onboardingComplete&&!local.workouts.length;
+ if(localEmpty){preserveRejected(raw,reason);return;}
+ try{
+  const existing=localStorage.getItem(NATIVE_REJECTED_KEY);
+  if(existing&&existing!==raw)localStorage.setItem(NATIVE_REJECTED_KEY+'-previous',existing);
+  localStorage.setItem(NATIVE_REJECTED_KEY,raw);
+ }catch{/* storage full or unavailable */}
+}
+
 function clearNotice(){
  try{localStorage.removeItem(NOTICE_KEY);}catch{/* ignore */}
 }
@@ -243,7 +346,7 @@ function readLocal():AppState{
   if(!raw)return fresh();
 
   const state=migratePersistedState(JSON.parse(raw));
-  if(isUsableState(state))return state;
+  if(isUsableState(state)){remember(state);return state;}
   preserveRejected(raw,'unusable_state');
   return fresh();
  }catch{
@@ -353,7 +456,7 @@ export const repository:Repository={
   * latest state in localStorage even if SQLite is temporarily unavailable.
   */
  save(s){
-  const state=merge(s);
+  const state=stamp(merge(s));
   writeLocal(state);
   void queueSqliteWrite(JSON.stringify(state));
  },
@@ -365,7 +468,10 @@ export const repository:Repository={
    const raw=await sqlite.read();
 
    if(raw){
-    const native=migratePersistedState(JSON.parse(raw));
+    let native:AppState;
+    try{native=migratePersistedState(JSON.parse(raw));}
+    catch{preserveNativeRejected(raw,'invalid_json',fallback);return fallback;}
+    if(!isUsableState(native)){preserveNativeRejected(raw,'unusable_state',fallback);return fallback;}
 
     /*
      * Prefer the state with the newest trustworthy mutation timestamp.
@@ -376,8 +482,7 @@ export const repository:Repository={
     const fallbackRevision=stateRevision(fallback);
     const chosen=nativeRevision>fallbackRevision?native:fallback;
 
-    if(!isUsableState(chosen))return fallback;
-
+    remember(chosen);
     if(chosen===native&&stateRevision(native)>0)clearNotice(); // a valid native copy restored the data automatically
     writeLocal(chosen);
     return chosen;
@@ -391,7 +496,7 @@ export const repository:Repository={
  },
 
  async saveAsync(s){
-  const state=merge(s);
+  const state=stamp(merge(s));
 
   /*
    * Persist locally before awaiting native storage. Callers that await this
@@ -403,7 +508,7 @@ export const repository:Repository={
  },
 
  reset(){
-  try{localStorage.removeItem(KEY);localStorage.removeItem(REJECTED_KEY);localStorage.removeItem(REJECTED_PREV_KEY);localStorage.removeItem(NOTICE_KEY);}catch{}
+  try{localStorage.removeItem(KEY);localStorage.removeItem(REJECTED_KEY);localStorage.removeItem(REJECTED_PREV_KEY);localStorage.removeItem(NOTICE_KEY);localStorage.removeItem(NATIVE_REJECTED_KEY);localStorage.removeItem(NATIVE_REJECTED_KEY+'-previous');localStorage.removeItem(PRE_RESTORE_KEY);}catch{}
 
   /*
    * Reset is ordered behind pending writes. Otherwise an old queued write
@@ -417,20 +522,46 @@ export const repository:Repository={
   void operation;
  },
 
+ nativeStatus(){return {lastError:native.lastError,lastWriteAt:native.lastWriteAt};},
+
+ snapshotBeforeRestore(s){
+  try{localStorage.setItem(PRE_RESTORE_KEY,JSON.stringify(s));}catch{/* storage full: the restore still proceeds, the undo is simply unavailable */}
+ },
+
+ preRestoreSnapshot(){
+  try{
+   const raw=localStorage.getItem(PRE_RESTORE_KEY);
+   if(!raw)return null;
+   const state=migratePersistedState(JSON.parse(raw));
+   return isUsableState(state)?state:null;
+  }catch{return null;}
+ },
+
  exportJson(s){
   return JSON.stringify({
    format:'APEX_BACKUP',
    version:SCHEMA_VERSION,
    exportedAt:new Date().toISOString(),
+   checksum:backupChecksum(JSON.stringify(s)),
    data:s
   },null,2);
  },
 
+  /**
+   * Validates a backup completely before returning it, and never touches the current state: a backup that is malformed, damaged,
+   * from a newer APEX or unusable throws, so a restore is all or nothing.
+   */
  importJson(raw){
-  const obj=JSON.parse(raw);
+  let obj:any;
+  try{obj=JSON.parse(raw);}catch{throw new Error('This file is not a readable APEX backup.');}
   if(obj?.format!=='APEX_BACKUP')throw new Error('This is not an APEX backup.');
+  if(typeof obj.version==='number'&&obj.version>SCHEMA_VERSION)throw new Error('This backup was made by a newer version of APEX. Update APEX to restore it.');
+  const data=obj.data;
+  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('This APEX backup has no data.');
+  if(typeof data.schemaVersion==='number'&&data.schemaVersion>SCHEMA_VERSION)throw new Error('This backup was made by a newer version of APEX. Update APEX to restore it.');
+  if(typeof obj.checksum==='string'&&obj.checksum!==backupChecksum(JSON.stringify(data)))throw new Error('This APEX backup is damaged (its checksum does not match).');
 
-  const state=migratePersistedState(obj.data);
+  const state=migratePersistedState(data);
   if(!isUsableState(state))throw new Error('This APEX backup is not usable.');
 
   return state;

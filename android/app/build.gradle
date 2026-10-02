@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+/*
+ * Release signing. The credentials are never in the repository: they come from android/keystore.properties (git-ignored; see
+ * keystore.properties.example) or from the APEX_KEYSTORE_PATH / APEX_KEYSTORE_PASSWORD / APEX_KEY_ALIAS / APEX_KEY_PASSWORD
+ * environment variables (CI). Without all four, the release build is produced UNSIGNED (app-release-unsigned.apk), which is
+ * correct for CI artifacts and cannot be installed until it is signed with the real key.
+ */
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+def signingValue = { String prop, String env -> keystoreProps.getProperty(prop) ?: System.getenv(env) }
+def releaseStorePath = signingValue('storeFile', 'APEX_KEYSTORE_PATH')
+def releaseStorePassword = signingValue('storePassword', 'APEX_KEYSTORE_PASSWORD')
+def releaseKeyAlias = signingValue('keyAlias', 'APEX_KEY_ALIAS')
+def releaseKeyPassword = signingValue('keyPassword', 'APEX_KEY_PASSWORD')
+def hasReleaseSigning = releaseStorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace "app.apex.training"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +23,8 @@ android {
         applicationId "app.apex.training"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
-        versionName "4.0.0"
+        versionCode 8
+        versionName "4.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +32,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
+        debug {
+            // a debug build identifies itself, so it is never mistaken for the release in Settings or in a bug report
+            versionNameSuffix "-debug"
+        }
         release {
+            // R8 stays off: the app is a WebView shell whose logic is JavaScript, and Capacitor plugins are found by reflection
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) signingConfig signingConfigs.release
         }
     }
 }

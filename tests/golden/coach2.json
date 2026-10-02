@@ -1,0 +1,398 @@
+{
+  "steady_hold": {
+    "weekly": {
+      "week": {
+        "start": "2026-03-02",
+        "end": "2026-03-08",
+        "elapsedDays": 4
+      },
+      "sessions": 1,
+      "planned": 2,
+      "adherencePct": 50,
+      "workingSets": 3,
+      "muscles": [
+        [
+          "chest",
+          3,
+          0,
+          100
+        ],
+        [
+          "front delts",
+          0,
+          3,
+          0
+        ],
+        [
+          "triceps",
+          0,
+          3,
+          0
+        ]
+      ],
+      "progressed": 1,
+      "flat": 0,
+      "stalled": 0,
+      "recovery": [
+        "NORMAL",
+        "normal",
+        "steady"
+      ],
+      "comparison": {
+        "sessions": [
+          "ok",
+          1,
+          2,
+          -1
+        ],
+        "workingSets": [
+          "ok",
+          3,
+          6,
+          -3
+        ],
+        "tonnage": [
+          "ok",
+          1148,
+          2280,
+          -1132
+        ],
+        "adherencePct": [
+          "ok",
+          50,
+          100,
+          -50
+        ],
+        "progressed": [
+          "ok",
+          1,
+          0,
+          1
+        ],
+        "fatigueScore": [
+          "ok",
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "briefing": {
+      "status": "on_track",
+      "headline": "On track",
+      "next": [
+        "maintain_load",
+        "info",
+        "Keep the prescribed loads: the engine is holding them while performance builds."
+      ],
+      "items": [
+        "maintain_load",
+        "train_as_planned"
+      ],
+      "observations": [
+        "This week: 1 session done of 2 planned, 3 working sets.",
+        "Compared with the same days last week: -1 session.",
+        "1 exercise progressed."
+      ]
+    },
+    "ask": {
+      "How did I do this week?": {
+        "intent": "weekly_review",
+        "confidence": "medium",
+        "answer": "Week of 2026-03-02 (4 days so far): 1 session completed of 2 planned (50% of the plan), 3 working sets. Compared with the same days last week: sessions -1, working sets -3. 1 exercise progressed.",
+        "nextAction": "maintain_load",
+        "limitations": []
+      },
+      "What should I focus on today?": {
+        "intent": "focus_today",
+        "confidence": "medium",
+        "answer": "Keep the prescribed loads: the engine is holding them while performance builds. No progression is due yet. Engine prescriptions for Upper A: Machine Chest Press 42.5 kg (hold). The prescription itself is unchanged.",
+        "nextAction": "maintain_load",
+        "limitations": []
+      },
+      "When should I deload?": {
+        "intent": "deload",
+        "confidence": "low",
+        "answer": "There is no deload signal right now. APEX recommends a deload only after training load has been high for two weeks in a row (fatigue level HIGH now and a week ago) with at least 6 sessions in 28 days. These are training-load rules, not a medical assessment.",
+        "nextAction": "maintain_load",
+        "limitations": [
+          "Several weeks of training history make the load signals more reliable."
+        ]
+      },
+      "Why am I getting this weight?": {
+        "intent": "progression",
+        "confidence": "high",
+        "answer": "For Machine Chest Press, the deterministic engine currently says hold. Build repeatable performance inside the target range before changing load. Today's prescribed load is 42.5 machine stack kg. The Coach is explaining that result; it does not replace it.",
+        "limitations": [],
+        "prescription": [
+          "hold",
+          42.5
+        ]
+      }
+    }
+  },
+  "ready_to_progress": {
+    "weekly": {
+      "week": {
+        "start": "2026-03-02",
+        "end": "2026-03-08",
+        "elapsedDays": 4
+      },
+      "sessions": 1,
+      "planned": 2,
+      "adherencePct": 50,
+      "workingSets": 3,
+      "muscles": [
+        [
+          "chest",
+          3,
+          0,
+          100
+        ],
+        [
+          "front delts",
+          0,
+          3,
+          0
+        ],
+        [
+          "triceps",
+          0,
+          3,
+          0
+        ]
+      ],
+      "progressed": 0,
+      "flat": 1,
+      "stalled": 0,
+      "recovery": [
+        "NORMAL",
+        "normal",
+        "steady"
+      ],
+      "comparison": {
+        "sessions": [
+          "not_enough_data",
+          1,
+          0,
+          null
+        ],
+        "workingSets": [
+          "not_enough_data",
+          3,
+          0,
+          null
+        ],
+        "tonnage": [
+          "not_enough_data",
+          1440,
+          0,
+          null
+        ],
+        "adherencePct": [
+          "not_enough_data",
+          50,
+          null,
+          null
+        ],
+        "progressed": [
+          "not_enough_data",
+          0,
+          0,
+          null
+        ],
+        "fatigueScore": [
+          "not_enough_data",
+          0,
+          0,
+          null
+        ]
+      }
+    },
+    "briefing": {
+      "status": "on_track",
+      "headline": "On track",
+      "next": [
+        "follow_progression",
+        "info",
+        "Follow the progression: Machine Chest Press at 42.5 kg."
+      ],
+      "items": [
+        "follow_progression",
+        "train_as_planned"
+      ],
+      "observations": [
+        "This week: 1 session done of 2 planned, 3 working sets.",
+        "Not enough data yet to compare with last week."
+      ]
+    },
+    "ask": {
+      "How did I do this week?": {
+        "intent": "weekly_review",
+        "confidence": "medium",
+        "answer": "Week of 2026-03-02 (4 days so far): 1 session completed of 2 planned (50% of the plan), 3 working sets. There is not enough data from last week to compare. 0 exercises progressed.",
+        "nextAction": "follow_progression",
+        "limitations": [
+          "Last week has no completed sessions, so there is nothing to compare with."
+        ]
+      },
+      "What should I focus on today?": {
+        "intent": "focus_today",
+        "confidence": "medium",
+        "answer": "Follow the progression: Machine Chest Press at 42.5 kg. Your recent performance supports an increase. Engine prescriptions for Upper A: Machine Chest Press 42.5 kg (increase). The prescription itself is unchanged.",
+        "nextAction": "follow_progression",
+        "limitations": []
+      },
+      "When should I deload?": {
+        "intent": "deload",
+        "confidence": "low",
+        "answer": "There is no deload signal right now. APEX recommends a deload only after training load has been high for two weeks in a row (fatigue level HIGH now and a week ago) with at least 6 sessions in 28 days. These are training-load rules, not a medical assessment.",
+        "nextAction": "follow_progression",
+        "limitations": [
+          "Several weeks of training history make the load signals more reliable."
+        ]
+      },
+      "Why am I getting this weight?": {
+        "intent": "progression",
+        "confidence": "high",
+        "answer": "For Machine Chest Press, the deterministic engine currently says increase. Repeatedly reached 12 reps; use a small 2.5 kg progression step. Today's prescribed load is 42.5 machine stack kg. The Coach is explaining that result; it does not replace it.",
+        "limitations": [],
+        "prescription": [
+          "increase",
+          42.5
+        ]
+      }
+    }
+  },
+  "sustained_load": {
+    "weekly": {
+      "week": {
+        "start": "2026-02-02",
+        "end": "2026-02-08",
+        "elapsedDays": 7
+      },
+      "sessions": 4,
+      "planned": 5,
+      "adherencePct": 80,
+      "workingSets": 12,
+      "muscles": [
+        [
+          "chest",
+          12,
+          0,
+          100
+        ],
+        [
+          "front delts",
+          0,
+          12,
+          0
+        ],
+        [
+          "triceps",
+          0,
+          12,
+          0
+        ]
+      ],
+      "progressed": 0,
+      "flat": 1,
+      "stalled": 0,
+      "recovery": [
+        "RECOVERY_REQUIRED",
+        "deload_recommended",
+        "steady"
+      ],
+      "comparison": {
+        "sessions": [
+          "ok",
+          4,
+          4,
+          0
+        ],
+        "workingSets": [
+          "ok",
+          12,
+          12,
+          0
+        ],
+        "tonnage": [
+          "ok",
+          9600,
+          9600,
+          0
+        ],
+        "adherencePct": [
+          "ok",
+          80,
+          100,
+          -20
+        ],
+        "progressed": [
+          "ok",
+          0,
+          0,
+          0
+        ],
+        "fatigueScore": [
+          "ok",
+          3,
+          3,
+          0
+        ]
+      }
+    },
+    "briefing": {
+      "status": "recovery",
+      "headline": "Recovery comes first",
+      "next": [
+        "recovery_deload",
+        "important",
+        "A deload week is recommended: lighter loads, one fewer set per exercise and a higher target RIR. You decide whether to start it."
+      ],
+      "items": [
+        "recovery_deload",
+        "review_stalled_exercise",
+        "train_as_planned"
+      ],
+      "observations": [
+        "This week: 4 sessions done of 5 planned, 12 working sets.",
+        "Compared with the same days last week: +0 sessions.",
+        "Training load status: deload recommended (fatigue level RECOVERY_REQUIRED, steady)."
+      ]
+    },
+    "ask": {
+      "How did I do this week?": {
+        "intent": "weekly_review",
+        "confidence": "medium",
+        "answer": "Week of 2026-02-02 (7 days so far): 4 sessions completed of 5 planned (80% of the plan), 12 working sets. Compared with the same days last week: sessions +0, working sets +0. 0 exercises progressed. Training load status: deload recommended (fatigue level RECOVERY_REQUIRED, steady).",
+        "nextAction": "recovery_deload",
+        "limitations": []
+      },
+      "What should I focus on today?": {
+        "intent": "focus_today",
+        "confidence": "medium",
+        "answer": "A deload week is recommended: lighter loads, one fewer set per exercise and a higher target RIR. You decide whether to start it. Training load has stayed high for two weeks in a row. Engine prescriptions for Upper A: Machine Chest Press 80 kg (hold). The prescription itself is unchanged.",
+        "nextAction": "recovery_deload",
+        "limitations": []
+      },
+      "When should I deload?": {
+        "intent": "deload",
+        "confidence": "medium",
+        "answer": "A deload is recommended now. You choose whether to start it; the next seven days then use lighter loads, one fewer set per exercise and a higher target RIR. APEX recommends a deload only after training load has been high for two weeks in a row (fatigue level HIGH now and a week ago) with at least 6 sessions in 28 days. These are training-load rules, not a medical assessment.",
+        "nextAction": "recovery_deload",
+        "limitations": []
+      },
+      "Why am I getting this weight?": {
+        "intent": "progression",
+        "confidence": "medium",
+        "answer": "For Machine Chest Press, the deterministic engine currently says hold. Recent sets were very close to failure. Repeat the load before adding more. Today's prescribed load is 80 machine stack kg. The Coach is explaining that result; it does not replace it.",
+        "limitations": [],
+        "prescription": [
+          "hold",
+          80
+        ]
+      }
+    }
+  }
+}

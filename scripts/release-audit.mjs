@@ -9,7 +9,7 @@ const required = [
   'src/core/types.ts',
   'src/engine/training.ts',
   'src/engine/intelligence.ts',
-  'src/engine/coachGateway.ts',
+  'src/coach/coach.ts',
   'src/engine/notifications.ts',
   'src/native/localNotifications.ts',
   'src/data/repository.ts',
@@ -75,12 +75,28 @@ const workflow = fs.readFileSync(path.join(root, '.github/workflows/android-apk.
 if (!fs.existsSync(path.join(root, 'android'))) {
   errors.push('Android project missing: android/');
 }
-for (const token of ['npm install', 'npm run build', 'npx cap sync android', './gradlew assembleDebug --no-daemon', 'android/app/build/outputs/apk/debug/app-debug.apk', 'upload-artifact']) {
+for (const token of ['npm ci', 'npm run verify', 'npm run build', 'npx cap sync android', './gradlew assembleDebug assembleRelease bundleRelease', 'app-debug.apk', 'app-release.aab', 'upload-artifact']) {
   if (!workflow.includes(token)) errors.push(`Android CI missing: ${token}`);
 }
 if (workflow.includes('npx cap add android')) {
   errors.push('Android CI must use the committed android project instead of adding the platform.');
 }
+
+/* release engineering: one version everywhere, signing material never in the repository, no cloud copy of the local database */
+const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
+const gradle = read('android/app/build.gradle');
+const versionName = /versionName\s+"([^"]+)"/.exec(gradle)?.[1];
+if (versionName !== pkg.version) errors.push(`Android versionName (${versionName}) differs from package.json (${pkg.version}).`);
+const lock = JSON.parse(read('package-lock.json'));
+if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) errors.push('package-lock.json root version differs from package.json.');
+if (!read('android/app/src/main/res/values/strings.xml').includes(`<string name="app_name">APEX ${pkg.version}</string>`)) errors.push('The Android app label does not carry the package version.');
+if (!/applicationId "app\.apex\.training"/.test(gradle) || !/appId:\s*'app\.apex\.training'/.test(read('capacitor.config.ts'))) errors.push('The application id differs between Gradle and the Capacitor config.');
+if (/(storePassword|keyPassword)\s*[= ]\s*["'][^"']+["']/.test(gradle)) errors.push('A signing password is written in build.gradle.');
+if (!gradle.includes('APEX_KEYSTORE_PATH') || !gradle.includes('hasReleaseSigning')) errors.push('The release signing structure (environment or keystore.properties) is missing from build.gradle.');
+if (/android:allowBackup="true"/.test(read('android/app/src/main/AndroidManifest.xml'))) errors.push('The manifest allows cloud backup of the local database.');
+const ignored = read('.gitignore');
+for (const token of ['*.jks', '*.keystore', 'android/keystore.properties']) if (!ignored.includes(token)) errors.push(`.gitignore does not exclude ${token}.`);
+if (fs.existsSync(path.join(root, '.github/workflows/android-apk'))) errors.push('A stray extension-less workflow file exists.');
 
 const aiLocal = fs.readFileSync(path.join(root, 'src/aiProviders/localOllama.ts'), 'utf8');
 if (!aiLocal.includes('127.0.0.1:11434')) warnings.push('Local provider adapter is present but requires a user-run local model server.');
