@@ -204,7 +204,7 @@ test('P10.13 recovery and fatigue are not inputs: selection imports nothing abou
   assert.doesNotMatch(src, /from '\.\/(recovery|intelligence|analytics)'/);
   const code = src.replace(/\/\*[\s\S]*?\*\//g, ''); // the header explains why; the code must not use them
   assert.doesNotMatch(code, /recoveryLog|workloadFatigue|readiness|recovery/i);
-  const buildPlan = read('src/engine/training.ts').match(/export function buildPlan\([\s\S]*?\n\}\n/)[0];
+  const buildPlan = read('src/engine/training.ts').match(/export function buildPlan\([\s\S]*?\r?\n\}\r?\n/)[0]; // CRLF checkouts (Windows) end lines with \r\n
   assert.doesNotMatch(buildPlan, /recoveryLog|workloadFatigue|readiness/);
 });
 
