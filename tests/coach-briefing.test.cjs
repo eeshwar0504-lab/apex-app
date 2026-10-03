@@ -203,8 +203,8 @@ test('P15.5 regression: the existing Coach decision is unchanged by the briefing
   B.coachBriefing(s, TODAY);
   assert.equal(JSON.stringify(E.coachMod.coach(ctx).decision), before);
   const main = uiSource();
-  assert.match(main, /<CoachBriefCard s=\{s\}\/>/);
-  assert.match(main, /const live=coach\(buildContext\(\)\)/, 'the existing decision card is still there');
+  assert.match(main, /aria-label="Coach briefing"/, 'the briefing is part of the Coach observation');
+  assert.match(main, /const live=coach\(coachContext\(s\)\)/, 'the existing decision pipeline is still there');
   assert.match(main, /data-coach-next/);
 });
 

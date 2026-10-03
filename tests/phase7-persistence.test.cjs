@@ -56,7 +56,7 @@ const EDITS = {
   journal: (s) => { s.journal = [...s.journal, { id: 'j1', date: '2026-02-01', scope: 'general', text: 'note', tags: [] }]; },
   goals: (s) => { s.goals = [...s.goals, { id: 'g1', kind: 'strength', title: 'Bench', priority: 1, periodId: 'x', status: 'active' }]; },
   recovery: (s) => { s.recoveryLog = [{ date: '2026-02-01', sleepHours: 7, readiness: 4 }]; },
-  preferences: (s) => { s.preferences = { ...s.preferences, theme: 'steel' }; },
+  preferences: (s) => { s.preferences = { ...s.preferences, theme: 'graphite' }; },
   deloads: (s) => { s.deloads = ['2026-02-01']; },
 };
 const seen = {
@@ -64,7 +64,7 @@ const seen = {
   journal: (s) => s.journal.length === 1,
   goals: (s) => s.goals.length === 1,
   recovery: (s) => (s.recoveryLog || []).length === 1,
-  preferences: (s) => s.preferences.theme === 'steel',
+  preferences: (s) => s.preferences.theme === 'graphite',
   deloads: (s) => (s.deloads || []).join() === '2026-02-01',
 };
 
@@ -242,12 +242,12 @@ test('P7.5 smartRir is gone from the type, the defaults and saved data, and old 
   assert.equal('smartRir' in fresh().preferences, false);
   const old = fresh();
   old.preferences.smartRir = true;
-  old.preferences.theme = 'steel';
+  old.preferences.theme = 'graphite';
   old.onboardingComplete = true;
   global.localStorage.setItem('apex-state-v4', JSON.stringify(old));
   const loaded = repository.load();
   assert.equal('smartRir' in loaded.preferences, false, 'the dead field is dropped');
-  assert.equal(loaded.preferences.theme, 'steel', 'everything else is preserved');
+  assert.equal(loaded.preferences.theme, 'graphite', 'everything else is preserved');
   assert.equal(loaded.onboardingComplete, true);
   repository.save(loaded);
   assert.equal('smartRir' in JSON.parse(global.localStorage.getItem('apex-state-v4')).preferences, false);

@@ -1,5 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {APEX_TRAINING_IMAGES,type TrainingImageKind} from '../imagery';
+import {motionMs} from './motion';
 
 
 
@@ -19,22 +20,8 @@ export function ApexImage({kind,alt,className='',caption,eager=false}:{kind:Trai
    {caption&&<figcaption>{caption}</figcaption>}
  </figure>;
 }
-export function ApexRidge({className=''}:{className?:string}){
- return <svg className={`a3-ridge ${className}`} viewBox="0 0 400 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
-  <defs>
-   <radialGradient id="a3-sun" cx="72%" cy="34%" r="58%"><stop offset="0" style={{stopColor:'var(--apex3-gold-bright)',stopOpacity:0.5}}/><stop offset="0.45" style={{stopColor:'var(--apex3-gold)',stopOpacity:0.14}}/><stop offset="1" style={{stopColor:'var(--apex3-gold)',stopOpacity:0}}/></radialGradient>
-   <linearGradient id="a3-far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--apex3-steel)',stopOpacity:0.5}}/><stop offset="1" style={{stopColor:'var(--apex3-bg)',stopOpacity:0.15}}/></linearGradient>
-   <linearGradient id="a3-mid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--apex3-surface-strong)',stopOpacity:0.95}}/><stop offset="1" style={{stopColor:'var(--apex3-bg)',stopOpacity:1}}/></linearGradient>
-  </defs>
-  <rect width="400" height="220" fill="url(#a3-sun)"/>
-  <path d="M0 150 L34 122 L58 136 L96 92 L124 118 L152 84 L188 126 L214 104 L246 138 L286 96 L318 124 L352 100 L400 132 V220 H0Z" fill="url(#a3-far)"/>
-  <path d="M96 92 L108 105 M152 84 L165 99 M286 96 L297 109" className="a3-ridge-snow"/>
-  <path d="M0 176 L44 146 L82 166 L128 120 L166 158 L214 128 L262 168 L310 132 L356 160 L400 140 V220 H0Z" fill="url(#a3-mid)"/>
-  <path d="M0 200 L52 178 L100 194 L156 166 L212 192 L268 172 L330 196 L400 176 V220 H0Z" style={{fill:'var(--apex3-bg)'}}/>
- </svg>
-}
 export function Splash({message}:{message?:string}){
- return <div className="apex3-splash"><ApexImage kind="strength-session" alt="" className="a3-splash-photo" eager/><ApexRidge className="a3-splash-ridge"/><img src="/brand/apex-mark-gold.png" alt=""/><b>APEX</b><span className="a3-splash-tag" aria-label="Train, track, progress, evolve"><i>TRAIN</i><i>TRACK</i><i>PROGRESS</i><i>EVOLVE</i></span><em className="a3-splash-claim">Your training is measured.<br/>Your progress is earned.</em>{message&&<small>{message}</small>}</div>
+ return <div className="apex3-splash"><ApexImage kind="strength-session" alt="" className="a3-splash-photo" eager/><img src="/brand/apex-mark-gold.png" alt=""/><b>APEX</b><span className="a3-splash-tag" aria-label="Train, track, progress, evolve"><i>TRAIN</i><i>TRACK</i><i>PROGRESS</i><i>EVOLVE</i></span><em className="a3-splash-claim">Your training is measured.<br/>Your progress is earned.</em>{message&&<small>{message}</small>}</div>
 }
 export function ApexSpark({values,label,xLabels}:{values:number[];label:string;xLabels?:[string,string]}){
  if(values.length<2)return <p className="a3-muted a3-note">Not enough logged points yet.</p>;
@@ -78,8 +65,6 @@ export function Metric({label,value,sub}:{label:string;value:string;sub:string})
 export function ListRow({title,sub,icon,click}:{title:string;sub:string;icon:string;click:()=>void}){return <button className="a3-card a3-row a3-tap" onClick={click}><span className="a3-rowicon"><Icon name={icon}/></span><span><strong>{title}</strong><small>{sub}</small></span><Icon name="chev"/></button>}
 export function PageTitle({eyebrow,title,sub}:{eyebrow:string;title:string;sub:string}){return <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">{eyebrow}</span><h1>{title}</h1><p className="a3-muted">{sub}</p></header>}
 export function Empty({title,text,action}:{title:string;text:string;action?:{label:string;onClick:()=>void}}){return <div className="a3-card a3-empty"><Icon name="bolt"/><strong>{title}</strong><p>{text}</p>{action&&<button className="a3-cta" onClick={action.onClick}>{action.label} <Icon name="arrow" size={16}/></button>}</div>}
-/* Changing numbers re-key on value so a short fade/slide plays; CSS disables it for reduced motion. */
-export function Num({value}:{value:React.ReactNode}){return <span className="a3-num" key={String(value)}>{value}</span>}
 export function BumpInput(props:React.InputHTMLAttributes<HTMLInputElement>){
  const ref=useRef<HTMLInputElement>(null);const first=useRef(true);
  useEffect(()=>{if(first.current){first.current=false;return}const el=ref.current;if(!el)return;el.classList.remove('a3-bump');void el.offsetWidth;el.classList.add('a3-bump')},[props.value]);
@@ -90,7 +75,6 @@ type StateKind='loading'|'empty'|'error'|'success'|'pr';
 export function StateView({kind,title,text,detail,progress,primary,secondary}:{kind:StateKind;title:string;text?:string;detail?:string;progress?:number;primary?:{label:string;onClick:()=>void};secondary?:{label:string;onClick:()=>void}}){
  const icon=kind==='error'?'alert':kind==='pr'?'crown':kind==='success'?'check':kind==='empty'?'dumbbell':'bolt';
  return <section className={`a3-stateview is-${kind}`} role={kind==='error'?'alert':'status'} aria-live={kind==='error'?'assertive':'polite'}>
-  {kind==='pr'&&<span className="a3-pr-rays" aria-hidden="true"/>}
   <span className="a3-state-icon" aria-hidden="true">{kind==='loading'?<img src="/brand/apex-mark-gold.png" alt=""/>:<Icon name={icon} size={kind==='pr'?40:kind==='error'||kind==='empty'?56:34}/>}</span>
   <h2>{title}</h2>
   {detail&&<strong className="a3-state-detail">{detail}</strong>}
@@ -100,21 +84,54 @@ export function StateView({kind,title,text,detail,progress,primary,secondary}:{k
   {secondary&&<button className="a3-ghost" onClick={secondary.onClick}>{secondary.label}</button>}
  </section>
 }
-export const LoadingPanel=({progress}:{progress?:number})=><main className="a3-errorpage"><StateView kind="loading" title="Loading your workout…" text="Preparing your personalised training experience." progress={progress}/></main>;
-export const ErrorPanel=({onRetry,onBack}:{onRetry:()=>void;onBack:()=>void})=><main className="a3-errorpage"><StateView kind="error" title="Something went wrong" text="We couldn't load your data. Please check your connection and try again. Your training data is stored on this device and has not been changed." primary={{label:'Try Again',onClick:onRetry}} secondary={{label:'Go Back',onClick:onBack}}/></main>;
+export const LoadingPanel=({progress}:{progress?:number})=><main className="a3-errorpage"><StateView kind="loading" title="Loading your training" text="Reading what is saved on this device." progress={progress}/></main>;
+export const ErrorPanel=({onRetry,onBack}:{onRetry:()=>void;onBack:()=>void})=><main className="a3-errorpage"><ErrorState title="SOMETHING WENT WRONG" happened="This screen could not be shown." safe="Your training data is stored on this device and has not been changed." todo="Try again, or go back." primary={{label:'Try Again',onClick:onRetry}} secondary={{label:'Go Back',onClick:onBack}}/></main>;
 export class ApexErrorBoundary extends React.Component<{children:React.ReactNode},{failed:boolean}>{
  state={failed:false};
  static getDerivedStateFromError(){return {failed:true}}
  render(){return this.state.failed
-  ?<div className="app" data-theme="apex"><ErrorPanel onRetry={()=>this.setState({failed:false})} onBack={()=>{try{history.back()}catch{}this.setState({failed:false})}}/></div>
+  ?<div className="app" data-theme="obsidian"><ErrorPanel onRetry={()=>this.setState({failed:false})} onBack={()=>{try{history.back()}catch{}this.setState({failed:false})}}/></div>
   :this.props.children}
 }
 
 /* Calm placeholder while something is being prepared. The shimmer is a transform on a pseudo-element (see apex-motion.css) and stops under reduced motion. */
 export function Skeleton({label,lines=2}:{label:string;lines?:number}){return <div className="a3-skeleton" role="status" aria-label={label}>{Array.from({length:lines},(_,i)=><span key={i}/>)}</div>}
 
-/* A real show/hide control for secondary detail: the detail is not in the page until it is asked for. */
+/* A real show/hide control for secondary detail: the detail is not in the page until it is asked for, and it folds back to its summary. */
 export function Disclosure({label,children,className=''}:{label:string;children:React.ReactNode;className?:string}){
  const [open,setOpen]=useState(false);
- return <div className={`a3-disclosure ${className}`}><button type="button" className="a3-disclosure-toggle" aria-expanded={open} onClick={()=>setOpen(x=>!x)}>{label}<Icon name="chev" size={16}/></button>{open&&<div className="a3-disclosure-body">{children}</div>}</div>;
+ const [folding,setFolding]=useState(false);
+ const timer=useRef<number|undefined>(undefined);
+ useEffect(()=>()=>window.clearTimeout(timer.current),[]);
+ const toggle=()=>{
+  if(!open){setOpen(true);return}
+  const ms=motionMs('--motion-exit',160);
+  if(!ms){setOpen(false);return}
+  setFolding(true);
+  timer.current=window.setTimeout(()=>{setOpen(false);setFolding(false)},ms);
+ };
+ return <div className={`a3-disclosure ${className}`}><button type="button" className="a3-disclosure-toggle" aria-expanded={open&&!folding} onClick={toggle}>{label}<Icon name="chev" size={16}/></button>{open&&<div className={`a3-disclosure-body${folding?' mo-fold':''}`}>{children}</div>}</div>;
+}
+
+/*
+ * THE APEX LINE: one thin amber signal that is a different thing in each context (navigation, workout and set progress, the rest
+ * timer, a timeline or chart baseline, a goal trajectory, a completion signal). It is deliberately rare; gold is earned.
+ */
+export function ApexLine({value=1,variant='progress',label,className=''}:{value?:number;variant?:'progress'|'timer'|'baseline'|'signal';label?:string;className?:string}){
+ const v=Math.max(0,Math.min(1,Number.isFinite(value)?value:0));
+ return <div className={`apex-line apex-line-${variant} ${className}`} {...(label?{role:'progressbar','aria-label':label,'aria-valuemin':0,'aria-valuemax':100,'aria-valuenow':Math.round(v*100)}:{'aria-hidden':true})}><i style={{transform:`scaleX(${v})`}}/></div>;
+}
+
+/* An instrument reporting a problem: what happened, what is safe, what to do. Never colour alone: the heading says it. */
+export function ErrorState({title,happened,safe,todo,primary,secondary}:{title:string;happened:string;safe:string;todo:string;primary?:{label:string;onClick:()=>void};secondary?:{label:string;onClick:()=>void}}){
+ return <section className="apex-error" role="alert" aria-live="assertive">
+  <span className="a3-eyebrow apex-ember">{title}</span>
+  <dl>
+   <div><dt>What happened</dt><dd>{happened}</dd></div>
+   <div><dt>What is safe</dt><dd>{safe}</dd></div>
+   <div><dt>What to do</dt><dd>{todo}</dd></div>
+  </dl>
+  {primary&&<button className="a3-cta" onClick={primary.onClick}>{primary.label}</button>}
+  {secondary&&<button className="a3-ghost" onClick={secondary.onClick}>{secondary.label}</button>}
+ </section>;
 }

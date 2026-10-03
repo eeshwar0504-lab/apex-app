@@ -183,6 +183,10 @@ export function migratePersistedState(raw:unknown):AppState{
  return merge(migrated);
 }
 
+/* the five earlier themes map onto the four APEX themes, so saved data and backups keep a sensible look */
+const THEME_MIGRATION:Record<string,'obsidian'|'graphite'|'bone'|'contrast'>={apex:'obsidian',crimson:'obsidian',steel:'graphite',aurora:'graphite',classic:'bone',obsidian:'obsidian',graphite:'graphite',bone:'bone',contrast:'contrast'};
+function normalizeTheme(value:unknown):'obsidian'|'graphite'|'bone'|'contrast'{return THEME_MIGRATION[String(value)]||'obsidian'}
+
 function merge(raw:any):AppState{
  const base=fresh();
  const incoming=raw&&typeof raw==='object'?raw:{};
@@ -205,7 +209,9 @@ function merge(raw:any):AppState{
     ?incomingPreferences.fontScale
     :'system',
   highContrast:Boolean(incomingPreferences.highContrast),
-  theme:['apex','classic','steel','aurora','crimson'].includes(String(incomingPreferences.theme))?incomingPreferences.theme:'apex',
+  theme:normalizeTheme(incomingPreferences.theme),
+  uiExperience:['guided','standard','advanced'].includes(String(incomingPreferences.uiExperience))?incomingPreferences.uiExperience:'guided',
+  hapticsGentle:Boolean(incomingPreferences.hapticsGentle),
   aiMode:['off','rule-based','local-model'].includes(String(incomingPreferences.aiMode))?incomingPreferences.aiMode:'off',
   units:normalizeUnits(incomingPreferences.units),
   notifications

@@ -4,7 +4,7 @@ import {getUnits,wtInput,fromWt,weightLabel} from '../data/units';
 import {SET_TYPES} from '../ui/shared';
 import {Icon,BumpInput} from '../ui/primitives';
 
-export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,hideOptions=false,loadProfile,showRir=true,showNotes=true}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;hideOptions?:boolean;loadProfile?:UserProfile;showRir?:boolean;showNotes?:boolean}){
+export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemove,targetRir=2,focused=false,hideOptions=false,loadProfile,showRir=true,showNotes=true,onTick}:{set:SetLog;ex:Exercise;index:number;onChange:(p:Partial<SetLog>)=>void;onType:(t:SetType)=>void;onComplete:()=>void;onAdd:()=>void;onRemove:()=>void;targetRir?:number;focused?:boolean;hideOptions?:boolean;loadProfile?:UserProfile;showRir?:boolean;showNotes?:boolean;onTick?:()=>void}){
  const timed=set.type==='timed'||ex.loadSemantics==='time';
  const assist=set.type==='assisted'||ex.loadSemantics==='assistance';
  const loadable=
@@ -14,6 +14,7 @@ export function SetEditor({set,ex,index,onChange,onType,onComplete,onAdd,onRemov
 
 
  const stepValue=(key:'weight'|'reps'|'rir',delta:number)=>{
+   onTick?.();
    if(key==='weight'){
      const next=adjacentAvailableLoad(ex,set.weight,loadProfile,delta>0?'up':'down');
      if(next!==undefined)onChange({weight:next,loadDetail:loadDetailForSet(ex,next,set.loadDetail)});

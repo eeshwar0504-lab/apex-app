@@ -1,6 +1,6 @@
-# APEX 4.1.0
+# APEX 5.0.0
 
-APEX 4.1.0 is a local-first, adaptive training companion built around guided workout sessions and intelligent workout tracking.
+APEX 5.0.0 is a local-first, adaptive training companion built around guided workout sessions and intelligent workout tracking.
 
 ## Principles
 - Training and tracking first
@@ -38,7 +38,7 @@ See `PHASES.md` for the original 26-phase product map (historical) and `BUILD_ST
 
 
 ## Current status
-APEX 4.1.0 is the current release candidate. The deterministic engine, Coach, exercise graph, persistence and backup, local notifications and the optional AI explanation layer are implemented and covered by the automated suites (`npm test`, `npm run verify`, Playwright, the browser corpus, the longitudinal simulator). Counts are recorded in `BUILD_STATUS.md`, not here.
+APEX 5.0.0 is the current release. The deterministic engine, Coach, exercise graph, persistence and backup, local notifications and the optional AI explanation layer are implemented and covered by the automated suites (`npm test`, `npm run verify`, Playwright, the browser corpus, the longitudinal simulator). Counts are recorded in `BUILD_STATUS.md`, not here.
 
 **Not verified:** the Android runtime. No emulator or device could be run on the development machine (hardware acceleration needs an administrator), so the native SQLite engine, real notification delivery, the share-sheet backup export and TalkBack have never been exercised on Android. A simulated native bridge in Chromium covers the JavaScript wiring only. `docs/ANDROID_DEVICE_CERTIFICATION.md` is the record and the procedure. The release APK and bundle are produced unsigned; signing needs the owner's keystore, which is an external secret.
 

@@ -1,4 +1,8 @@
-# APEX 4.1.0 build status
+# APEX 5.0.0 build status
+
+## Release 5.0.0 (versionCode 9)
+
+APEX 5.0 design implementation: the APEX Line, Session Thread, Guided/Standard/Advanced view levels, Training Map and mission briefing, Ghost Set and cause-path logging, Progress Observatory, structured Coach observations, Exercise Dossier, onboarding calibration and the four-theme system. The training engine, Coach, knowledge base, persistence and native layers are unchanged. Pre-workout equipment: one row per equipment-requiring exercise ("Equipment available?", Available / Not available), the saved profile preselects Available, and an unavailable item offers the deterministic top alternative behind an explicit Use alternative. Release signing still needs the owner keystore; no Android device run. Test counts are recorded by the suites, not here.
 
 ## Release 4.0.0
 

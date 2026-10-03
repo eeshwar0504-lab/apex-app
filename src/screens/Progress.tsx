@@ -1,16 +1,21 @@
 import {useMemo,useState} from 'react';
-import type {AppState,SetLog} from '../core/types';
+import type {AppState,Exercise,SetLog} from '../core/types';
 import {todayLocal,addDaysLocal,dayOfTimestamp} from '../data/dates';
 import {weeklyAnalytics} from '../engine/weeklyAnalytics';
 import type {Comparison} from '../engine/weeklyAnalytics';
-import {volumeForWorkout,bestLoad,setLoad,isWorkingSet} from '../engine/training';
-import {goalProgress,trainingLoadSummary} from '../engine/intelligence';
-import {consistencySummary,volumeTrend,goalMomentum,trainingBalance} from '../engine/analytics';
+import {volumeForWorkout,bestLoad} from '../engine/training';
+import {trainingLoadSummary} from '../engine/intelligence';
+import {recoveryStatus} from '../engine/deload';
+import {consistencySummary,goalMomentum,trainingBalance} from '../engine/analytics';
 import {wt,vol,volLabel,weightLabel,displayText} from '../data/units';
 import {today,formatLoad,sourceLabel} from '../ui/shared';
-import {Icon,ApexSpark,SegBar,ApexStat,ApexRing,ApexMeter,PageTitle,Empty} from '../ui/primitives';
+import {Icon,ApexSpark,SegBar,ApexStat,ApexMeter,PageTitle,Empty} from '../ui/primitives';
+import {useExperience} from '../ui/experience';
+import {trainingWeek} from '../ui/week';
 import {workingOf} from '../ui/setHelpers';
-
+import {weekSentence} from './TrainingMap';
+import {ApexTrajectory,EvidenceSets,LayeredVolume,RhythmMap,RecoveryTrajectory,volumeByWeek} from './ProgressParts';
+import type {TrajectoryPoint} from './ProgressParts';
 
 /* Weekly analytics (src/engine/weeklyAnalytics.ts): counts and comparisons only, no judgement of volume. */
 function WeeklyCard({s}:{s:AppState}){
@@ -25,7 +30,7 @@ function WeeklyCard({s}:{s:AppState}){
    <div className="a3-stats">
     <ApexStat label="Sessions" value={String(c.sessionsCompleted)} unit={c.plannedSessions?`of ${c.plannedSessions}`:'done'}/>
     <ApexStat label="Working sets" value={String(v.workingSets)} unit="sets"/>
-    <ApexStat label="Adherence" value={c.adherencePct===null?'—':`${c.adherencePct}%`} unit={c.streakWeeks>1?`${c.streakWeeks} wk streak`:'of plan'}/>
+    <ApexStat label="Adherence" value={c.adherencePct===null?'—':`${c.adherencePct}%`} unit="of plan"/>
    </div>
    {v.byMuscle.length>0&&<div className="a3-stack" aria-label="Muscle coverage">{v.byMuscle.filter(m=>m.directSets>0).slice(0,6).map(m=><div key={m.muscle}><div className="a3-head"><small>{cap(m.muscle)}</small><small className="a3-muted">{m.directSets} direct{m.indirectSets?` · ${m.indirectSets} indirect`:''} · {m.sharePct}%</small></div><ApexMeter value={m.sharePct}/></div>)}</div>}
    {p.exercises.length>0&&<p className="a3-muted">{p.progressed} progressed · {p.flat} flat{p.regressed?` · ${p.regressed} regressed`:''}{p.stalled?` · ${p.stalled} stalled`:''}</p>}
@@ -35,34 +40,41 @@ function WeeklyCard({s}:{s:AppState}){
  </section>
 }
 
-export function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
+/* Progress is an observatory, not a wall of charts: OVERVIEW says what changed, each DIMENSION shows it as a line, and every point opens EVIDENCE (the session, the sets). */
+type Dimension='overview'|'strength'|'volume'|'consistency'|'recovery'|'body';
+export function Progress({s,onNav,onAsk}:{s:AppState;onNav:(r:string)=>void;onAsk:(q:string)=>void}){
+ const {standard,advanced}=useExperience();
  const done=s.workouts.filter(w=>w.status==='completed').sort((a,b)=>(a.completedAt||a.scheduledDate).localeCompare(b.completedAt||b.scheduledDate));
- const [tab,setTab]=useState<'overview'|'strength'|'body'|'prs'>('overview');
+ const [tab,setTab]=useState<Dimension>('overview');
  const [bodyRange,setBodyRange]=useState<'7D'|'30D'|'3M'|'1Y'>('30D');
  const [exerciseId,setExerciseId]=useState<string>('');
  const [exRange,setExRange]=useState<'1M'|'3M'|'6M'|'1Y'|'All'>('3M');
+ const [pointId,setPointId]=useState('');
+ /* the session just finished is the newest point on the line, and settles into place when it is first seen */
+ const [fresh]=useState(()=>{try{return sessionStorage.getItem('apex-fresh-session')||undefined}catch{return undefined}});
  const exerciseOptions=useMemo(()=>{const ids=new Set(done.flatMap(w=>w.exercises.map(e=>e.exerciseId)));return s.exercises.filter(e=>ids.has(e.id));},[done,s.exercises]);
  const selected=exerciseOptions.find(e=>e.id===exerciseId)||exerciseOptions[0];
- const historyAll=selected?done.flatMap(w=>w.exercises.filter(e=>e.exerciseId===selected.id).map(e=>({w,e}))):[];
+ const bestOf=(ex:Exercise|undefined,e:{sets:SetLog[]})=>ex?(bestLoad(ex,e.sets)??0):0;
+ const seriesFor=(ex:Exercise|undefined,cut:string)=>ex?done.flatMap(w=>w.exercises.filter(e=>e.exerciseId===ex.id&&w.scheduledDate>=cut).map(e=>({w,e}))).map(({w,e})=>({w,e,value:bestOf(ex,e)})).filter(p=>p.value>0):[];
  const rangeDays=exRange==='1M'?30:exRange==='3M'?90:exRange==='6M'?180:exRange==='1Y'?365:Infinity;
  const rangeCut=Number.isFinite(rangeDays)?addDaysLocal(todayLocal(),-rangeDays):'';
- const historyRange=historyAll.filter(({w})=>w.scheduledDate>=rangeCut);
- const history=historyRange.slice(-8);
- const bestOf=(e:{sets:SetLog[]})=>selected?(bestLoad(selected,e.sets)??0):0;
- const evidenceSeries=historyRange.map(({e})=>bestOf(e)).filter(v=>v>0);
- const evidenceChange=evidenceSeries.length>1?Math.round((evidenceSeries[evidenceSeries.length-1]-evidenceSeries[0])/evidenceSeries[0]*1000)/10:undefined;
- const evidenceBest=evidenceSeries.length?Math.max(...evidenceSeries):0;
- const bestReps=historyRange.flatMap(({e})=>e.sets.filter(x=>isWorkingSet(x)&&selected&&(setLoad(selected,x)??0)===evidenceBest)).reduce((m,x)=>Math.max(m,x.reps||0),0);
- const total=done.reduce((a,w)=>a+volumeForWorkout(w,s.exercises),0);
- const muscle=useMemo(()=>{const m:Record<string,number>={};done.slice(-8).forEach(w=>w.exercises.forEach(we=>{const e=s.exercises.find(x=>x.id===we.exerciseId);e?.primaryMuscles.forEach(x=>m[x]=(m[x]||0)+we.sets.filter(z=>z.completed&&z.type!=='warmup').length)}));return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10)},[done,s.exercises]);
- const top=s.achievements.slice(-5).reverse();
- const activeGoals=s.goals.filter(g=>g.status==='active');
+ const rows=seriesFor(selected,rangeCut);
+ const prWorkouts=new Set(s.achievements.filter(a=>a.exerciseId===selected?.id).map(a=>a.workoutId));
+ const points:TrajectoryPoint[]=rows.map(({w,value})=>({id:w.id,date:w.scheduledDate,value,pr:prWorkouts.has(w.id)}));
+ const sel=points.find(p=>p.id===pointId)||points[points.length-1];
+ const selRow=rows.find(r=>r.w.id===sel?.id);
+ const change=points.length>1?Math.round((points[points.length-1].value-points[0].value)/points[0].value*1000)/10:undefined;
+ const best=points.length?Math.max(...points.map(p=>p.value)):0;
+ const notes=s.journal.filter(j=>(j.scope==='exercise'&&j.refId===selected?.id)||(j.scope==='workout'&&points.some(p=>p.id===j.refId))).slice(0,3);
+ const shortDate=(d:string)=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+ const volume=useMemo(()=>volumeByWeek(s),[s]);
+ const fmtVol=(n:number)=>`${vol(n).toLocaleString()} ${volLabel()}`;
+ const week=trainingWeek(s,0);
+ const rs=recoveryStatus(s,today());
  const loadSummary=trainingLoadSummary(s);
  const consistency=consistencySummary(s);
- const trend=volumeTrend(s);
  const momentum=goalMomentum(s);
  const balance=trainingBalance(s);
- const maxTrend=Math.max(...trend.map(x=>x.volume),1);
  const bodyEntries=s.measurements.filter(entry=>entry.weightKg!==undefined).slice().sort((a,b)=>a.date.localeCompare(b.date));
  const latestBodyEntry=bodyEntries[bodyEntries.length-1];
  const previousBodyEntry=bodyEntries.length>1?bodyEntries[bodyEntries.length-2]:undefined;
@@ -71,106 +83,104 @@ export function Progress({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  const bodyCut=addDaysLocal(todayLocal(),-bodyDays);
  const bodyRangeEntries=bodyEntries.filter(x=>x.date>=bodyCut);
  const bodySeries=bodyRangeEntries.map(x=>wt(x.weightKg as number));
- const shortDate=(d:string)=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
- /* With no completed workout there is nothing to chart: one plain explanation and the body-weight shortcut, then analytics appear as data does. */
+ /* the overview: what changed, each with the dimension that shows the evidence */
+ const topMover=exerciseOptions.map(ex=>{const r=seriesFor(ex,addDaysLocal(todayLocal(),-90));const c=r.length>1?(r[r.length-1].value-r[0].value)/r[0].value*100:0;return {ex,c:Math.round(c*10)/10,n:r.length}}).filter(m=>m.n>1&&m.c>=2.5).sort((a,b)=>b.c-a.c)[0];
+ const lastTwo=volume.slice(-2);
+ const volumeLine=lastTwo.length===2&&lastTwo[0].total>0?(lastTwo[1].total>lastTwo[0].total*1.05?'Volume is up on last week.':lastTwo[1].total<lastTwo[0].total*0.95?'Volume is down on last week.':'Volume is steady against last week.'):'';
+ const changes:Array<{id:string;text:string;to:Dimension;exerciseId?:string}>=[
+  {id:'week',text:weekSentence(week),to:'consistency'},
+  ...(topMover?[{id:'mover',text:`${topMover.ex.name} is up ${topMover.c}% over ${topMover.n} sessions.`,to:'strength' as Dimension,exerciseId:topMover.ex.id}]:[]),
+  ...(volumeLine?[{id:'volume',text:volumeLine,to:'volume' as Dimension}]:[]),
+  ...(rs?[{id:'recovery',text:`Training load is ${rs.level.toLowerCase().replace(/_/g,' ')}${rs.status==='deload_active'?', deload week':''}.`,to:'recovery' as Dimension}]:[])
+ ];
  const zero=done.length===0;
- return <div className="a3-home a3-progress">
-   <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">{zero?'Progress':`Progress · ${done.length} session${done.length===1?'':'s'}`}</span><h1>Progress</h1></header>
-   {zero&&<Empty title="Your progress starts with your first workout" text="Finish a workout and your sessions, weights and records will show up here."/>}
-   {!zero&&<SegBar label="Progress sections" value={tab} onChange={setTab} items={[['overview','Overview'],['strength','Strength'],['body','Body'],['prs','PRs']]}/>}
-   {!zero&&tab==='overview'&&<WeeklyCard s={s}/>}
-   {(tab==='overview'||tab==='body')&&<>
-   <div className="a3-card a3-stack a3-bodycard apex-body-shortcut">
+ const bodyCard=<div className="a3-card a3-stack a3-bodycard apex-body-shortcut">
     <div className="a3-bodyhead"><div><span className="a3-eyebrow">Body weight</span><strong className="a3-bodyvalue">{latestBodyEntry?<>{wt(latestBodyEntry.weightKg as number)}<small>{weightLabel()}</small></>:'Start a recorded-weight history'}</strong></div>{bodyWeightChange!==undefined&&<span className="a3-delta">{bodyWeightChange>=0?'↑':'↓'} {Math.abs(wt(bodyWeightChange)).toFixed(1)} {weightLabel()}<small>since previous</small></span>}</div>
     {bodySeries.length>1&&<ApexSpark values={bodySeries} label="Body weight trend" xLabels={[shortDate(bodyRangeEntries[0].date),shortDate(bodyRangeEntries[bodyRangeEntries.length-1].date)]}/>}
     <div className="a3-choices a3-ranges" role="group" aria-label="Body weight range">{(['7D','30D','3M','1Y'] as const).map(p=><button key={p} aria-pressed={bodyRange===p} className={bodyRange===p?'selected':''} onClick={()=>setBodyRange(p)}>{p}</button>)}</div>
     <button className="a3-link" onClick={()=>onNav('measurements')}>Open Body / Weight <Icon name="arrow" size={14}/></button>
-   </div>
-   </>}
+   </div>;
+ return <div className="a3-home a3-progress">
+   <header className="a3-greet a3-pagetitle"><span className="a3-eyebrow">{zero?'Progress':`Progress · ${done.length} session${done.length===1?'':'s'}`}</span><h1>Progress</h1></header>
+   {zero&&<Empty title="Your first session draws the first line." text="Complete a few sessions and APEX will begin finding patterns."/>}
+   {!zero&&<SegBar label="Progress sections" value={tab} onChange={setTab} items={[['overview','Overview'],['strength','Strength'],['volume','Volume'],['consistency','Consistency'],['recovery','Recovery'],['body','Body']]}/>}
+   {zero&&bodyCard}
 
    {!zero&&tab==='overview'&&<>
-   <div className="a3-stats">
-    <ApexStat label="Sessions" value={String(done.length)} unit="done"/>
-    <ApexStat label="Volume" value={total?vol(total).toLocaleString():'—'} unit={volLabel()}/>
-    <ApexStat label="Awards" value={String(s.achievements.length)} unit="PRs"/>
-   </div>
-
-   <section className="a3-block">
-    <div className="a3-head"><h2>Consistency</h2><span className="a3-eyebrow">Last 30 days</span></div>
-    <div className="a3-rings">
-     <ApexRing value={Math.min(100,Math.max(0,consistency.rate))} label="Adherence" sub={`${consistency.completed}/${consistency.planned||'—'} scheduled`}/>
-     <div className="a3-stats a3-stats-2"><ApexStat label="Streak" value={String(consistency.streak)} unit="sessions"/><ApexStat label="Avg volume" value={loadSummary.recentAverageVolume?vol(loadSummary.recentAverageVolume).toLocaleString():'—'} unit="4-session"/></div>
-    </div>
-   </section>
-
-   <section className="a3-block">
-    <div className="a3-head"><h2>Workload</h2><span className="a3-eyebrow">Last {trend.length||0} sessions</span></div>
-    <div className="a3-card">
-     {trend.length>0
-      ?<div className="a3-bars">{trend.map((x,i)=><div className="a3-bar-col" key={`${x.date}-${i}`}><small>{x.volume?vol(x.volume).toLocaleString():'—'}</small><i><b style={{height:`${Math.max(8,Math.round((x.volume/maxTrend)*100))}%`}}/></i><span>{x.date.slice(5)}</span></div>)}</div>
-      :<Empty title="Not enough history yet" text="Complete more sessions and APEX will build the workload record."/>}
-    </div>
-    <div className="a3-stats"><ApexStat label="Working sets" value={String(loadSummary.workingSets30)} unit="30d"/><ApexStat label="Sessions" value={String(loadSummary.consistency30)} unit="30d"/><ApexStat label="Awards" value={String(s.achievements.length)} unit="PRs"/></div>
-   </section>
-
-   <section className="a3-block">
-    <div className="a3-head"><h2>Interpretation</h2><span className="a3-eyebrow">Context only</span></div>
-    <div className="a3-stats">
-     <ApexStat label="Momentum" value={momentum.direction==='insufficient'?'—':momentum.direction==='up'?'↑':momentum.direction==='down'?'↓':'→'} unit={momentum.direction==='insufficient'?'more data':`${momentum.changePct>=0?'+':''}${momentum.changePct}%`}/>
-     <ApexStat label="Top exposure" value={balance.highest?String(balance.highest[1]):'—'} unit={balance.highest?String(balance.highest[0]):'sets'}/>
-     <ApexStat label="Spread" value={String(balance.spread||'—')} unit="sets"/>
-    </div>
-    <div className="a3-card a3-callout"><Icon name="shield" size={16}/><div><p>{momentum.detail}{balance.highest&&balance.lowest?` Highest recent primary-muscle exposure: ${balance.highest[0]} (${balance.highest[1]} sets); lowest: ${balance.lowest[0]} (${balance.lowest[1]}).`:''}</p></div></div>
-   </section>
-
-   {activeGoals.length>0&&<section className="a3-block">
-    <div className="a3-head"><h2>Goals</h2><button className="a3-link" onClick={()=>onNav('goals')}>Open goals <Icon name="arrow" size={14}/></button></div>
-    <div className="a3-rings">{activeGoals.map(g=>{const gp=goalProgress(s,g);return <ApexRing key={g.id} value={gp.percent} label={g.title} sub={g.target?`${g.target.label}: ${g.target.value} ${g.target.unit}`:'No numeric target yet'} onClick={()=>onNav('goals')}/>})}</div>
-   </section>}
-
+    <section className="a3-card a3-stack apex-changes" aria-label="What changed">
+     <span className="a3-eyebrow a3-gold">WHAT CHANGED</span>
+     <ul>{changes.map(c=><li key={c.id}><span>{c.text}</span><button className="a3-link" aria-label={`Evidence: ${c.text}`} onClick={()=>{if(c.exerciseId)setExerciseId(c.exerciseId);setPointId('');setTab(c.to)}}>Evidence <Icon name="arrow" size={14}/></button></li>)}</ul>
+     <button className="a3-link" onClick={()=>onAsk('Why did my training change?')}>Why did this change? <Icon name="arrow" size={14}/></button>
+    </section>
+    {standard&&<WeeklyCard s={s}/>}
+    {bodyCard}
+    {advanced&&<>
+     <div className="a3-stats">
+      <ApexStat label="Sessions" value={String(done.length)} unit="done"/>
+      <ApexStat label="Working sets" value={String(loadSummary.workingSets30)} unit="30d"/>
+      <ApexStat label="Awards" value={String(s.achievements.length)} unit="PRs"/>
+     </div>
+     <section className="a3-block">
+      <div className="a3-head"><h2>Interpretation</h2><span className="a3-eyebrow">Context only</span></div>
+      <div className="a3-card a3-callout"><Icon name="shield" size={16}/><div><p>{momentum.detail}{balance.highest&&balance.lowest?` Highest recent primary-muscle exposure: ${balance.highest[0]} (${balance.highest[1]} sets); lowest: ${balance.lowest[0]} (${balance.lowest[1]}).`:''}</p></div></div>
+     </section>
+    </>}
+    <button className="a3-link" onClick={()=>onNav('goals')}>Goals <Icon name="arrow" size={14}/></button>
    </>}
 
-   {tab==='strength'&&<>
-   <section className="a3-block">
-    <div className="a3-head"><div><span className="a3-eyebrow">Strength Progress</span><h2 className="a3-bigtitle">{selected?.name||'Exercise evidence'}</h2></div></div>
-    {selected ? (
-      <div className="a3-stack">
-        <label className="a3-select"><span className="a3-eyebrow">Exercise</span>
-          <select value={selected.id} onChange={e=>setExerciseId(e.target.value)}>
-            {exerciseOptions.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}
-          </select>
-        </label>
-        <div className="a3-choices a3-ranges" role="group" aria-label="Exercise range">{(['1M','3M','6M','1Y','All'] as const).map(p=><button key={p} aria-pressed={exRange===p} className={exRange===p?'selected':''} onClick={()=>setExRange(p)}>{p}</button>)}</div>
-        <div className="a3-card a3-analytics"><div className="a3-analytics-metric"><strong>{evidenceChange===undefined?'—':`${evidenceChange>=0?'+':''}${evidenceChange}%`}</strong><small>Strength change · {exRange==='All'?'all time':`last ${exRange}`}</small></div><ApexSpark values={evidenceSeries} label={`${selected.name} best load per session`} xLabels={historyRange.length>1?[shortDate(historyRange[0].w.scheduledDate),shortDate(historyRange[historyRange.length-1].w.scheduledDate)]:undefined}/><div className="a3-stats a3-stats-2"><ApexStat label="Best set" value={evidenceBest?formatLoad(selected,evidenceBest):'—'} unit={bestReps?`${bestReps} reps`:''}/><ApexStat label="Sessions" value={String(historyRange.length)} unit="logged"/></div></div>
-        <div className="a3-list">
-          {history.map(({w,e},i)=>{
-            const doneSets=e.sets.filter(x=>x.completed&&x.type!=='warmup');
-            const best=selected?(bestLoad(selected,doneSets)??0):0;
-            const reps=Math.max(0,...doneSets.map(x=>x.reps||0));
-            const rirValues=doneSets.map(x=>x.rir).filter((x):x is number=>x!==undefined);
-            const avgRir=rirValues.length?(rirValues.reduce((a,b)=>a+b,0)/rirValues.length).toFixed(1):null;
-            return <div className="a3-card a3-row" key={w.id}>
-              <span className="a3-index">{String(i+1).padStart(2,'0')}</span>
-              <div><strong>{best?formatLoad(selected,best):'Bodyweight / time'}</strong><p>{w.scheduledDate} · {doneSets.length} working sets · best {reps||'—'} reps{avgRir?` · RIR ${avgRir}`:''}</p></div>
-            </div>;
-          })}
-          {!history.length&&<Empty title="Complete this exercise first" text="Comparable performance evidence will appear here."/>}
-        </div>
+   {!zero&&tab==='strength'&&<section className="a3-block">
+    <div className="a3-head"><div><span className="a3-eyebrow">Strength</span><h2 className="a3-bigtitle">{selected?.name||'Exercise evidence'}</h2></div></div>
+    {selected?<div className="a3-stack">
+      <label className="a3-select"><span className="a3-eyebrow">Exercise</span>
+       <select value={selected.id} onChange={e=>{setExerciseId(e.target.value);setPointId('')}}>{exerciseOptions.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select>
+      </label>
+      <div className="a3-choices a3-ranges" role="group" aria-label="Exercise range">{(['1M','3M','6M','1Y','All'] as const).map(p=><button key={p} aria-pressed={exRange===p} className={exRange===p?'selected':''} onClick={()=>{setExRange(p);setPointId('')}}>{p}</button>)}</div>
+      <div className="a3-card a3-analytics">
+       <div className="a3-analytics-metric"><strong>{change===undefined?'—':`${change>=0?'+':''}${change}%`}</strong><small>Strength change · {exRange==='All'?'all time':`last ${exRange}`}</small></div>
+       <ApexTrajectory points={points} label={`${selected.name} best load per session`} selected={sel?.id} onSelect={setPointId} fresh={fresh} xLabels={points.length>1?[shortDate(points[0].date),shortDate(points[points.length-1].date)]:undefined}/>
+       {points.some(p=>p.pr)&&<p className="a3-muted apex-pr-note"><span className="apex-event-mark" aria-hidden="true"/> Diamonds mark personal records.</p>}
+       <div className="a3-stats a3-stats-2"><ApexStat label="Best set" value={best?formatLoad(selected,best):'—'} unit=""/><ApexStat label="Sessions" value={String(points.length)} unit="logged"/></div>
       </div>
-    ) : <Empty title="Complete an exercise first" text="Exercise-level trends appear after APEX has comparable performance evidence."/>}
-   </section>
-
-   <section className="a3-block">
-    <div className="a3-head"><h2>Muscle exposure</h2><span className="a3-eyebrow">Recent working sets</span></div>
-    <div className="a3-card a3-stack">{muscle.map(([m,v])=><div className="a3-meter-row" key={m}><span>{m}</span><ApexMeter value={Math.min(100,v*8)}/><strong>{v}</strong></div>)}{!muscle.length&&<Empty title="No performance data yet" text="Complete a workout and APEX will build the evidence layer."/>}</div>
-   </section>
-
-   </>}
-
-   {tab==='prs'&&<section className="a3-block">
-    <div className="a3-head"><h2>Achievements</h2><button className="a3-link" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button></div>
-    <div className="a3-list">{top.map((a,i)=><div className="a3-card a3-row" key={i}><span className="a3-index">{String(i+1).padStart(2,'0')}</span><div><strong>{displayText(a.label)}</strong><p>{dayOfTimestamp(a.timestamp)||a.timestamp} · {a.unit}</p></div></div>)}{!top.length&&<Empty title="Achievements will appear here" text="PRs are contextual to exercise and set type."/>}</div>
+      {sel&&selRow&&<section className="a3-card a3-stack apex-evidence" aria-label="Evidence">
+       <span className="a3-eyebrow a3-gold">EVIDENCE · {shortDate(sel.date)}{sel.pr?' · PR':''}</span>
+       <strong>{selected.name}</strong>
+       <EvidenceSets ex={selected} sets={selRow.e.sets} date={sel.date} standard={standard}/>
+       <div className="a3-actions">
+        <button className="a3-pill" onClick={()=>onNav('session:'+sel.id)}>Open session</button>
+        <button className="a3-pill" onClick={()=>onAsk(`Why did my ${selected.name} change?`)}>Why did this change?</button>
+       </div>
+      </section>}
+      {notes.length>0&&<section className="a3-block" aria-label="Your notes"><span className="a3-eyebrow">YOUR NOTES</span>{notes.map(n=><p key={n.id} className="apex-note"><small className="a3-muted">{n.date}</small> {n.text}</p>)}</section>}
+      <div className="a3-list">{rows.slice(-8).map(({w,e,value},i)=><button className={`a3-card a3-row a3-tap${sel?.id===w.id?' selected':''}`} key={w.id} onClick={()=>setPointId(w.id)}><span className="a3-index">{String(i+1).padStart(2,'0')}</span><div><strong>{formatLoad(selected,value)}</strong><p>{w.scheduledDate} · {e.sets.filter(x=>x.completed&&x.type!=='warmup').length} working sets</p></div></button>)}</div>
+    </div>:<Empty title="Complete an exercise first" text="Exercise-level trends appear after APEX has comparable performance evidence."/>}
+    {s.achievements.length>0&&<section className="a3-block"><div className="a3-head"><h2>Personal records</h2><button className="a3-link" onClick={()=>onNav('history')}>History <Icon name="arrow" size={14}/></button></div>
+     <div className="a3-list">{s.achievements.slice(-5).reverse().map((a,i)=><button className="a3-card a3-row a3-tap" key={i} onClick={()=>onNav('session:'+a.workoutId)}><span className="apex-event-mark" aria-hidden="true"/><div><strong>{displayText(a.label)}</strong><p>{dayOfTimestamp(a.timestamp)||a.timestamp} · {a.unit}</p></div></button>)}</div></section>}
    </section>}
+
+   {!zero&&tab==='volume'&&<section className="a3-block">
+    <div className="a3-head"><h2>Volume</h2><span className="a3-eyebrow">Last 8 weeks</span></div>
+    <p>{volumeLine||'Complete a few sessions and APEX will begin finding patterns.'}</p>
+    {standard&&<div className="a3-card"><LayeredVolume rows={volume} format={fmtVol}/></div>}
+    {advanced&&<table className="apex-evidence-table" aria-label="Weekly volume"><thead><tr><th scope="col">Week of</th><th scope="col">Volume</th><th scope="col">Largest layer</th></tr></thead><tbody>{volume.map(r=><tr key={r.start}><th scope="row">{r.start}</th><td>{fmtVol(r.total)}</td><td>{r.layers[0]?`${r.layers[0].muscle}`:'—'}</td></tr>)}</tbody></table>}
+    <button className="a3-link" onClick={()=>onAsk('Why did my volume change?')}>Why did this change? <Icon name="arrow" size={14}/></button>
+   </section>}
+
+   {!zero&&tab==='consistency'&&<section className="a3-block">
+    <div className="a3-head"><h2>Consistency</h2><span className="a3-eyebrow">Training rhythm</span></div>
+    <p>{weekSentence(week)}. Rest days are part of the plan.</p>
+    <div className="a3-card"><RhythmMap s={s}/></div>
+    {standard&&<p className="a3-muted">{consistency.completed} of {consistency.planned||'—'} scheduled sessions done in the last 30 days.</p>}
+    <div className="a3-list">{done.slice(-4).reverse().map(w=><button className="a3-card a3-row a3-tap" key={w.id} onClick={()=>onNav('session:'+w.id)}><span className="a3-index">{w.scheduledDate.slice(5)}</span><div><strong>{w.name}</strong><p>{w.exercises.length} exercises</p></div></button>)}</div>
+   </section>}
+
+   {!zero&&tab==='recovery'&&<section className="a3-block">
+    <div className="a3-head"><h2>Recovery</h2><span className="a3-eyebrow">Fatigue state</span></div>
+    <p>{rs?`Training load is ${rs.level.toLowerCase().replace(/_/g,' ')}${rs.status==='deload_active'?'. This is a deload week.':rs.status==='deload_recommended'?'. A deload week is recommended.':'.'}`:'Not enough sessions yet to describe recovery.'}</p>
+    {standard&&<div className="a3-card"><RecoveryTrajectory s={s}/></div>}
+    <button className="a3-link" onClick={()=>onAsk('Why is this week lighter?')}>Why is this week lighter? <Icon name="arrow" size={14}/></button>
+   </section>}
+
+   {!zero&&tab==='body'&&bodyCard}
  </div>
 }
 
@@ -194,7 +204,7 @@ export function History({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
  });
  const todayIso=today();
  const monthDone=Array.from({length:daysInMonth},(_,i)=>marks.get(isoDay(i+1))).filter(m=>m==='done'||m==='partial').length;
- return <div className="a3-home"><PageTitle eyebrow="HISTORY" title="Workout History" sub="Performed, skipped, missed, rescheduled and extra work remain distinguishable."/>
+ return <div className="a3-home"><PageTitle eyebrow="HISTORY" title="Workout History" sub="Every session, in order. Records show as events on the line."/>
   <section className="a3-card a3-calendar" aria-label="Training calendar">
    <div className="a3-head"><button className="a3-iconbtn" aria-label="Previous month" onClick={()=>setMonthOffset(x=>x-1)}><Icon name="back" size={18}/></button><div className="a3-cal-title"><strong>{monthLabel}</strong><small>{monthDone} session{monthDone===1?'':'s'}</small></div><button className="a3-iconbtn" aria-label="Next month" disabled={monthOffset>=0} onClick={()=>setMonthOffset(x=>Math.min(0,x+1))}><Icon name="chev" size={18}/></button></div>
    <div className="a3-cal-grid" role="grid">
@@ -206,5 +216,5 @@ export function History({s,onNav}:{s:AppState;onNav:(r:string)=>void}){
   </section>
   <div className="a3-search"><Icon name="search"/><input aria-label="Search workouts" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search workout, date…"/></div>
   <div className="a3-chips">{['all','completed','skipped','missed','rescheduled','extra'].map(x=><button className={`a3-pill ${status===x?'selected':''}`} key={x} onClick={()=>setStatus(x)}>{x}</button>)}</div>
-  <div className="a3-list">{rows.map(w=><button className="a3-card a3-pick a3-tap history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="a3-eyebrow">{[w.scheduledDate,w.status,sourceLabel(w.source)].filter(Boolean).join(' · ')}</span><strong>{w.name}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {vol(volumeForWorkout(w,s.exercises)).toLocaleString()} {volLabel()}</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Nothing to show" text="Your timeline will populate as training happens."/>}</div>
+  <div className="a3-list">{rows.map(w=><button className="a3-card a3-pick a3-tap history-item" key={w.id} onClick={()=>w.status==='completed'&&onNav('session:'+w.id)}><div><span className="a3-eyebrow">{[w.scheduledDate,w.status,sourceLabel(w.source)].filter(Boolean).join(' · ')}</span><strong>{w.name}{s.achievements.some(a=>a.workoutId===w.id)&&<span className="apex-pr-chip"> · PR</span>}</strong><small>{w.exercises.length} exercises · {w.exercises.reduce((a,e)=>a+e.sets.filter(x=>x.completed).length,0)} completed sets · {vol(volumeForWorkout(w,s.exercises)).toLocaleString()} {volLabel()}</small></div><Icon name="chev"/></button>)}{!rows.length&&<Empty title="Your training history begins here." text="Finish a session and it appears on this line."/>}</div>
  </div>}

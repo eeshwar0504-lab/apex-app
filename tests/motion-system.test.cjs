@@ -38,11 +38,11 @@ test('P17.2 reduced motion (OS setting and APEX preference) collapses every dura
   assert.match(css, /\.app\.reduce-motion \.a3-skeleton::after \{ animation: none; \}/);
 });
 
-test('P17.3 durations come from tokens: no stray millisecond values outside the token blocks and two named exceptions', () => {
+test('P17.3 durations come from tokens: no stray millisecond values outside the token blocks and one named exception', () => {
   const body = css.replace(/:root \{[^}]*\}/g, '').replace(/@media \(prefers-reduced-motion: reduce\) \{\s*:root \{[^}]*\}\s*\}/g, '').replace(/\.app\.reduce-motion \{[^}]*\}/g, '');
   const stray = [...body.matchAll(/(\d+)ms/g)].map((m) => m[0]);
-  // the rest ring ticks once a second (linear) and the skeleton shimmer is a slow ambient loop; both are deliberate
-  assert.deepEqual([...new Set(stray)].sort(), ['1400ms', '400ms']);
+  // the skeleton shimmer is a slow ambient loop and is the one deliberate exception (the rest line ticks once a second, linear, in apex5.css)
+  assert.deepEqual([...new Set(stray)].sort(), ['1400ms']);
 });
 
 test('P17.4 only transform and opacity are keyframed; transitions never touch layout', () => {

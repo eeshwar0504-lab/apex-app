@@ -46,7 +46,7 @@ function realisticState(fresh, workouts = 60) {
   s.journal = [{ id: 'j1', date: '2026-03-08', scope: 'general', text: 'felt strong', tags: [] }];
   s.deloads = ['2026-02-02'];
   s.recoveryLog = [{ date: '2026-03-08', sleepHours: 7, readiness: 4 }];
-  s.preferences = { ...s.preferences, theme: 'steel', reducedMotion: true, units: 'imperial' };
+  s.preferences = { ...s.preferences, theme: 'graphite', reducedMotion: true, units: 'imperial' };
   return s;
 }
 const core = (s) => JSON.parse(JSON.stringify({ ...s, savedAt: undefined, exercises: undefined }));

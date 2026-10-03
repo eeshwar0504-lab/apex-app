@@ -39,7 +39,7 @@ async function openScheduledSession(page: Page) {
    * when the responsive layout presents the session through its row.
    */
   const primaryStart = page.getByRole('button', {
-    name: /Start session|Start Workout|Resume Workout|Preview next/i,
+    name: /Begin session|Resume session|Preview next/i,
   });
 
   if (
@@ -372,7 +372,7 @@ test.describe('APEX training execution', () => {
     await openTrainRoute(page);
 
     const start = page.getByRole('button', {
-      name: /Start session|Start Workout|Resume Workout|Preview next/i,
+      name: /Begin session|Resume session|Preview next/i,
     });
 
     if (
@@ -413,13 +413,10 @@ test.describe('APEX training execution', () => {
   test('the equipment chosen in setup is the default: start is available at once and Change keeps the per-exercise override', async ({ page }) => {
     await openScheduledSession(page);
 
-    // no equipment question has to be answered before training can start
+    // no answer is required (the saved profile preselects Available), but every equipment exercise has explicit controls
     await expect(page.getByRole('button', { name: /^Start training/i })).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Confirm available' })).toHaveCount(0);
-    await expect(page.getByText('Using the equipment from your setup.')).toBeVisible();
-
-    // Change reveals one row per exercise requirement
-    await page.getByRole('button', { name: 'Change', exact: true }).click();
+    await expect(page.getByText('Using the equipment from your setup.')).toHaveCount(0);
+    await expect(page.getByText('Equipment available?').first()).toBeVisible();
     const requirementLabels = await page.locator('.equipment-check-block .a3-equip-main .a3-eyebrow').allTextContents();
     expect(requirementLabels).toContain('Machine Chest Press');
     expect(new Set(requirementLabels).size).toBeGreaterThan(1);
@@ -428,13 +425,20 @@ test.describe('APEX training execution', () => {
     await page.getByRole('button', { name: 'Not available' }).first().click();
     await expect(page.getByText(/Not available today/i).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Replace unavailable equipment to continue/i })).toBeDisabled();
+    // the deterministic top alternative is shown with what changes; nothing is swapped until the user confirms
+    const top = page.locator('[data-top-alternative]').first();
+    await expect(top).toBeVisible();
+    await expect(top).toContainText('→');
+    await expect(top).toContainText('Only for today');
+    await expect(page.getByRole('button', { name: 'Use alternative' }).first()).toBeVisible();
+    await expect(page.getByText(/Can you use|Is this equipment available/i)).toHaveCount(0);
 
     // and the override can be undone
-    await page.getByRole('button', { name: 'Confirm available' }).first().click();
+    await page.locator('.equipment-check-block[data-equipment-state="unavailable"]').first().getByRole('button', { name: 'Available', exact: true }).click();
     await expect(page.getByRole('button', { name: /^Start training/i })).toBeEnabled();
   });
 
-  test('active set logger is weight, reps and one visible LOG SET; RIR is advanced', async ({ page }) => {
+  test('active set logger is weight, reps and one visible LOG SET; RIR appears with the Standard view', async ({ page }) => {
     await enterActiveSet(page);
 
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
@@ -443,10 +447,10 @@ test.describe('APEX training execution', () => {
     await expect(page.getByRole('button', { name: 'Increase reps' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Decrease load' })).toBeVisible();
 
-    // RIR is hidden until the advanced controls are switched on
+    // RIR is hidden in Guided and optional once the Standard view is chosen
     await expect(page.getByRole('button', { name: 'Decrease RIR' })).toHaveCount(0);
     await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.getByRole('button', { name: 'Advanced controls' }).click();
+    await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Standard', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Decrease RIR' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Increase RIR' })).toBeVisible();
 
@@ -622,7 +626,7 @@ test.describe('APEX training execution', () => {
     input=dialog.locator('input').first();
     await input.fill('Show my progress');
     await input.press('Enter');
-    await expect(page.locator('.a3-stats .a3-stat').first()).toContainText('1');
+    await expect(page.locator('.a3-progress .a3-pagetitle .a3-eyebrow')).toHaveText('Progress · 1 session');
   });
 
   test('a heavy lift is warmed up first: warm-ups are labelled, skip the feedback step and are not working sets', async ({ page }) => {

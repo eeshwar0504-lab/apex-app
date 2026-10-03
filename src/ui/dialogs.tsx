@@ -1,11 +1,21 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {useExitTransition} from './motion';
+
+/* Sheets emerge from the object that opened them: the last tap is remembered so the panel can grow from that point. */
+let lastPointer:{x:number;y:number}|undefined;
+if(typeof document!=='undefined')document.addEventListener('pointerdown',e=>{lastPointer={x:e.clientX,y:e.clientY}},true);
 
 export function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){
  /* Dialog behaviour: focus moves in, Tab stays inside, Escape closes, focus returns to what opened it. */
  const panel=useRef<HTMLDivElement>(null);
  const {closing,request}=useExitTransition(close);
+ useLayoutEffect(()=>{
+  const node=panel.current;
+  if(!node||!lastPointer)return;
+  const r=node.getBoundingClientRect();
+  node.style.transformOrigin=`${Math.max(0,Math.min(r.width,lastPointer.x-r.left))}px ${Math.max(0,Math.min(r.height,lastPointer.y-r.top))}px`;
+ },[]);
  const requestRef=useRef(request);
  requestRef.current=request;
  /* captured during the first render, before autoFocus inside the dialog can take focus */

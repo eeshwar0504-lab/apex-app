@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {flushSync} from 'react-dom';
 
 /* Motion helpers. Durations and easings are CSS tokens in apex-motion.css; script reads them from there so timing has one source.
  * Reduced motion (the OS setting or the APEX preference) collapses every token to ~0, so anything waiting on an animation waits no time. */
@@ -28,4 +29,19 @@ export function useExitTransition(close:()=>void){
   timer.current=window.setTimeout(()=>closeRef.current(),ms);
  };
  return {closing,request};
+}
+
+/*
+ * One continuous object across states: when the platform supports it, the change is wrapped in a view transition so the element
+ * that carries the same view-transition-name (the Session Thread, a chart point's source) travels instead of being replaced.
+ * Without support, or with reduced motion, the change is simply applied. The state change itself never depends on the animation.
+ */
+export function motionReduced(preference?:boolean):boolean{
+ if(preference)return true;
+ try{return window.matchMedia('(prefers-reduced-motion: reduce)').matches}catch{return false}
+}
+export function withViewTransition(change:()=>void,reducedPreference?:boolean):void{
+ const doc=document as Document&{startViewTransition?:(cb:()=>void)=>unknown};
+ if(typeof doc.startViewTransition!=='function'||motionReduced(reducedPreference)){change();return}
+ try{doc.startViewTransition(()=>{flushSync(change)});}catch{change()}
 }

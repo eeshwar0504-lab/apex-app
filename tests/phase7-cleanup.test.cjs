@@ -62,9 +62,9 @@ test('P7.6 no stray root manifest: the PWA decision and the repository agree', (
 test('P7.7 the docs carry no invented completion percentage and no stale release label', () => {
   const readme = read('README.md');
   assert.doesNotMatch(readme, /\d+\s*%\s*complete|complete[^.\n]{0,40}\d+\s*%/i, 'no completion percentage');
-  assert.match(readme, /4\.1\.0/);
+  assert.match(readme, /5\.0\.0/);
   const readiness = read('RELEASE_READINESS.md');
-  assert.match(readiness.split('\n')[0], /4\.1\.0/, 'the title is the current release, not "v2"');
+  assert.match(readiness.split('\n')[0], /5\.0\.0/, 'the title is the current release, not "v2"');
   assert.doesNotMatch(readiness.split('## Historical log')[0], /\d+\/\d+ Node|feature-complete/, 'no stale counts or completion claims above the historical log');
   assert.match(readiness, /safetyCheck/, 'the deferred safetyCheck decision is documented');
   assert.match(readiness, /NOT VERIFIED/);

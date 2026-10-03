@@ -58,7 +58,8 @@ test.describe('APEX product workflows',()=>{
     const detail=page.getByRole('dialog');
     await expect(detail).toBeVisible();
     await expect(detail.getByText('SETUP',{exact:true})).toBeVisible();
-    await expect(detail.getByText('SAFETY',{exact:true})).toBeVisible();
+    await expect(detail.getByText('TECHNIQUE',{exact:true})).toBeVisible();
+    await expect(detail.getByText('Stay safe',{exact:true})).toBeVisible();
     await expect(detail.getByRole('button',{name:'Use in training'})).toBeVisible();
   });
 
@@ -76,8 +77,10 @@ test.describe('APEX product workflows',()=>{
     await page.getByRole('button',{name:'You',exact:true}).click();
     const enabled=page.getByRole('checkbox',{name:'Notifications enabled',exact:true});
     await expect(enabled).toBeChecked();
+    // the prepared-intent preview is part of the Standard view
+    await page.getByRole('radiogroup',{name:'Workout experience'}).getByRole('radio',{name:/Standard/}).click();
     await enabled.uncheck();
-    await expect(page.getByText('No reminder needed',{exact:true})).toBeVisible();
+    await expect(page.getByText('No reminder is needed right now.',{exact:true})).toBeVisible();
     await enabled.check();
     await expect(enabled).toBeChecked();
   });

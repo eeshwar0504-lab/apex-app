@@ -1,0 +1,286 @@
+/* ============================================================
+   APEX 5.0 — one instrument.
+   Loaded last. Typography, spacing and light make the interface; gold is earned. This layer holds the APEX Line, the motion
+   vocabulary, the four atmospheres, tonal surfaces and the objects introduced in 5.0. Durations come from the --motion-* tokens, so
+   reduced motion (OS or APEX preference) collapses everything here too.
+   ============================================================ */
+
+/* ---------- identity: tonal layering instead of gradients and glow ---------- */
+:root {
+  --a3-gold-fill: var(--apex3-gold);
+  --a3-card-bg: var(--apex3-surface-raised);
+  --apex3-shadow-surface: none;
+  --a3-ui: Inter, "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+  --apex-ember: #d9895b;
+  --apex-track: rgba(225, 218, 202, 0.14);
+}
+.a3-card { box-shadow: none; border-color: var(--apex3-line-soft); }
+.a3-cta { box-shadow: none; }
+.a3-cta:not(.a3-cta-ghost):not(.a3-danger) { color: #14110a; }
+.a3-eyebrow { font-family: var(--a3-ui); }
+body, .app { font-family: var(--a3-ui); }
+
+/* ---------- typography: grotesk for UI and data, serif only for editorial moments ---------- */
+.a3-focus-head h2, .a3-topcopy h1, .a3-modal-head h2, .a3-decision h2, .a3-profile strong, .a3-cal-title strong, .a3-analytics-metric strong,
+.a3-bodyvalue, .a3-bigtitle, .a3-stateview h2, .a3-loghead h2, .a3-head .a3-bigtitle, .a3-bodycard .a3-bodyvalue, .a3-bigrep, .a3-rest > strong,
+.onboard-body h2, .a3-brief > h1, .a3-workout h1 { font-family: var(--a3-ui); }
+.a3-greet h1, .onboard-body h1, .a3-completehead h1, .apex-editorial, .apex-observation, .a3-hero h2, .apex-briefing h1 { font-family: var(--a3-serif); }
+.a3-num, .a3-stat strong, .a3-stepper input, .a3-input[type="number"], .apex-rest-time, .apex-ghost strong, .apex-ghost span, table td, table th,
+.apex-cause strong, .apex-rhythm-count, .a3-session-pct strong, .a3-spec dd, .a3-spec2 strong { font-variant-numeric: tabular-nums; }
+.a3-stat strong { font-size: calc(24px * var(--apex3-fs)); }
+
+/* ---------- atmospheres: Obsidian, Graphite, Bone / Paper Night, High Contrast ---------- */
+.app[data-theme="obsidian"] { --apex3-bg: #07090a; --apex3-surface: #0d1011; --apex3-surface-raised: #141819; --apex3-surface-strong: #1b2021; }
+.app[data-theme="graphite"] { --apex3-bg: #0a0b0d; --apex3-surface: #111316; --apex3-surface-raised: #181b1f; --apex3-surface-strong: #20242a; --apex3-line: rgba(200, 212, 228, 0.14); --apex3-line-soft: rgba(200, 212, 228, 0.08); --apex3-text: #eef0f3; --apex3-muted: #a3a9b2; --apex3-dim: #8a909a; --apex3-steel: #8d9db3; --apex3-glow2-rgb: 100, 120, 150; }
+.app[data-theme="bone"] { --apex3-bg: #0e0d0b; --apex3-surface: #16140f; --apex3-surface-raised: #1e1b15; --apex3-surface-strong: #27231b; --apex3-line: rgba(240, 228, 200, 0.14); --apex3-line-soft: rgba(240, 228, 200, 0.08); --apex3-text: #f6efdd; --apex3-muted: #b3aa96; --apex3-dim: #978f7d; --apex3-steel: #a39878; --apex3-glow2-rgb: 130, 112, 80; }
+.app[data-theme="contrast"] { --apex3-bg: #000; --apex3-surface: #060606; --apex3-surface-raised: #0e0e0e; --apex3-surface-strong: #161616; --apex3-line: rgba(255, 255, 255, 0.5); --apex3-line-soft: rgba(255, 255, 255, 0.34); --apex3-text: #fff; --apex3-muted: #e2dfd6; --apex3-dim: #cfccc2; --apex3-gold: #ffcf6b; --apex3-gold-bright: #ffe3a0; --apex3-gold-rgb: 255, 207, 107; --apex-track: rgba(255, 255, 255, 0.4); }
+html:has(.app[data-theme="graphite"]), body:has(.app[data-theme="graphite"]) { background: #0a0b0d; }
+html:has(.app[data-theme="bone"]), body:has(.app[data-theme="bone"]) { background: #0e0d0b; }
+html:has(.app[data-theme="contrast"]), body:has(.app[data-theme="contrast"]) { background: #000; }
+.a3-theme[data-theme-swatch="obsidian"] { --p-bg: #07090a; --p-surface: #141819; --p-accent: #d8ad58; }
+.a3-theme[data-theme-swatch="graphite"] { --p-bg: #0a0b0d; --p-surface: #20242a; --p-accent: #d8ad58; }
+.a3-theme[data-theme-swatch="bone"] { --p-bg: #0e0d0b; --p-surface: #27231b; --p-accent: #d8ad58; }
+.a3-theme[data-theme-swatch="contrast"] { --p-bg: #000; --p-surface: #161616; --p-accent: #ffcf6b; }
+
+/* ---------- THE APEX LINE ---------- */
+.apex-line { position: relative; height: 2px; width: 100%; overflow: hidden; background: var(--apex-track); border-radius: 2px; }
+.apex-line > i { position: absolute; inset: 0; display: block; background: var(--apex3-gold); transform-origin: left center; transition: transform var(--motion-smooth) var(--ease-apex); }
+.apex-line-timer > i { transition: transform 500ms linear; }
+.apex-line-baseline { height: 1px; }
+.apex-line-signal > i { background: var(--apex3-gold-bright); }
+.a3-workout > .apex-line { margin: -4px 0 6px; }
+
+/* ---------- motion vocabulary: emerge, settle, travel, morph, fold, recede, breathe, release ---------- */
+@keyframes apex-emerge { from { opacity: 0; transform: translateY(var(--rise-distance)); } to { opacity: 1; transform: none; } }
+@keyframes apex-settle { from { transform: scale(1.025); } to { transform: none; } }
+@keyframes apex-travel { from { opacity: 0; transform: translate(var(--travel-x, 0), var(--travel-y, var(--slide-distance))); } to { opacity: 1; transform: none; } }
+@keyframes apex-fold { from { opacity: 1; max-height: 40em; } to { opacity: 0; max-height: 0; } }
+@keyframes apex-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
+@keyframes apex-release { from { transform: scaleX(0); opacity: .4; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes apex-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.mo-emerge { animation: apex-emerge var(--motion-base) var(--ease-apex) backwards; }
+.mo-settle { animation: apex-settle var(--motion-fast) var(--ease-apex); }
+.mo-travel { animation: apex-travel var(--motion-smooth) var(--ease-apex) backwards; }
+.mo-fold { animation: apex-fold var(--motion-exit) var(--ease-exit) forwards; overflow: hidden; }
+.mo-recede { opacity: .6; transition: opacity var(--motion-base) var(--ease-apex); }
+.mo-breathe { animation: apex-breathe 4.2s ease-in-out infinite; }
+.mo-release { animation: apex-release var(--motion-slow) var(--ease-spring) backwards; transform-origin: left center; }
+.app.reduce-motion .mo-breathe { animation: none; }
+@media (prefers-reduced-motion: reduce) { .mo-breathe { animation: none; } }
+/* sheets grow from the tap that opened them (the origin is set from the last pointer position) */
+.a3-modal { animation-name: apex-emerge; transform-origin: 50% 100%; }
+/* view transitions: the Session Thread travels between Home, the briefing, the workout, the dock and the completion artifact */
+::view-transition-group(session-thread) { animation-duration: var(--motion-smooth); animation-timing-function: var(--ease-spring); }
+::view-transition-old(session-thread), ::view-transition-new(session-thread) { height: 100%; object-fit: cover; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-base); }
+.app[data-vt="1"] .page-transition { animation: none; }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }
+.a3-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- guide, target, disclosures ---------- */
+.a3-guide { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--apex3-line-soft); border-radius: 14px; }
+.a3-guide-title { margin: 0; font-size: calc(18px * var(--apex3-fs, 1)); font-weight: 600; }
+.a3-guide-block { display: grid; gap: 6px; }
+.a3-guide .a3-bullets { color: inherit; }
+.a3-target { margin-top: 4px; }
+.a3-targetline { margin: 0 0 8px; font-size: calc(14px * var(--apex3-fs, 1)); }
+.a3-disclosure { display: grid; gap: 6px; }
+.a3-disclosure-toggle { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 0; border: 0; background: none; color: var(--apex3-muted); font: inherit; font-size: calc(14px * var(--apex3-fs, 1)); text-align: left; cursor: pointer; }
+.a3-disclosure-toggle svg { flex: none; }
+.a3-disclosure-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.a3-disclosure-body { display: grid; gap: 6px; padding-bottom: 6px; animation: apex-emerge var(--motion-base) var(--ease-apex) backwards; }
+.a3-disclosure-body p, .a3-disclosure-body small { margin: 0; }
+.a3-setoptions > summary, .a3-more > summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; color: var(--apex3-muted); font-size: calc(14px * var(--apex3-fs, 1)); }
+.a3-firstrun p { margin: 0; font-size: calc(15px * var(--apex3-fs, 1)); line-height: 1.5; }
+.a3-iconbtn-spacer { display: inline-block; width: 44px; height: 44px; flex: none; }
+.a3-choices + .a3-cta-ghost { margin-top: 10px; }
+
+/* ---------- Session Thread: briefing, dock ---------- */
+.apex-thread { position: relative; }
+.apex-briefing { display: grid; gap: 6px; }
+.apex-briefing h1 { margin: 0; font-size: clamp(28px, 8vw, 40px); font-weight: 500; line-height: 1.1; }
+.apex-intent { display: grid; gap: 2px; margin: 4px 0 0; color: var(--apex3-muted); }
+.apex-sticky-action { padding: 8px 0; }
+.apex-sticky-action .a3-cta { margin-top: 0; }
+.apex-dock { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 40; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; min-height: 56px; padding: 10px 14px 12px; border: 1px solid var(--apex3-line); border-radius: 14px; background: var(--apex3-surface-strong); color: var(--apex3-text); text-align: left; font: inherit; cursor: pointer; max-width: 520px; margin: 0 auto; }
+.apex-dock-copy { display: grid; gap: 2px; min-width: 0; }
+.apex-dock-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apex-dock-action { display: inline-flex; align-items: center; gap: 4px; color: var(--apex3-gold); font-weight: 600; }
+.apex-dock .apex-line { grid-column: 1 / -1; }
+.app.is-focus .apex-dock { display: none; }
+.app:has(.apex-dock) .main { padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+
+/* focus mode: during training the workout is the environment; chrome recedes */
+.app.is-focus .topbar { opacity: .72; }
+.app.is-focus .bottom .nav-item:not(.active) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.app.is-focus .bottom .nav-item:not(.active) { opacity: .7; }
+
+/* ---------- workout: ghost set, cause path, rest line, artifact ---------- */
+.apex-ghost { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.apex-ghost small { display: block; font-size: calc(10px * var(--apex3-fs, 1)); letter-spacing: .14em; color: var(--apex3-muted); }
+.apex-ghost strong { display: block; font-size: calc(18px * var(--apex3-fs, 1)); font-weight: 600; }
+.apex-ghost-prev span { display: block; font-size: calc(15px * var(--apex3-fs, 1)); color: var(--apex3-muted); }
+.apex-ghost-prev { opacity: .55; transition: opacity var(--motion-slow) var(--ease-apex); }
+.apex-ghost.is-dissolving .apex-ghost-prev { opacity: 0; transition-duration: var(--motion-slow); }
+.apex-cause { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 12px; margin: 6px 0; padding: 0; list-style: none; }
+.apex-cause li { display: grid; gap: 4px; animation: apex-emerge var(--motion-base) var(--ease-apex) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-step) * 2); }
+.apex-cause small { font-size: calc(10px * var(--apex3-fs, 1)); letter-spacing: .14em; color: var(--apex3-muted); }
+.apex-cause strong { font-size: calc(14px * var(--apex3-fs, 1)); font-weight: 600; }
+.apex-cause .apex-line > i { transform-origin: left center; animation: apex-draw var(--motion-smooth) var(--ease-apex) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-step) * 2); }
+.apex-rest { display: grid; gap: 14px; padding: 18px 0 6px; }
+.apex-rest .apex-line { height: 3px; }
+.apex-rest-time { font-size: calc(34px * var(--apex3-fs, 1)); font-weight: 500; letter-spacing: .02em; }
+.apex-rest.is-done .apex-line > i { background: var(--apex3-gold-bright); transition-duration: var(--motion-base); }
+.apex-rest-actions .a3-cta, .apex-rest-actions button { min-height: 56px; }
+.apex-primary { min-height: 56px; }
+.apex-artifact { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--apex3-line-soft); border-radius: 14px; background: var(--apex3-surface-raised); }
+.apex-artifact-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: calc(14px * var(--apex3-fs, 1)); }
+.apex-pips { display: inline-flex; gap: 5px; flex: none; }
+.apex-pips i { width: 14px; height: 4px; border-radius: 2px; background: var(--apex-track); }
+.apex-pips i.is-done { background: var(--apex3-gold); }
+.apex-pips i.is-skipped { background: transparent; border: 1px solid var(--apex3-dim); height: 4px; }
+.apex-signals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.apex-signal-line, .apex-next { margin: 0; }
+.apex-events { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.apex-events li { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.apex-events small { color: var(--apex3-muted); }
+.apex-event-mark { display: inline-block; width: 9px; height: 9px; background: var(--apex3-gold); transform: rotate(45deg); flex: none; }
+.apex-pr-chip { color: var(--apex3-gold); font-weight: 600; }
+.apex-menu { display: grid; gap: 10px; padding: 12px 0; }
+.apex-experience { display: grid; gap: 8px; }
+
+/* workout controls are the primary surface: 56dp and up */
+.a3-workout .a3-cta, .a3-workout .a3-complete { min-height: 56px; }
+.a3-workout .a3-stepper > button { min-width: 56px; min-height: 56px; }
+.a3-workout .a3-stepper-input { min-height: 56px; }
+.a3-workout .a3-choices > button { min-height: 56px; }
+.a3-pill, .mini-btn { min-height: 48px; }
+.a3-link { min-height: 48px; }
+.a3-iconbtn { min-width: 48px; min-height: 48px; }
+.topbar .a3-iconbtn { min-width: 40px; min-height: 40px; }
+
+/* ---------- Training Map ---------- */
+.apex-week { position: relative; padding: 14px 0 6px; }
+.apex-week .apex-week-line { position: absolute; left: 6%; right: 6%; top: 29px; width: auto; }
+.apex-week ol { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin: 0; padding: 0; list-style: none; }
+.apex-node-cell { display: grid; justify-items: center; }
+.apex-node { display: grid; justify-items: center; gap: 6px; min-width: 40px; min-height: 48px; padding: 4px; border: 0; background: none; color: var(--apex3-muted); font: inherit; font-size: calc(11px * var(--apex3-fs, 1)); letter-spacing: .08em; cursor: pointer; }
+span.apex-node { cursor: default; }
+.apex-node i { display: block; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--apex3-dim); background: var(--apex3-bg); }
+.apex-node.is-rest i { width: 4px; height: 4px; margin: 5px; border: 0; background: var(--apex-track); }
+.apex-node.is-planned i { border-color: var(--apex3-text); }
+.apex-node.is-done i, .apex-node.is-partial i { background: var(--apex3-gold); border-color: var(--apex3-gold); }
+.apex-node.is-partial i { background: linear-gradient(90deg, var(--apex3-gold) 50%, var(--apex3-bg) 50%); }
+.apex-node.is-active i { background: var(--apex3-gold-bright); border-color: var(--apex3-gold-bright); animation: apex-breathe 3.6s ease-in-out infinite; }
+.apex-node.is-missed i, .apex-node.is-skipped i { border-style: dashed; border-color: var(--apex3-dim); }
+.apex-node.is-today { color: var(--apex3-text); font-weight: 700; }
+.apex-node[aria-pressed="true"] { outline: 2px solid rgba(var(--apex3-gold-rgb), .55); outline-offset: 1px; border-radius: 10px; }
+.apex-node.is-fresh i { animation: apex-settle var(--motion-smooth) var(--ease-spring); }
+.apex-week.is-deload ol { gap: 0; padding: 0 12%; }
+.apex-week.is-deload .apex-week-line { left: 14%; right: 14%; background: repeating-linear-gradient(90deg, var(--apex-track) 0 6px, transparent 6px 10px); }
+.apex-week.is-compact { padding: 4px 0 2px; }
+.apex-week.is-compact .apex-week-line { top: 17px; }
+.apex-week.is-compact .apex-node { min-height: 36px; }
+.app.reduce-motion .apex-node.is-active i, .app.reduce-motion .apex-node.is-fresh i { animation: none; }
+.apex-block-view { display: grid; gap: 4px; }
+.apex-block-row { display: grid; gap: 2px; }
+.apex-block-label { display: grid; gap: 2px; justify-items: start; min-height: 48px; padding: 4px 0; border: 0; background: none; color: var(--apex3-text); font: inherit; text-align: left; cursor: pointer; }
+.apex-block-label span { color: var(--apex3-muted); font-size: calc(13px * var(--apex3-fs, 1)); }
+.apex-rest-day { margin: 0; padding: 8px 0; }
+.apex-weekcard { gap: 4px; }
+.apex-statenote { margin: 0; color: var(--apex3-muted); font-size: calc(14px * var(--apex3-fs, 1)); }
+.apex-state-tag { color: var(--apex3-muted); }
+/* Home state: emphasis and tone, never a banner */
+[data-home-state="deload"] .apex-thread .a3-eyebrow.a3-gold { color: var(--apex3-steel); }
+[data-home-state="deload"] .apex-weekcard { border-style: dashed; }
+[data-home-state="fatigued"] .apex-statenote { color: var(--apex-ember); }
+[data-home-state="returning"] .apex-statenote { color: var(--apex3-steel); }
+[data-home-state="progressing"] .apex-statenote { color: var(--apex3-gold); }
+[data-home-state="recovery"] .apex-thread { opacity: .96; }
+
+/* ---------- Progress observatory ---------- */
+.apex-changes ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.apex-changes li { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.apex-traj { width: 100%; height: auto; }
+.apex-traj-base { stroke: var(--apex-track); stroke-width: 1; }
+.apex-traj-line { fill: none; stroke: var(--apex3-gold); stroke-width: 1.6; stroke-linejoin: round; }
+.apex-traj-dot { fill: var(--apex3-gold); }
+.apex-traj-dot.is-deload { fill: var(--apex3-steel); }
+.apex-traj-pr { fill: var(--apex3-gold-bright); }
+.apex-traj-hit { fill: transparent; }
+.apex-traj-point { cursor: pointer; outline: none; }
+.apex-traj-point:focus-visible .apex-traj-hit { stroke: rgba(var(--apex3-gold-rgb), .7); stroke-width: 2; }
+.apex-traj-point.is-selected .apex-traj-dot { fill: var(--apex3-gold-bright); }
+.apex-traj-point.is-fresh .apex-traj-dot, .apex-traj-point.is-fresh .apex-traj-pr { transform-box: fill-box; transform-origin: center; animation: apex-settle var(--motion-slow) var(--ease-spring) backwards; }
+.apex-first-line { margin: 0; }
+.apex-evidence-table { width: 100%; border-collapse: collapse; font-size: calc(14px * var(--apex3-fs, 1)); }
+.apex-evidence-table th, .apex-evidence-table td { padding: 8px 4px; text-align: left; border-bottom: 1px solid var(--apex3-line-soft); font-weight: 400; }
+.apex-evidence-table thead th { color: var(--apex3-muted); font-size: calc(11px * var(--apex3-fs, 1)); letter-spacing: .12em; text-transform: uppercase; }
+.apex-note { margin: 0; }
+.apex-layers { display: flex; align-items: flex-end; gap: 6px; height: 140px; }
+.apex-layer-col { flex: 1; display: grid; grid-template-rows: 1fr auto; height: 100%; justify-items: stretch; gap: 4px; }
+.apex-layer-stack { align-self: end; display: flex; flex-direction: column-reverse; gap: 1px; min-height: 0; }
+.apex-layer-stack i { display: block; min-height: 2px; background: var(--apex3-gold); }
+.apex-layer-stack i.layer-1 { background: rgba(var(--apex3-gold-rgb), .6); }
+.apex-layer-stack i.layer-2 { background: rgba(var(--apex3-gold-rgb), .38); }
+.apex-layer-stack i.layer-3 { background: rgba(var(--apex3-gold-rgb), .2); }
+.apex-layer-col small { text-align: center; color: var(--apex3-muted); font-size: calc(10px * var(--apex3-fs, 1)); }
+.apex-rhythm { display: grid; gap: 6px; }
+.apex-rhythm-row { display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 10px; }
+.apex-rhythm-row.is-deload { opacity: .75; }
+.apex-rhythm-dots { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.apex-rhythm-dots i { justify-self: center; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--apex3-dim); background: transparent; }
+.apex-rhythm-dots i.is-rest { width: 4px; height: 4px; margin: 4px; border: 0; background: var(--apex-track); }
+.apex-rhythm-dots i.is-done, .apex-rhythm-dots i.is-partial { background: var(--apex3-gold); border-color: var(--apex3-gold); }
+.apex-rhythm-dots i.is-missed, .apex-rhythm-dots i.is-skipped { border-style: dashed; }
+.apex-rhythm-dots i.is-today { outline: 1.5px solid var(--apex3-text); outline-offset: 2px; }
+.apex-rhythm-label, .apex-rhythm-count { color: var(--apex3-muted); font-size: calc(12px * var(--apex3-fs, 1)); }
+.apex-rhythm-row.is-deload .apex-rhythm-dots { padding: 0 14%; }
+.apex-recovery-list { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.apex-recovery-list li { display: flex; gap: 10px; align-items: baseline; }
+.apex-recovery-list span { color: var(--apex3-muted); width: 52px; }
+
+/* ---------- Coach: observation, structured answers ---------- */
+.apex-observation-card { display: grid; gap: 10px; }
+.apex-observation { margin: 0; font-size: clamp(20px, 5.6vw, 26px); line-height: 1.3; font-weight: 400; }
+.apex-observation-q { margin: 0 0 6px; font-family: var(--a3-serif); font-size: calc(18px * var(--apex3-fs, 1)); }
+.apex-recommend { display: grid; gap: 4px; padding-top: 6px; border-top: 1px solid var(--apex3-line-soft); }
+.apex-recommend p { margin: 0; }
+.apex-answer { display: grid; gap: 12px; }
+.apex-answer section { display: grid; gap: 4px; }
+.apex-answer p, .apex-answer ul { margin: 0; }
+.apex-answer ul { padding-left: 18px; }
+.apex-answer-safety { margin: 0; color: var(--apex-ember); }
+
+/* ---------- goals, identity, settings preview, onboarding ---------- */
+.apex-goal-line { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.apex-goal-line .apex-line { grid-column: 1 / -1; height: 3px; }
+.apex-goal-line span { font-size: calc(10px * var(--apex3-fs, 1)); letter-spacing: .14em; text-transform: uppercase; color: var(--apex3-muted); }
+.apex-goal-line span:last-child { text-align: right; }
+.apex-goal-read, .apex-identity-read, .apex-profile-read { display: grid; gap: 8px; margin: 0; }
+.apex-goal-read > div, .apex-identity-read > div, .apex-profile-read > div { display: grid; gap: 2px; }
+.apex-goal-read dt, .apex-identity-read dt, .apex-profile-read dt { font-size: calc(10px * var(--apex3-fs, 1)); letter-spacing: .14em; text-transform: uppercase; color: var(--apex3-muted); }
+.apex-goal-read dd, .apex-identity-read dd, .apex-profile-read dd { margin: 0; }
+.apex-identity-name { font-family: var(--a3-serif); font-size: calc(24px * var(--apex3-fs, 1)); font-weight: 500; }
+.apex-preview { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--apex3-line-soft); border-radius: 14px; background: var(--apex3-surface-raised); }
+.apex-preview-row { display: flex; justify-content: space-between; gap: 12px; font-size: calc(14px * var(--apex3-fs, 1)); }
+.apex-preview-action { margin-top: 4px; pointer-events: none; }
+.apex-assemble { display: grid; gap: 14px; }
+.apex-assemble-inputs, .apex-assemble-plan { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.apex-assemble-inputs li, .apex-assemble-plan li { animation-delay: calc(var(--i, 0) * var(--stagger-step) * 3); --travel-y: 18px; }
+.apex-assemble-inputs li { display: flex; justify-content: space-between; gap: 12px; }
+.apex-assemble-inputs small { color: var(--apex3-muted); }
+.apex-assemble-plan li { padding: 8px 0; border-top: 1px solid var(--apex3-line-soft); font-weight: 600; letter-spacing: .06em; }
+.apex-assemble-line > i { animation: apex-draw var(--motion-slow) var(--ease-apex) backwards; animation-delay: var(--motion-smooth); }
+
+/* ---------- errors: an instrument reporting a problem ---------- */
+.apex-error { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--apex3-line); border-left: 3px solid var(--apex-ember); border-radius: 12px; background: var(--apex3-surface-raised); }
+.apex-error dl { display: grid; gap: 8px; margin: 0; }
+.apex-error dt { font-size: calc(10px * var(--apex3-fs, 1)); letter-spacing: .14em; text-transform: uppercase; color: var(--apex3-muted); }
+.apex-error dd { margin: 0; }
+.apex-ember { color: var(--apex-ember); }
+.apex-notice { position: relative; z-index: 60; padding: 8px 12px 0; }
+
+/* ---------- high contrast keeps every state readable without colour ---------- */
+.app.high-contrast .apex-line { background: rgba(255, 255, 255, .5); }
+.app.high-contrast .apex-node.is-missed i, .app.high-contrast .apex-node.is-skipped i { border-width: 2px; }

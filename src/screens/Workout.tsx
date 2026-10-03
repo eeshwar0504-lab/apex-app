@@ -6,8 +6,14 @@ import {normalizeGuidedPosition,completeSet,applySetFeedback,skipSetFeedback,con
 import {adaptationsForWorkout} from '../engine/intelligence';
 import {vol,volLabel,displayText} from '../data/units';
 import {today,formatLoad,fmt,SET_TYPES,niceName,patternLabel,equipmentLabel} from '../ui/shared';
-import {useAdvancedControls} from '../ui/advanced';
-import {Icon,ApexImage,ApexRidge,ApexStat,Metric,ListRow,Empty,Num,StateView,Disclosure} from '../ui/primitives';
+import {useExperience,EXPERIENCE_OPTIONS} from '../ui/experience';
+import type {UiExperience} from '../ui/experience';
+import {haptic} from '../ui/haptics';
+import {withViewTransition} from '../ui/motion';
+import {lastSession,ghostSet,beatsGhost} from '../ui/previous';
+import {GhostSet,CausePath,RestLine,SessionArtifact} from './WorkoutParts';
+import {trainingWeek} from '../ui/week';
+import {Icon,ApexLine,ApexStat,Metric,Empty,Disclosure} from '../ui/primitives';
 import {Modal,useConfirm} from '../ui/dialogs';
 import {completeGuidedSession} from '../ui/stateHelpers';
 
@@ -18,7 +24,7 @@ import {ExerciseGuide} from './ExerciseGuide';
 
 
 
-export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal}:{s:AppState;w:Workout;update:(f:(x:AppState)=>AppState)=>void;onExit:()=>void;onExercise:(id:string)=>void;onDone:(w:Workout)=>void;onJournal:()=>void}){
+export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal,onAsk}:{s:AppState;w:Workout;update:(f:(x:AppState)=>AppState)=>void;onExit:()=>void;onExercise:(id:string)=>void;onDone:(w:Workout)=>void;onJournal:()=>void;onAsk:(question:string)=>void}){
  const [now,setNow]=useState(Date.now());
  const [replace,setReplace]=useState<string|null>(null);
  const [rq,setRq]=useState('');
@@ -26,7 +32,8 @@ export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal}:{s:A
  const [safety,setSafety]=useState(false);
  const [overview,setOverview]=useState(false);
  const [menuOpen,setMenuOpen]=useState(false);
- const {advanced,toggleAdvanced}=useAdvancedControls();
+ const {standard,advanced,level}=useExperience();
+ const chooseExperience=(next:UiExperience)=>{if(next===level)return;haptic('tick',s.preferences);withViewTransition(()=>update(x=>({...x,preferences:{...x.preferences,uiExperience:next}})),s.preferences.reducedMotion)};
  const {ask,dialog}=useConfirm();
  const [beforeTab,setBeforeTab]=useState<'details'|'history'|'modes'>('details');
  const [motionKey,setMotionKey]=useState(0);
@@ -155,11 +162,7 @@ export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal}:{s:A
    });
  };
 
- const vibrate=(pattern:number|number[]=[18])=>{
-   if(s.preferences.haptics&&typeof navigator!=='undefined'&&'vibrate' in navigator){
-     try{navigator.vibrate(pattern);}catch{}
-   }
- };
+ const buzz=(kind:'tick'|'click'|'thud'|'double')=>haptic(kind,s.preferences);
 
  /*
   * When the timestamp reaches the target, transition exactly once.
@@ -170,7 +173,7 @@ export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal}:{s:A
    const key=`${current.id}:${exerciseIndex}:${setIndex}:${restStartedAt||''}`;
    if(hapticKey.current===key)return;
    hapticKey.current=key;
-   vibrate([18,45,18]);
+   buzz('tick');
 
    mutate(ww=>continueGuidedAfterRest(ww).workout);
  },[phase,restRemaining,current.id,exerciseIndex,setIndex,restStartedAt,activeExercise]);
@@ -252,14 +255,14 @@ export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal}:{s:A
      return c;
    });
 
-   vibrate(10);
+   buzz('click');
  };
 
  const completeGuidedSet=()=>{
    if(!activeExercise||!activeSet||!activeEx||current.pausedAt)return;
 
    mutate(ww=>completeSet(ww,exerciseIndex,setIndex));
-   vibrate([12,30,12]);
+   buzz('click');
  };
 
  const applyFeedback=(kind:'heavy'|'right'|'easy')=>{
@@ -457,9 +460,6 @@ export function WorkoutView({s,w,update,onExit,onExercise,onDone,onJournal}:{s:A
    ?[...current.exercises.slice(0,nextExerciseIndex)].reverse().find(e=>e.sets.some(x=>x.completed))||activeExercise
    :activeExercise;
  const justDoneEx=justDoneExercise?safeExercise(s.exercises,justDoneExercise.exerciseId):activeEx;
- const restProgress=restTargetSec>0
-   ?Math.max(0,Math.min(1,restRemaining/restTargetSec))
-   :0;
 
  const sessionProgress=assessment.plannedSets>0
    ?Math.max(0,Math.min(1,(assessment.completedSets+assessment.skippedSets)/assessment.plannedSets))
@@ -488,8 +488,9 @@ const onSetType=(t:SetType)=>mutate(x=>{
              targetRir={targetRir}
              focused
              loadProfile={s.profile}
-             showRir={advanced}
+             showRir={standard}
              showNotes={advanced}
+             onTick={()=>buzz('tick')}
              onChange={p=>mutate(x=>{
                const c=structuredClone(x);
                const e=c.exercises.find(
@@ -513,67 +514,68 @@ const onSetType=(t:SetType)=>mutate(x=>{
              <small>{timedWorkComplete?'Time is up. Tap LOG SET when you are ready.':'Hold the position until the timer reaches zero.'}</small>
            </div>}
 </>:null;
+ /* Previous performance feeds the Ghost Set (Standard and Advanced); it is read from completed workouts and never changes a target. */
+ const prevSession=activeEx?lastSession(s.workouts,activeEx.id,current.id):undefined;
+ const workingIndex=activeExercise&&activeSet?workingOf(activeExercise.sets).indexOf(activeSet):-1;
+ const ghost=standard&&activeEx&&activeSet&&!isWarm(activeSet)?ghostSet(prevSession,workingIndex):undefined;
+ const improved=!!(ghost&&activeEx&&activeSet&&activeSet.completed&&beatsGhost(activeEx,activeSet,ghost));
+ const betterSets=current.exercises.reduce((n,we)=>{
+   const ex=safeExercise(s.exercises,we.exerciseId);
+   const prev=ex?lastSession(s.workouts,we.exerciseId,current.id):undefined;
+   if(!ex||!prev)return n;
+   return n+workingOf(we.sets).filter((x,i)=>{const g=ghostSet(prev,i);return x.completed&&!!g&&beatsGhost(ex,x,g)}).length;
+ },0);
+ const weekNow=trainingWeek(s,0);
+ const causeSteps=activeExercise&&activeSet?[
+   {label:'SET',value:`${setCounter(activeExercise.sets,setIndex).replace(/^SET /,'')} logged`,progress:workingOf(activeExercise.sets).length?completedForExercise/workingOf(activeExercise.sets).length:0},
+   {label:'EXERCISE',value:`${exerciseIndex+1} of ${current.exercises.length}`,progress:(exerciseIndex+(workingOf(activeExercise.sets).length?completedForExercise/workingOf(activeExercise.sets).length:0))/Math.max(1,current.exercises.length)},
+   {label:'SESSION',value:`${assessment.completedSets} of ${assessment.plannedSets} sets`,progress:sessionProgress},
+   ...(standard?[{label:'WEEK',value:`${weekNow.sessions.done} of ${weekNow.sessions.planned} sessions`,progress:weekNow.sessions.planned?(weekNow.sessions.done+sessionProgress)/weekNow.sessions.planned:0}]:[])
+ ]:[];
+ const asks=activeEx?`Why was this target selected for ${activeEx.name}?`:'Why was this target selected?';
+ useEffect(()=>{if(phase==='exercise_complete'||phase==='complete')buzz('thud');if(phase==='complete'&&assessment.achievements.length>0)buzz('double')},[phase]);
  return <div className="a3-home a3-workout">
    <div className="a3-topline">
      <button className="a3-iconbtn" onClick={onExit} aria-label="Exit workout">
        <Icon name="back"/>
      </button>
 
-     <div className="a3-topcopy">
+     <div className="a3-topcopy apex-thread" style={{viewTransitionName:'session-thread'} as React.CSSProperties}>
        <span className="a3-eyebrow">
          {phaseLabel[phase]||'WORKOUT'} · {current.scheduledDate}
        </span>
        <h1>{niceName(current.name)}</h1>
      </div>
 
-     {advanced?<button
-       className="a3-iconbtn"
-       aria-label={overview?'Focus':'Overview'}
-       aria-pressed={overview}
-       onClick={()=>setOverview(x=>!x)}
-     >
-       <Icon name="layers"/>
-     </button>:<span className="a3-iconbtn-spacer" aria-hidden="true"/>}
+     <span className="a3-iconbtn-spacer" aria-hidden="true"/>
    </div>
 
-   <div className="a3-toolbar">
+   <div className="a3-toolbar apex-toolbar">
      <span>{fmt(elapsed)} elapsed</span>
-     <span
-       className="a3-toolbar-progress"
-       style={{'--apex-session-progress':`${sessionProgress*100}%`} as React.CSSProperties}
-     >
-       <i aria-hidden="true"/>
-       {assessment.completedSets}/{assessment.plannedSets} sets
-     </span>
+     <span>{assessment.completedSets}/{assessment.plannedSets} sets</span>
      <button className="a3-pill" aria-expanded={menuOpen} aria-controls="a3-session-menu" onClick={()=>setMenuOpen(x=>!x)}>{menuOpen?'Less':'More'}</button>
    </div>
-   {menuOpen&&<div className="a3-toolbar a3-menu" id="a3-session-menu">
-     <button
-       className="a3-pill"
-       onClick={onJournal}
-     >
-       Journal
-     </button>
-     <button
-       className="a3-pill"
-       onClick={()=>setSafety(true)}
-     >
-       Safety
-     </button>
-     <button
-       className="a3-pill"
-       aria-label={current.pausedAt?'Resume workout':'Pause workout'}
-       onClick={togglePause}
-     >
-       {current.pausedAt?'Resume':'Pause'}
-     </button>
-     <button
-       className={`a3-pill ${advanced?'selected':''}`}
-       aria-pressed={advanced}
-       onClick={toggleAdvanced}
-     >
-       Advanced controls
-     </button>
+   <ApexLine value={sessionProgress} variant="progress" label="Session progress"/>
+   {menuOpen&&<div className="apex-menu mo-emerge" id="a3-session-menu">
+     <div className="apex-experience" role="group" aria-label="View">
+       <span className="a3-eyebrow">VIEW</span>
+       <div className="a3-chips">
+         {EXPERIENCE_OPTIONS.map(o=><button key={o.id} className={`a3-pill ${level===o.id?'selected':''}`} aria-pressed={level===o.id} onClick={()=>chooseExperience(o.id)}>{o.name}</button>)}
+       </div>
+       <small className="a3-muted">This changes what you see, not what you train.</small>
+     </div>
+     <div className="a3-toolbar a3-menu">
+       <button className="a3-pill" onClick={onJournal}>Journal</button>
+       <button className="a3-pill" onClick={()=>setSafety(true)}>Safety</button>
+       <button
+         className="a3-pill"
+         aria-label={current.pausedAt?'Resume workout':'Pause workout'}
+         onClick={togglePause}
+       >
+         {current.pausedAt?'Resume':'Pause'}
+       </button>
+       {advanced&&<button className="a3-pill" aria-pressed={overview} onClick={()=>setOverview(x=>!x)}>{overview?'Back to focus':'Whole workout'}</button>}
+     </div>
    </div>}
 
    {current.pausedAt&&
@@ -698,15 +700,15 @@ const onSetType=(t:SetType)=>mutate(x=>{
        }
 
        {phase==='ready'&&(()=>{
-         const tab=advanced?beforeTab:'details';
+         const tab=standard?(beforeTab==='modes'&&!advanced?'details':beforeTab):'details';
          const unit=activeEx.loadSemantics==='time'?'sec':'reps';
          const warmN=activeExercise.sets.filter(x=>isWarm(x)&&!x.completed).length;
          const mainN=workingOf(activeExercise.sets).length;
+         const firstWorking=workingOf(activeExercise.sets)[0];
          const target=phase6LoadDisplay(activeEx,undefined,currentRecommendation?.weight,s.profile);
          return <div className="a3-stage a3-stage-ready">
-           <span className="a3-eyebrow">GET READY</span>
-           {advanced&&<div className="a3-tabs" role="tablist" aria-label="Before set">
-             {(['details','history','modes'] as const).map(t=><button key={t} role="tab" aria-selected={beforeTab===t} className={beforeTab===t?'active':''} onClick={()=>setBeforeTab(t)}>{t==='details'?'How to':t==='history'?'History':'Options'}</button>)}
+           {standard&&<div className="a3-tabs" role="tablist" aria-label="Before set">
+             {(['details','history',...(advanced?['modes' as const]:[])] as const).map(t=><button key={t} role="tab" aria-selected={tab===t} className={tab===t?'active':''} onClick={()=>setBeforeTab(t)}>{t==='details'?'How to':t==='history'?'History':'Options'}</button>)}
            </div>}
            {tab==='details'&&<>
              <ExerciseGuide ex={activeEx}/>
@@ -719,8 +721,10 @@ const onSetType=(t:SetType)=>mutate(x=>{
                  <span>{activeExercise.repRange[0]}–{activeExercise.repRange[1]} {unit}</span>
                  <span>{mainN} {mainN===1?'set':'sets'}</span>
                  <span>{fmt(restSeconds)} rest</span>
-                 {advanced&&<span>RIR {targetRir}</span>}
+                 {standard&&<span>RIR {targetRir}</span>}
+                 {advanced&&activeEx.tempo&&<span>Tempo {activeEx.tempo}</span>}
                </div>
+               {standard&&firstWorking&&<GhostSet ex={activeEx} current={firstWorking} ghost={ghostSet(prevSession,0)}/>}
                {warmN>0&&<small>First {warmN} easy warm-up {warmN===1?'set':'sets'} with a lighter weight, then your {mainN} main {mainN===1?'set':'sets'}.</small>}
                <Disclosure label="Why this weight?" className="a3-why">
                  <p>
@@ -732,18 +736,19 @@ const onSetType=(t:SetType)=>mutate(x=>{
                    {currentRecommendation?.kind==='calibration'&&<small>{displayText(currentRecommendation.reason)}</small>}
                    <small>Target RIR {targetRir}</small>
                  </>}
+                 {standard&&<button className="a3-link" onClick={()=>onAsk(asks)}>Ask Coach why <Icon name="arrow" size={14}/></button>}
                </Disclosure>
              </div>
            </>}
            {tab==='history'&&(()=>{
              const past=s.workouts.filter(w=>w.status==='completed'&&w.id!==current.id).flatMap(w=>w.exercises.filter(e=>e.exerciseId===activeEx.id).map(e=>({w,e}))).slice(-5).reverse();
-             if(!past.length)return <Empty title="No history for this exercise yet" text="Completed sets for this movement will appear here."/>;
+             if(!past.length)return <Empty title="No history for this exercise yet" text="Your first sets here start the record."/>;
              return <div className="a3-list">{past.map(({w,e})=>{
                const done=e.sets.filter(x=>x.completed&&x.type!=='warmup');
                const best=activeEx?(bestLoad(activeEx,done)??0):0;
                const reps=Math.max(0,...done.map(x=>x.reps||0));
                const rirs=done.map(x=>x.rir).filter((x):x is number=>x!==undefined);
-               return <div className="a3-card a3-row" key={w.id}><span className="a3-index">{w.scheduledDate.slice(5)}</span><div><strong>{best?formatLoad(activeEx,best):'Bodyweight / time'}</strong><p>{done.length} working sets · best {reps||'—'} reps{rirs.length?` · RIR ${(rirs.reduce((a,b)=>a+b,0)/rirs.length).toFixed(1)}`:''}</p></div></div>})}</div>
+               return <div className="a3-card a3-row" key={w.id}><span className="a3-index">{w.scheduledDate.slice(5)}</span><div><strong>{best?formatLoad(activeEx,best):'Bodyweight / time'}</strong><p>{done.length} working sets · best {reps||'—'} reps{advanced&&rirs.length?` · RIR ${(rirs.reduce((a,b)=>a+b,0)/rirs.length).toFixed(1)}`:''}</p></div></div>})}</div>
            })()}
            {tab==='modes'&&<div className="a3-stack">
              {activeSet&&<>
@@ -756,7 +761,7 @@ const onSetType=(t:SetType)=>mutate(x=>{
            </div>}
 
            <button
-             className="a3-cta"
+             className="a3-cta apex-primary"
              onClick={()=>{setBeforeTab('details');finishPhase()}}
            >
              START SET <Icon name="play"/>
@@ -786,7 +791,7 @@ const onSetType=(t:SetType)=>mutate(x=>{
              <p>
                {isWarm(activeSet)
                  ?`${activeSet.reps??'—'} reps · easy, stop well before it gets hard · ${fmt(WARMUP_RULES.restSec)} rest`
-                 :`${activeExercise.repRange[0]}–${activeExercise.repRange[1]} ${unit} · ${fmt(restSeconds)} rest${advanced?` · RIR ${targetRir}`:''}`}
+                 :`${activeExercise.repRange[0]}–${activeExercise.repRange[1]} ${unit} · ${fmt(restSeconds)} rest${standard?` · RIR ${targetRir}`:''}`}
              </p>
            </div>
 
@@ -801,10 +806,11 @@ const onSetType=(t:SetType)=>mutate(x=>{
                    ?'Initial calibration · limited history'
                    :'Evidence-based recommendation'}
              </small>}
+             {ghost&&<GhostSet ex={activeEx} current={activeSet} ghost={ghost}/>}
            </div>
 
            <button
-             className="a3-cta"
+             className="a3-cta apex-primary"
              onClick={finishPhase}
              disabled={!!current.pausedAt}
            >
@@ -836,6 +842,8 @@ const onSetType=(t:SetType)=>mutate(x=>{
                  :`Aim for ${activeExercise.repRange[0]}–${activeExercise.repRange[1]} reps. Change the numbers below if you did something different.`}
            </p>
 
+           {ghost&&<GhostSet ex={activeEx} current={activeSet} ghost={ghost}/>}
+
            {logEditor}
 
            <details className="a3-more a3-setoptions"><summary>More options</summary>
@@ -855,7 +863,6 @@ const onSetType=(t:SetType)=>mutate(x=>{
            key={`feedback-${activeExercise.exerciseId}-${activeSet.id}`}
          >
            <span className="a3-eyebrow">SET {setCounter(activeExercise.sets,setIndex).replace(/^SET /,'')} DONE <span className="animated-check" aria-hidden="true">✓</span></span>
-           <h3>How did that feel? <small className="a3-muted">(optional)</small></h3>
 
            <div className="a3-reco">
              <strong>{phase6LoadDisplay(activeEx,activeSet,undefined,s.profile).primary}</strong>
@@ -865,12 +872,16 @@ const onSetType=(t:SetType)=>mutate(x=>{
                  :activeSet.seconds!==undefined
                    ?`${activeSet.seconds} sec`
                    :'Not recorded'}
-               {advanced&&activeSet.rir!==undefined
+               {standard&&activeSet.rir!==undefined
                  ?` · RIR ${activeSet.rir}`
                  :''}
              </span>
+             {ghost&&<GhostSet ex={activeEx} current={activeSet} ghost={ghost} dissolve={improved}/>}
            </div>
 
+           <CausePath steps={causeSteps}/>
+
+           <h3>How did that feel? <small className="a3-muted">(optional)</small></h3>
            <p>
              This helps APEX choose your next weight. You can skip it.
            </p>
@@ -899,18 +910,10 @@ const onSetType=(t:SetType)=>mutate(x=>{
        }
 
        {phase==='rest'&&
-         <div className="a3-stage">
+         <div className="a3-stage apex-rest-stage mo-emerge">
            <span className="a3-eyebrow">REST</span>
 
-           <div
-             className={`a3-rest ${restRemaining<=0?'is-done':restTargetSec>0&&restRemaining<=restTargetSec*0.25?'is-low':''}`}
-             aria-live="polite"
-             role="timer"
-           >
-             <svg className="a3-rest-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54"/><circle cx="60" cy="60" r="54" className="a3-ring-fill" strokeDasharray={339.29} strokeDashoffset={339.29*(1-restProgress)}/></svg>
-             <strong><Num value={restRemaining>0?fmt(restRemaining):'READY'}/></strong>
-             <span className="a3-rest-pct">{Math.round(restProgress*100)}% remaining</span>
-           </div>
+           <RestLine remaining={restRemaining} total={restTargetSec} done={restRemaining<=0}/>
 
            {(() => {
              const upcomingSet=
@@ -947,36 +950,35 @@ const onSetType=(t:SetType)=>mutate(x=>{
            {restRemaining<=0&&<p>Rest is over. Keep going when you are ready.</p>}
            {advanced&&restRemaining>0&&<Disclosure label="About the rest timer"><p>The timer follows the real clock, so it keeps counting if you switch apps.</p></Disclosure>}
 
-           <div className="a3-actions">
+           <div className="a3-actions apex-rest-actions">
              {restRemaining>0&&
                <button onClick={skipRest}>
                  SKIP REST
                </button>
              }
 
-             {restRemaining>0&&
+             {restRemaining>0&&[15,30].map(extra=>
                <button
+                 key={extra}
                  onClick={()=>{
                    const started=
                      restStartedAt
                        ?new Date(restStartedAt).getTime()
                        :Date.now();
-                   const newTarget=
-                     restTargetSec+30;
 
                    setGuided(
                      {},
                      {
                        restStartedAt:
                          new Date(started).toISOString(),
-                       restTargetSec:newTarget
+                       restTargetSec:restTargetSec+extra
                      }
                    );
                  }}
                >
-                 +30 SEC
+                 +{extra} SEC
                </button>
-             }
+             )}
 
              {restRemaining<=0&&
                <button
@@ -991,11 +993,13 @@ const onSetType=(t:SetType)=>mutate(x=>{
        }
 
        {phase==='exercise_complete'&&
-         <div className="a3-stage a3-stage-done">
+         <div className="a3-stage a3-stage-done mo-release">
            <span className="a3-eyebrow">
              {(justDoneEx||activeEx).name.toUpperCase()}
            </span>
-           <StateView kind="success" title="Exercise complete" detail={`${justDoneExercise?workingOf(justDoneExercise.sets).filter(x=>x.completed).length:completedForExercise} / ${workingOf((justDoneExercise||activeExercise).sets).length} sets`}/>
+           <h3 className="apex-editorial">Exercise complete</h3>
+           <ApexLine value={1} variant="signal"/>
+           <p className="a3-muted">{justDoneExercise?workingOf(justDoneExercise.sets).filter(x=>x.completed).length:completedForExercise} / {workingOf((justDoneExercise||activeExercise).sets).length} sets</p>
 
            {nextEx
              ?<>
@@ -1027,7 +1031,6 @@ const onSetType=(t:SetType)=>mutate(x=>{
 
        {phase==='complete'&&
          <div className="a3-stage a3-stage-done">
-           <ApexImage kind="training-floor" alt="" className="a3-hero-image"/><ApexRidge/>
            {assessment.completedSets===0
              ?<>
                <span className="a3-eyebrow">NO SETS LOGGED</span>
@@ -1036,20 +1039,17 @@ const onSetType=(t:SetType)=>mutate(x=>{
              </>
              :<>
                <span className="a3-eyebrow">SESSION COMPLETE</span>
-               <div className="a3-donemark animated-completion-mark" aria-hidden="true">✓</div>
-               <h3>Every planned movement is accounted for.</h3>
-               <p>
-                 Review your session and let APEX record the evidence for future
-                 training.
-               </p>
+               <h3 className="apex-editorial">{niceName(current.name)}</h3>
+               <ApexLine value={1} variant="signal" className="mo-release"/>
              </>}
-           {assessment.achievements.length>0&&<StateView kind="pr" title="New Personal Record!" detail={displayText(assessment.achievements[0].label)} text={assessment.achievements.length>1?`+${assessment.achievements.length-1} more this session`:assessment.achievements[0].unit}/>}
-           <div className="a3-stats">
-             <ApexStat label="Volume" value={vol(assessment.volume).toLocaleString()} unit={volLabel()}/>
-             <ApexStat label="Elapsed" value={fmt(elapsed)} unit="time"/>
+           {assessment.completedSets>0&&<div className="apex-signals mo-emerge">
+             <ApexStat label="Time" value={fmt(elapsed)} unit="min:sec"/>
              <ApexStat label="Sets" value={`${assessment.completedSets}/${assessment.plannedSets}`} unit="done"/>
-             {assessment.achievements.length>0&&<div className="a3-card a3-stat a3-pr"><span className="a3-eyebrow">PRs</span><strong>{assessment.achievements.length}</strong><small>this session</small></div>}
-           </div>
+             <ApexStat label="Volume" value={vol(assessment.volume).toLocaleString()} unit={volLabel()}/>
+           </div>}
+           {assessment.completedSets>0&&betterSets>0&&<p className="apex-signal-line">{betterSets} {betterSets===1?'set':'sets'} beat last time.</p>}
+           {assessment.achievements.length>0&&<ul className="apex-events" aria-label="Personal records">{assessment.achievements.map((a,i)=><li key={i}><span className="apex-event-mark" aria-hidden="true"/><strong>PR</strong> {displayText(a.label)}<small>{displayText(a.unit)}</small></li>)}</ul>}
+           {assessment.completedSets>0&&<SessionArtifact workout={current} exercises={s.exercises}/>}
            <button
              className="a3-cta"
              onClick={()=>onDone(current)}
@@ -1357,14 +1357,7 @@ const onSetType=(t:SetType)=>mutate(x=>{
      </div>
    }
 
-   {advanced&&<div className="a3-footer">
-     <button
-       className="a3-cta a3-cta-ghost"
-       onClick={()=>setOverview(x=>!x)}
-     >
-       {overview?'Return to focused training':'Open workout overview'}
-     </button>
-   </div>}
+
 
    {advanced&&adapt.length>0&&
      <div className="a3-card a3-callout">
@@ -1534,16 +1527,46 @@ const onSetType=(t:SetType)=>mutate(x=>{
 }
 
 export function SessionReview({s,id,onNav,update}:{s:AppState;id:string;onNav:(r:string)=>void;update:(f:(x:AppState)=>AppState)=>void}){
- const w=s.workouts.find(x=>x.id===id); const [feel,setFeel]=useState<'easy'|'right'|'hard'|'rough'|''>(''); const [showDetails,setShowDetails]=useState(false); const {advanced}=useAdvancedControls();
+ const w=s.workouts.find(x=>x.id===id);
+ const [feel,setFeel]=useState<'easy'|'right'|'hard'|'rough'|''>('');
+ const {standard,advanced}=useExperience();
  if(!w)return <Empty title="Session not found" text="The historical record is still local, but this view no longer has the session reference."/>
  const a=sessionAssessment(w,s.exercises,s.workouts.filter(x=>x.status==='completed'&&x.id!==w.id));
- const done=()=>onNav('home');const saveFeel=()=>{if(!feel)return;const text=`Session feel: ${feel}.`;const already=s.journal.some(j=>j.scope==='workout'&&j.refId===w.id&&j.text===text);if(!already) {const next={id:uid('journal'),date:today(),scope:'workout' as const,refId:w.id,text,tags:['session-feedback']};update(x=>({...x,journal:[...x.journal,next],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'session_feedback',timestamp:new Date().toISOString(),payload:{workoutId:w.id,feel}}]}));}onNav('home')};
+ /* the finished session travels into the training week: Train picks the same object up (view-transition-name: session-thread) */
+ const leave=()=>{try{sessionStorage.setItem('apex-fresh-session',w.id)}catch{}onNav('train')};
+ const saveFeel=()=>{
+  if(!feel)return;
+  const text=`Session feel: ${feel}.`;
+  const already=s.journal.some(j=>j.scope==='workout'&&j.refId===w.id&&j.text===text);
+  if(!already){
+   const next={id:uid('journal'),date:today(),scope:'workout' as const,refId:w.id,text,tags:['session-feedback']};
+   update(x=>({...x,journal:[...x.journal,next],eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'session_feedback',timestamp:new Date().toISOString(),payload:{workoutId:w.id,feel}}]}));
+  }
+  leave();
+ };
  const minutes=w.startedAt&&w.completedAt?Math.max(1,Math.round((new Date(w.completedAt).getTime()-new Date(w.startedAt).getTime())/60000)):undefined;
- return <div className="a3-home a3-complete-screen"><header className="a3-completehead"><span className="a3-state-icon" aria-hidden="true"><Icon name="check" size={36}/></span><span className="a3-eyebrow">SESSION COMPLETE</span><h1>Workout Complete</h1><p>{niceName(w.name)} · {a.completedSets} completed sets · {a.skipped} skipped</p></header>
- <div className="a3-stats session-review-metrics"><Metric label="Volume" value={a.volume?vol(a.volume).toLocaleString():'—'} sub={volLabel()}/><Metric label="Time" value={minutes===undefined?'—':String(minutes)} sub="min"/><Metric label="Sets" value={String(a.completedSets)} sub={`of ${a.plannedSets}`}/></div>
- {a.achievements.length>0&&<div className="a3-card a3-row a3-pr-row"><span className="a3-rowicon"><Icon name="crown"/></span><span><strong>{a.achievements.length} PR{a.achievements.length===1?'':'s'}</strong><small>Great work today!</small></span></div>}
- <section className="a3-block"><div className="a3-head"><div><span className="a3-eyebrow">SESSION FEEDBACK</span><h2>How did the session feel?</h2><p>Optional. A quick rating helps APEX plan your next session.</p></div></div><div className="a3-choices">{[['easy','Too easy'],['right','About right'],['hard','Hard but productive'],['rough','Rough / unusually difficult']].map(([id,label])=><button className={feel===id?'selected':''} key={id} onClick={()=>setFeel(id as any)}><strong>{label}</strong><small>{feel===id?'Selected':'Optional'}</small></button>)}</div></section>
- {showDetails&&<section className="a3-block"><div className="a3-list">{a.achievements.map((x,i)=><ListRow key={i} title={displayText(x.label)} sub={displayText(x.unit)} icon="bolt" click={()=>{}}/>)}{!a.achievements.length&&<Empty title="No new achievement" text="A normal session is still useful evidence."/>}</div></section>}
- {advanced&&<section className="a3-block"><div className="a3-card a3-callout"><Icon name="bolt"/><div><strong>Coach</strong><p>Keep the current structure unless new evidence supports a meaningful change. APEX adapts future prescription from actual performance, context and your feedback.</p></div></div></section>}
- <button className="a3-cta a3-cta-ghost" aria-expanded={showDetails} onClick={()=>setShowDetails(x=>!x)}>{showDetails?'Hide Details':'View Details'}</button>
- <button className="a3-cta" onClick={feel?saveFeel:done}>{feel?'Save feedback & finish':'Done'}</button></div>}
+ const better=w.exercises.reduce((n,we)=>{
+  const ex=s.exercises.find(e=>e.id===we.exerciseId);
+  const prev=ex?lastSession(s.workouts,we.exerciseId,w.id):undefined;
+  if(!ex||!prev)return n;
+  return n+workingOf(we.sets).filter((x,i)=>{const g=ghostSet(prev,i);return x.completed&&!!g&&beatsGhost(ex,x,g)}).length;
+ },0);
+ const next=s.workouts.filter(x=>x.status==='planned'&&x.scheduledDate>=today()).sort((p,q)=>p.scheduledDate.localeCompare(q.scheduledDate))[0];
+ const notes=s.journal.filter(j=>j.scope==='workout'&&j.refId===w.id&&j.tags.indexOf('session-feedback')<0);
+ return <div className="a3-home a3-complete-screen">
+  <header className="a3-completehead">
+   <span className="a3-eyebrow">SESSION COMPLETE</span>
+   <h1 className="apex-editorial">Workout Complete</h1>
+   <p>{niceName(w.name)} · {a.completedSets} completed sets · {a.skipped} skipped</p>
+   <ApexLine value={1} variant="signal" className="mo-release"/>
+  </header>
+  <div className="a3-stats session-review-metrics mo-emerge"><Metric label="Time" value={minutes===undefined?'—':String(minutes)} sub="min"/><Metric label="Sets" value={String(a.completedSets)} sub={`of ${a.plannedSets}`}/><Metric label="Volume" value={a.volume?vol(a.volume).toLocaleString():'—'} sub={volLabel()}/></div>
+  {better>0&&<p className="apex-signal-line">{better} {better===1?'set':'sets'} beat last time.</p>}
+  {a.achievements.length>0&&<ul className="apex-events" aria-label="Personal records">{a.achievements.map((x,i)=><li key={i}><span className="apex-event-mark" aria-hidden="true"/><strong>PR</strong> {displayText(x.label)}<small>{displayText(x.unit)}</small></li>)}</ul>}
+  <div className="apex-thread-artifact" style={{viewTransitionName:'session-thread'} as React.CSSProperties}><SessionArtifact workout={w} exercises={s.exercises}/></div>
+  {next&&<p className="a3-muted apex-next">Next: {niceName(next.name)} · {next.scheduledDate===today()?'today':next.scheduledDate}</p>}
+  {standard&&notes.length>0&&<section className="a3-block" aria-label="Notes from this session"><span className="a3-eyebrow">YOUR NOTES</span>{notes.map(n=><p key={n.id}>{n.text}</p>)}</section>}
+  <section className="a3-block"><div className="a3-head"><div><span className="a3-eyebrow">SESSION FEEDBACK</span><h2>How did the session feel?</h2><p>Optional. A quick rating helps APEX plan your next session.</p></div></div><div className="a3-choices">{[['easy','Too easy'],['right','About right'],['hard','Hard but productive'],['rough','Rough / unusually difficult']].map(([fid,label])=><button className={feel===fid?'selected':''} key={fid} onClick={()=>setFeel(fid as any)}><strong>{label}</strong><small>{feel===fid?'Selected':'Optional'}</small></button>)}</div></section>
+  {advanced&&<section className="a3-block"><div className="a3-card a3-callout"><Icon name="bolt"/><div><strong>Coach</strong><p>Keep the current structure unless new evidence supports a meaningful change. APEX adapts future prescription from actual performance, context and your feedback.</p></div></div></section>}
+  <button className="a3-cta" onClick={feel?saveFeel:leave}>{feel?'Save feedback & finish':'Done'}</button>
+ </div>}

@@ -12,8 +12,8 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
-const RELEASE = '4.1.0';
-const PREVIOUS_VERSION_CODE = 7; // 4.0.0
+const RELEASE = '5.0.0';
+const PREVIOUS_VERSION_CODE = 8; // 4.1.0
 
 test('Release version: package.json is the release version', () => {
   assert.equal(JSON.parse(read('package.json')).version, RELEASE);

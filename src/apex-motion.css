@@ -101,11 +101,6 @@
 .apex-message { animation: apex-m-rise var(--motion-base) var(--ease-apex) backwards; }
 [aria-label="Weekly analytics"], [aria-label="Coach briefing"] { animation: apex-m-rise var(--motion-smooth) var(--ease-apex) backwards; }
 
-/* ---------- workout: set completion, rest timer ---------- */
-.a3-rest { animation: apex-m-rise var(--motion-base) var(--ease-apex) backwards; }
-.a3-rest-ring .a3-ring-fill { transition: stroke-dashoffset 400ms linear, stroke var(--motion-base) var(--ease-apex); }
-.a3-rest.is-done > strong { animation: apex-m-pop var(--motion-smooth) var(--ease-spring) backwards; }
-
 /* ---------- progress and analytics ---------- */
 .a3-bar i { transition: width var(--motion-smooth) var(--ease-apex); }
 

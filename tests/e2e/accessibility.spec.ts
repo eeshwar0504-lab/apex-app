@@ -83,6 +83,7 @@ test.describe('APEX accessibility and interaction safety', () => {
     await expect(page.locator('.app')).toHaveClass(/font-large/);
 
     await page.getByRole('button',{name:'APEX Home',exact:true}).click();
+    await expect(page.locator('[data-apex-route="home"]')).toBeVisible();
     const largeSize=await eyebrow.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
     expect(largeSize).toBeGreaterThan(systemSize);
 
@@ -92,6 +93,7 @@ test.describe('APEX accessibility and interaction safety', () => {
 
     await page.setViewportSize({width:360,height:800});
     await page.getByRole('button',{name:'APEX Home',exact:true}).click();
+    await expect(page.locator('[data-apex-route="home"]')).toBeVisible();
     const largerSize=await eyebrow.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
     expect(largerSize).toBeGreaterThan(largeSize);
     await assertNoHorizontalOverflow(page);

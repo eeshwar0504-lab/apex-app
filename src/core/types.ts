@@ -698,7 +698,14 @@ export interface AppState {
 
     highContrast: boolean;
 
-    theme?: 'apex' | 'classic' | 'steel' | 'aurora' | 'crimson';
+    /** Atmosphere only; hierarchy never changes with the theme. */
+    theme?: 'obsidian' | 'graphite' | 'bone' | 'contrast';
+
+    /** How much the interface shows (Guided, Standard, Advanced). Presentation only: it never changes what is prescribed. Guided is the default. */
+    uiExperience?: 'guided' | 'standard' | 'advanced';
+
+    /** Shorter, softer haptic patterns. */
+    hapticsGentle?: boolean;
 
     units?: 'metric' | 'imperial';
 

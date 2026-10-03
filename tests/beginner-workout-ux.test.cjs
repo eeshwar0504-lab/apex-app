@@ -55,11 +55,11 @@ test('BW.3 missing RIR is handled by feedback, rest and progression', () => {
   assert.ok(Number.isFinite(heavy.exercises[0].recommendedWeight ?? heavy.guidedSession.workingLoads?.[ex.id] ?? 0));
 });
 
-test('BW.4 RIR is entered only from the advanced controls', () => {
+test('BW.4 RIR is never part of the Guided view: it is optional in Standard and Advanced', () => {
   const editor = read('src/screens/SetEditor.tsx');
   assert.match(editor, /showRir&&<div className="a3-control">/, 'the focused RIR stepper is conditional');
   const workout = read('src/screens/Workout.tsx');
-  assert.match(workout, /showRir=\{advanced\}/);
+  assert.match(workout, /showRir=\{standard\}/);
   assert.match(workout, /showNotes=\{advanced\}/);
   assert.match(editor, /RIR \(reps left in the tank\)/, 'when shown it is explained');
 });
@@ -103,7 +103,7 @@ test('BW.7 the feedback screen offers Not sure / skip and the three real choices
 
 test('BW.8 session feedback is optional: Done is always enabled and writes no rating', () => {
   const src = read('src/screens/Workout.tsx');
-  assert.match(src, /onClick=\{feel\?saveFeel:done\}>\{feel\?'Save feedback & finish':'Done'\}/);
+  assert.match(src, /onClick=\{feel\?saveFeel:leave\}>\{feel\?'Save feedback & finish':'Done'\}/);
   assert.doesNotMatch(src, /disabled=\{!feel\}/);
   assert.doesNotMatch(src, /Select how it felt/);
 });
@@ -130,14 +130,25 @@ test('BW.10 the active set has a visible LOG SET label and no unlabeled icon-onl
 
 /* ---------------------------------------------------------------- equipment default */
 
-test('BW.11 the profile equipment is the default and Change keeps the per-exercise override', () => {
+test('BW.11 the profile equipment is the default state and the explicit availability controls remain', () => {
   const src = read('src/screens/Train.tsx');
-  assert.match(src, /effectiveStatus=\(exerciseId:string,item:string\)[^\n]*statusFor\(exerciseId,item\)\|\|\(fitOf\(exerciseId\)==='available'\?'profile_available':undefined\)/);
-  assert.match(src, /const resolved=requirements\.every\(\(\{exerciseId,item\}\)=>!!effectiveStatus\(exerciseId,item\)\)/);
-  assert.match(src, /Using the equipment from your setup\./);
-  assert.match(src, />\{showEquip\?'Hide':'Change'\}</);
-  assert.match(src, /Confirm available/);
-  assert.match(src, /Not available/);
+  assert.ok(src.includes("statusFor(exerciseId,item)||(fitOf(exerciseId)==='available'?'profile_available':undefined)"), 'the profile is the default state');
+  assert.ok(src.includes('const resolved=requirements.every(({exerciseId,item})=>!!effectiveStatus(exerciseId,item))'));
+  assert.doesNotMatch(src, /showEquip|Using the equipment from your setup/, 'no hidden Change toggle: every row is always visible');
+});
+
+test('BW.11b every equipment-requiring exercise gets its own EXERCISE / Equipment available? / Available | Not available row', () => {
+  const src = read('src/screens/Train.tsx');
+  assert.doesNotMatch(src, /Can you use|Is this equipment available\?|Needs: \{label/, 'no generic or rephrased question');
+  assert.ok(src.includes('equipmentRows=Array.from(new Set(requirements.map(r=>r.exerciseId)))'), 'one row per exercise that has requirements');
+  assert.match(src, /<span className="a3-eyebrow">\{exerciseName\}<\/span>\s*<strong>Equipment available\?<\/strong>/);
+  assert.ok(src.includes('>Available</button>'));
+  assert.ok(src.includes('>Not available</button>'));
+  assert.ok(src.includes('getAlternatives(ex,1)[0]'), 'the single top deterministic alternative from rankSubstitutes');
+  assert.ok(src.includes('>Use alternative</button>'));
+  assert.ok(src.includes('{ex.name} → {best.name}'), 'the user sees what will change');
+  assert.ok(src.includes('onClick={()=>chooseAlternative(ex.id,best)}'), 'only the explicit button swaps');
+  assert.ok(src.includes('rankSubstitutes(source,s.exercises,s.profile?.equipment,[...sessionUnavailable])'), 'engine call unchanged');
 });
 
 test('BW.12 a beginner profile resolves every first-workout requirement without a single answer', () => {
@@ -150,25 +161,29 @@ test('BW.12 a beginner profile resolves every first-workout requirement without 
 
 /* ---------------------------------------------------------------- advanced controls remain reachable */
 
-test('BW.13 every advanced capability is still in the workout, behind one Advanced controls switch', () => {
+test('BW.13 every advanced capability is still in the workout, behind the Advanced experience', () => {
   const src = read('src/screens/Workout.tsx');
-  assert.match(src, /Advanced controls/);
-  assert.match(src, /useAdvancedControls\(\)/);
-  for (const re of [/aria-label="Set type"/, /\+ Add set/, /− Remove/, /Open workout overview/, /Replace exercise…/, /reorderWorkoutExercise/, /aria-label="Workout notes"/, /Skip exercise/, /label="History"|'History'/]) assert.match(src, re, String(re));
-  // set type, add/remove, notes, overview and the history/options tabs are gated
+  assert.match(src, /useExperience\(\)/);
+  for (const re of [/aria-label="Set type"/, /\+ Add set/, /− Remove/, /Whole workout/, /Replace exercise…/, /reorderWorkoutExercise/, /aria-label="Workout notes"/, /Skip exercise/, /'History'/]) assert.match(src, re, String(re));
+  // set type, add/remove, notes, the whole-workout editor and the options tab are Advanced; history and the previous-performance ghost are Standard
   assert.match(src, /\{advanced&&<select value=\{activeSet\.type\}/);
   assert.match(src, /\{advanced&&<button className="a3-pill" onClick=\{onSetAdd\}>/);
   assert.match(src, /\{advanced&&<button className="a3-pill" onClick=\{onSetRemove\}>/);
   assert.match(src, /\{advanced&&phase!=='complete'&&/);
-  assert.match(src, /\{advanced&&<div className="a3-footer">/);
-  assert.match(src, /\{advanced&&<div className="a3-tabs" role="tablist" aria-label="Before set">/);
+  assert.match(src, /\{advanced&&<button className="a3-pill" aria-pressed=\{overview\}/);
+  assert.match(src, /\{standard&&<div className="a3-tabs" role="tablist" aria-label="Before set">/);
+  assert.match(src, /\(advanced\?\['modes' as const\]:\[\]\)/);
 });
 
-test('BW.14 the advanced switch is a device display preference, not training data', () => {
-  const src = read('src/ui/advanced.ts');
-  assert.match(src, /apex-advanced-workout/);
-  assert.match(src, /try\{/);
-  assert.doesNotMatch(src, /repository|AppState|update\(/);
+test('BW.14 UI Experience is a saved preference that never reaches the engines', () => {
+  const exp = read('src/ui/experience.tsx');
+  assert.match(exp, /createContext<UiExperience>\('guided'\)/, 'Guided is the default');
+  assert.match(exp, /normalizeExperience/);
+  for (const dir of ['src/engine', 'src/coach', 'src/knowledge']) {
+    for (const f of fs.readdirSync(path.join(root, dir)).filter((x) => x.endsWith('.ts'))) {
+      assert.doesNotMatch(read(`${dir}/${f}`), /uiExperience|useExperience|UiExperience/, `${dir}/${f} must not know about the interface level`);
+    }
+  }
 });
 
 /* ---------------------------------------------------------------- confirmation */
@@ -200,20 +215,21 @@ test('BW.16 the Journal pill goes to the Journal and nothing in the workout is a
 
 test('BW.17 a brand-new user sees one next step on Home and no empty analytics', () => {
   const home = read('src/screens/Home.tsx');
-  assert.match(home, /const firstRun=!s\.workouts\.some\(w=>w\.status==='completed'\)/);
-  assert.match(home, /\{firstRun&&<article[^>]*aria-label="Your first workout"/);
-  assert.match(home, /\{!firstRun&&<>\s*<div className="a3-stats">/);
+  assert.match(home, /const firstRun=completed\.length===0/);
+  assert.match(home, /\{firstRun&&<article[^>]*aria-label="Your first session"/);
+  assert.match(home, /\{!firstRun&&<>\s*<section className="a3-card a3-stack apex-weekcard"/);
+  assert.doesNotMatch(home, /Streak|ApexStat label="Volume"/, 'no streak guilt and no zero-volume tile');
   const progress = read('src/screens/Progress.tsx');
   assert.match(progress, /const zero=done\.length===0/);
-  assert.match(progress, /Your progress starts with your first workout/);
+  assert.match(progress, /Your first session draws the first line\./);
   assert.match(progress, /\{!zero&&tab==='overview'&&<>/);
   const train = read('src/screens/Train.tsx');
-  assert.match(train, /\(isActive\|\|doneSets>0\)&&<div className="a3-session-pct">/);
-  assert.match(train, /\{completed>0&&<div className="a3-card a3-stat">/);
+  assert.match(train, /Your first session draws the first line\./);
+  assert.doesNotMatch(train, /a3-session-pct/, 'no zero percent on Train');
 });
 
 test('BW.18 analytics return once there is data (the zero-data gates are on completed sessions only)', () => {
-  assert.doesNotMatch(read('src/screens/Home.tsx'), /firstRun=.*planned|firstRun=.*length===0&&/);
+  assert.doesNotMatch(read('src/screens/Home.tsx'), /firstRun=.*planned/);
   assert.match(read('src/screens/Progress.tsx'), /const zero=done\.length===0/);
 });
 
@@ -242,13 +258,15 @@ test('BW.20 the workout-facing screens no longer print raw identifiers or engine
   assert.doesNotMatch(ui, /\{activeEx\.pattern\}|\{e\.pattern\} ·|\{ex\.pattern\.replace/, 'no raw pattern');
   assert.doesNotMatch(ui, /v\{w\.version\}|\{w\.source\} ·/, 'no internal version or source label');
   assert.doesNotMatch(ui, /'CALIBRATION'|CONTROLLED CALIBRATION|Calibration set required|Start with a controlled calibration set/);
-  assert.doesNotMatch(read('src/screens/Train.tsx'), /LOAD GUIDANCE|FIRST MOVEMENT|CONFIDENCE · INITIAL(?![^]*advanced)/);
-  // the calibration wording is replaced by a plain sentence; the engine text for it is shown only with the advanced switch
+  const trainSrc = read('src/screens/Train.tsx');
+  assert.doesNotMatch(trainSrc, /LOAD GUIDANCE|FIRST MOVEMENT/);
+  assert.ok(trainSrc.indexOf('CONFIDENCE · INITIAL') > trainSrc.indexOf('{advanced&&firstRec&&<>'), 'confidence wording only in the Advanced experience');
+  // the calibration wording is replaced by a plain sentence; the engine text for it is shown only in the Advanced experience
   const workout = read('src/screens/Workout.tsx');
   assert.ok(workout.includes("currentRecommendation?.kind==='calibration'&&<small>{displayText(currentRecommendation.reason)}"));
-  assert.ok(workout.includes("{advanced&&<>") && workout.indexOf("{advanced&&<>", workout.indexOf("Why this weight")) < workout.indexOf("currentRecommendation?.kind==='calibration'&&<small>"));
+  assert.ok(workout.indexOf('{advanced&&<>', workout.indexOf('Why this weight')) < workout.indexOf("currentRecommendation?.kind==='calibration'&&<small>"));
   const train = read('src/screens/Train.tsx');
-  assert.ok(train.indexOf("{advanced&&firstRec&&<>") > -1 && train.indexOf("{advanced&&firstRec&&<>") < train.indexOf("firstRec.kind==='calibration'&&<small>"));
+  assert.ok(train.indexOf('{advanced&&firstRec&&<>') > -1 && train.indexOf('{advanced&&firstRec&&<>') < train.indexOf("firstRec.kind==='calibration'&&<small>"));
 });
 
 test('BW.21 the exercise is explained on the exercise itself, from the existing knowledge data', () => {
@@ -265,9 +283,10 @@ test('BW.21 the exercise is explained on the exercise itself, from the existing 
   for (const e of EX) assert.ok(e.setup.length && e.steps.length, `${e.name} has instructions`);
 });
 
-test('BW.22 rest keeps countdown, next, Skip rest and +30 SEC and drops the timer explanation', () => {
+test('BW.22 rest keeps countdown, next, Skip rest and +15/+30 SEC and drops the timer explanation', () => {
   const src = read('src/screens/Workout.tsx');
-  for (const s of ['SKIP REST', '+30 SEC', 'NEXT · ', 'role="timer"']) assert.ok(src.includes(s), s);
+  for (const s of ['SKIP REST', '[15,30]', '+{extra} SEC', 'NEXT · ', '<RestLine']) assert.ok(src.includes(s), s);
+  assert.match(read('src/screens/WorkoutParts.tsx'), /role="timer"/);
   assert.doesNotMatch(src, /actual elapsed timestamp/);
 });
 

@@ -49,9 +49,9 @@ test.describe('APEX Coach', () => {
 
     await expect(apexMessage).toBeVisible();
 
-    // APEX's current Coach response exposes the actionable
-    // recommendation as "Next:" rather than "Decision:".
-    await expect(apexMessage).toContainText(/Next:/i);
+    // the answer is structured: the conclusion, what it rests on, how sure APEX is, and what to do next
+    await expect(apexMessage).toContainText('ANSWER');
+    await expect(apexMessage).toContainText('EVIDENCE');
 
     await expect(apexMessage).toContainText(/Confidence:/i);
   });
@@ -118,7 +118,7 @@ test.describe('APEX Coach', () => {
 
     // with no completed workout Progress explains itself instead of showing empty analytics (the weekly card is covered by weekly-analytics.test.cjs)
     await page.getByRole('button', { name: 'Progress', exact: true }).first().click();
-    await expect(page.getByText('Your progress starts with your first workout')).toBeVisible();
+    await expect(page.getByText('Your first session draws the first line.')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Weekly analytics' })).toHaveCount(0);
   });
 });

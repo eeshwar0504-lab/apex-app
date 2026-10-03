@@ -1,7 +1,7 @@
-# APEX 4.1.0 — Release Readiness
+# APEX 5.0.0 — Release Readiness
 
 ## Current status
-APEX 4.1.0 (versionCode 8) is a release candidate. Automated validation (Node tests, release audit, web build, Playwright, the browser corpus, the longitudinal simulator) is the source of truth for what is verified; current counts are recorded in `BUILD_STATUS.md`, not here. The log below this section is history and its test counts are superseded.
+APEX 5.0.0 (versionCode 9) is the current release. Automated validation (Node tests, release audit, web build, Playwright, the browser corpus, the longitudinal simulator) is the source of truth for what is verified; current counts are recorded in `BUILD_STATUS.md`, not here. The log below this section is history and its test counts are superseded.
 
 **Code readiness** is complete for the roadmap (persistence and backup, notifications, AI boundary, UI and motion, release engineering). **Release readiness has two external gates that code cannot close:**
 1. *Android runtime certification.* No emulator or device could be run on the development machine: the emulator needs hardware acceleration (an administrator must enable Windows Hypervisor Platform), and no phone is attached. The native SQLite engine, real notification delivery, the share-sheet backup export, process-death recovery and TalkBack are NOT VERIFIED. `docs/ANDROID_DEVICE_CERTIFICATION.md` records what was attempted and the exact steps to finish.

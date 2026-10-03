@@ -8,7 +8,7 @@ const readState = (page: Page) => page.evaluate((k) => JSON.parse(localStorage.g
 const INTERNAL = /horizontal_push|vertical_pull|horizontal_pull|vertical_push|knee_flexion|calibration|baseline|load semantics|evidence quality|\bRIR\b|reps in reserve|\bv1\b|LOAD GUIDANCE|CONFIDENCE/i;
 
 async function openBrief(page: Page) {
-  await page.locator('.main').getByRole('button', { name: /Start Workout/ }).first().click();
+  await page.locator('.main').getByRole('button', { name: /Begin session/ }).first().click();
   await expect(page.locator('[data-apex-route^="brief:"]')).toBeVisible({ timeout: 10_000 });
 }
 
@@ -42,10 +42,11 @@ async function openMore(page: Page) {
   await page.getByRole('button', { name: 'More', exact: true }).click();
 }
 
-async function enableAdvanced(page: Page) {
+async function setView(page: Page, name: 'Guided' | 'Standard' | 'Advanced') {
   await openMore(page);
-  await page.getByRole('button', { name: 'Advanced controls' }).click();
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name, exact: true }).click();
 }
+const enableAdvanced = (page: Page) => setView(page, 'Advanced');
 
 test.describe('beginner-first workout', () => {
   test.beforeEach(async ({ page }) => {
@@ -55,18 +56,18 @@ test.describe('beginner-first workout', () => {
 
   test('zero-data Home, Train and Progress show one next step and no empty analytics', async ({ page }) => {
     const main = page.locator('.main');
-    await expect(main.getByRole('button', { name: /Start Workout/ }).first()).toBeVisible();
-    await expect(page.getByText('Your first workout')).toBeVisible();
+    await expect(main.getByRole('button', { name: /Begin session/ }).first()).toBeVisible();
+    await expect(page.getByText('Your first session draws the first line')).toBeVisible();
     for (const hidden of ['Streak', 'Coach insight', 'Consistency', 'Signals', 'Recent training']) await expect(main.getByText(hidden, { exact: false })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Train', exact: true }).click();
     await expect(page.locator('[data-apex-route="train"]')).toBeVisible();
     const train = await page.locator('[data-apex-route="train"]').innerText();
     expect(train).not.toMatch(/\bRIR\b|\bv1\b|scheduled|0%|0\/\d+ sets|Queue/);
-    await expect(page.getByRole('button', { name: /Start Workout/ }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Begin session/ }).first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Progress', exact: true }).click();
-    await expect(page.getByText('Your progress starts with your first workout')).toBeVisible();
+    await expect(page.getByText('Your first session draws the first line.')).toBeVisible();
     for (const hidden of ['Interpretation', 'Workload', 'Momentum', 'Consistency']) await expect(page.locator('.a3-progress').getByText(hidden, { exact: false })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Strength' })).toHaveCount(0);
   });
@@ -74,9 +75,12 @@ test.describe('beginner-first workout', () => {
   test('pre-workout: start is available at once, equipment uses the profile, reasoning is collapsed', async ({ page }) => {
     await openBrief(page);
     await expect(page.getByRole('button', { name: /^Start training/i })).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Confirm available' })).toHaveCount(0);
-    await expect(page.getByText('Using the equipment from your setup.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Change', exact: true })).toBeVisible();
+    // every equipment exercise has explicit controls; the saved profile preselects Available
+    const rows = page.locator('.equipment-check-block');
+    expect(await rows.count()).toBeGreaterThan(0);
+    await expect(page.getByText('Equipment available?').first()).toBeVisible();
+    await expect(rows.first().getByRole('button', { name: 'Available', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(rows.first().getByRole('button', { name: 'Not available' })).toBeVisible();
 
     // the weight reasoning and the readiness check-in are secondary (collapsed)
     await expect(page.getByRole('button', { name: 'Why this weight?' })).toBeVisible();
@@ -169,15 +173,16 @@ test.describe('beginner-first workout', () => {
   test('advanced controls: RIR, set type, add/remove set, notes and overview are all still reachable', async ({ page }) => {
     await openBrief(page);
     await startTraining(page);
-    await expect(page.getByRole('button', { name: 'Overview', exact: true })).toHaveCount(0);
+    await openMore(page);
+    await expect(page.getByRole('button', { name: 'Whole workout' })).toHaveCount(0);
     await expect(page.getByLabel('Workout notes')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Less', exact: true }).click();
 
     await enableAdvanced(page);
     await expect(page.getByRole('tab', { name: 'History' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Options' })).toBeVisible();
     await expect(page.getByLabel('Workout notes')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open workout overview' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Overview', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Whole workout' })).toBeVisible();
 
     await page.getByRole('tab', { name: 'Options' }).click();
     await expect(page.getByRole('button', { name: 'Replace exercise…' })).toBeVisible();
@@ -201,7 +206,9 @@ test.describe('beginner-first workout', () => {
     // the preference persists across a reload, on this device only
     await page.reload();
     await expect(page.locator('[data-apex-route="workout"]')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('button', { name: 'Overview', exact: true })).toBeVisible();
+    await openMore(page);
+    await expect(page.getByRole('button', { name: 'Whole workout' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Advanced', exact: true })).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('confirmation: removing and skipping a set ask first; cancelling changes nothing', async ({ page }) => {
@@ -238,6 +245,9 @@ test.describe('beginner-first workout', () => {
     const statuses = async () => (await readState(page)).workouts.map((w: any) => w.status + ':' + w.source);
     const before = await statuses();
 
+    // destructive controls appear only in edit mode
+    await expect(page.getByRole('button', { name: 'Skip', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.getByRole('button', { name: 'Skip', exact: true }).first().click();
     await expect(page.getByRole('dialog', { name: 'Skip this workout?' })).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
@@ -264,7 +274,7 @@ test.describe('beginner-first workout', () => {
   });
 
   test('a whole first workout can be finished without RIR, feedback or a rating', async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
     await openBrief(page);
     await startTraining(page);
     const seen: string[] = [];
@@ -294,7 +304,8 @@ test.describe('beginner-first workout', () => {
     const done = page.getByRole('button', { name: 'Done', exact: true });
     await expect(done).toBeEnabled();
     await done.click();
-    await expect(page.locator('[data-apex-route="home"]')).toBeVisible();
+    // the finished session travels into the training week
+    await expect(page.locator('[data-apex-route="train"]')).toBeVisible();
 
     const st = await readState(page);
     expect(st.workouts.filter((w: any) => w.status === 'completed').length).toBe(1);
@@ -303,7 +314,8 @@ test.describe('beginner-first workout', () => {
     expect(sets.length).toBeGreaterThan(0);
     expect(sets.every((s: any) => s.rir === undefined)).toBe(true);
     // analytics appear once there is a completed session
-    await expect(page.getByText('Your first workout')).toHaveCount(0);
-    await expect(page.locator('.main').getByText('Streak', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    await expect(page.getByText('Your first session draws the first line')).toHaveCount(0);
+    await expect(page.locator('.apex-weekcard')).toBeVisible();
   });
 });

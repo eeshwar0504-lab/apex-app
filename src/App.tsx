@@ -6,22 +6,25 @@ import {maintainTrainingHorizon} from './engine/rolling';
 import {detectAchievements,uid,pauseWorkoutSession,resumeWorkoutSession,recoverWorkoutSession,hasLoggedSets,abandonWorkout,applyWorkoutAdaptation} from './engine/training';
 import {buildObservations} from './engine/intelligence';
 import {syncLocalNotifications,listenForNotificationActions} from './native/localNotifications';
-import {motionMs} from './ui/motion';
+import {motionMs,motionReduced,withViewTransition} from './ui/motion';
+import {ExperienceProvider,normalizeExperience} from './ui/experience';
 
 import {accessibilityClass,fontScaleValue} from './data/accessibility';
 import {App as CapacitorApp} from '@capacitor/app';
 import {setUnits} from './data/units';
 import {today} from './ui/shared';
-import {Icon,Splash,LoadingPanel} from './ui/primitives';
+import {Icon,Splash,LoadingPanel,ErrorState} from './ui/primitives';
 import {Modal} from './ui/dialogs';
-import {NavItem,Command} from './ui/navigation';
+import {NavItem,Command,SessionDock} from './ui/navigation';
 import {withGoalProgram,hydrateWorkoutRecommendations,ensureGuidedSession,initialWorkouts,todayPlus} from './ui/stateHelpers';
 import {Today,Home} from './screens/Home';
-import {Train,PreWorkout,PlanStudio,Templates} from './screens/Train';
+import {Train,PreWorkout} from './screens/Train';
+import {PlanStudio,Templates} from './screens/Plan';
 import {WorkoutView,SessionReview} from './screens/Workout';
 import {Progress,History} from './screens/Progress';
-import {Coach,RecoveryGate} from './screens/Coach';
-import {You,Goals,Journal,Measurements} from './screens/You';
+import {Coach,RecoveryGate,CoachSheet} from './screens/Coach';
+import {You} from './screens/You';
+import {Goals,Journal,Measurements} from './screens/Personal';
 import {Nutrition} from './screens/Nutrition';
 import {Library,ExerciseSheet,Learn} from './screens/Library';
 import {Onboarding} from './screens/Onboarding';
@@ -127,9 +130,7 @@ export function App(){
    ).slice(-30);
 
    navDir.current='forward';
-   setRoute(r);
-   setSheet(null);
-   window.scrollTo({top:0,behavior:'instant'});
+   withViewTransition(()=>{setRoute(r);setSheet(null);window.scrollTo({top:0,behavior:'instant'})},s.preferences.reducedMotion);
  };
 
  const goBack=()=>{
@@ -146,8 +147,7 @@ export function App(){
 
    if(previous){
      navDir.current='back';
-     setRoute(previous);
-     window.scrollTo({top:0,behavior:'instant'});
+     withViewTransition(()=>{setRoute(previous);window.scrollTo({top:0,behavior:'instant'})},s.preferences.reducedMotion);
      return;
    }
 
@@ -415,7 +415,10 @@ export function App(){
  useEffect(()=>{const tick=()=>setDayKey(today());document.addEventListener('visibilitychange',tick);const timer=setInterval(tick,60000);return()=>{document.removeEventListener('visibilitychange',tick);clearInterval(timer)}},[]);
  /* keeps the future horizon filled and marks earlier planned sessions missed (src/engine/rolling.ts); a no-op when nothing is missing */
  useEffect(()=>{if(!hydrated||!s.onboardingComplete)return;setS(x=>maintainTrainingHorizon(x,{today:today(),now:new Date().toISOString()}))},[hydrated,s.onboardingComplete,s.workouts,s.plan,s.profile,s.preferences.horizonDays,dayKey]);
- useEffect(()=>{if(hydrated)void repository.saveAsync({...s,activeRoute:route})},[s,route,hydrated]);
+ /* a failed write is reported by the instrument, not swallowed: the previous data is safe because the local copy is written first */
+ const [saveFailed,setSaveFailed]=useState(false);
+ const save=(state:AppState)=>repository.saveAsync(state).then(()=>setSaveFailed(false)).catch(()=>setSaveFailed(true));
+ useEffect(()=>{if(hydrated)void save({...s,activeRoute:route})},[s,route,hydrated]);
  /* Notifications are re-planned when what they depend on changes, when the app returns to the foreground and when the local day rolls over (also covers a time-zone change while it was closed). */
  const [clockTick,setClockTick]=useState(0);
  const lastDay=useRef(today());
@@ -430,6 +433,7 @@ export function App(){
  },[]);
  useEffect(()=>{if(hydrated)void syncLocalNotifications(s)},[s.preferences.notifications,s.workouts,s.deloads,hydrated,clockTick]);
  useEffect(()=>{let dispose:(()=>Promise<void>)|undefined; if(hydrated)void listenForNotificationActions(r=>nav(r)).then(fn=>{dispose=fn}); return()=>{if(dispose)void dispose()};},[hydrated]);
+ const ask=(question:string)=>setSheet('coach:'+encodeURIComponent(question));
  const start=(w:Workout)=>{
   if(w.status==='in_progress'){
     update(x=>{
@@ -471,19 +475,21 @@ export function App(){
  const active=s.workouts.find(w=>w.id===s.activeWorkoutId&&w.status==='in_progress');
  const appClass=`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`;
  const appStyle={fontSize:`${fontScaleValue(s.preferences.fontScale)}em`};
- if(!hydrated&&!splash)return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} data-theme={s.preferences.theme||'apex'}><LoadingPanel/></div>;
- if(hydrated&&recovery)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'apex'}><RecoveryGate notice={recovery} onRecovered={next=>{setS(next);setRoute(next.activeRoute||'home');setRecovery(null)}} onFresh={next=>{setS(next);setRoute('home');setRecovery(null)}}/></div>;
- if(!s.onboardingComplete)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'apex'}>{splash&&<Splash message={hydrated?'Set up your training context…':'Restoring local training data…'}/>}<Onboarding onDone={(p,g,plan)=>{const ws=initialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
- return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}} data-theme={s.preferences.theme||'apex'}>{splash&&<Splash/>}
- <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-mark-gold.png" alt=""/><span>APEX</span></button><div className="brand-caption">TRAIN · TRACK · PROGRESS · EVOLVE</div><div className="apex-top-status"><i/> SYSTEM READY</div><div className="top-actions"><button className="a3-iconbtn" title="Profile" aria-label="Profile" onClick={()=>nav('you')}><Icon name="user"/></button><button className="a3-iconbtn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
- <main className="main">
+ if(!hydrated&&!splash)return <div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}`} data-theme={s.preferences.theme||'obsidian'}><LoadingPanel/></div>;
+ if(hydrated&&recovery)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'obsidian'}><RecoveryGate notice={recovery} onRecovered={next=>{setS(next);setRoute(next.activeRoute||'home');setRecovery(null)}} onFresh={next=>{setS(next);setRoute('home');setRecovery(null)}}/></div>;
+ if(!s.onboardingComplete)return <div className={appClass} style={appStyle} data-theme={s.preferences.theme||'obsidian'}>{splash&&<Splash message={hydrated?'Set up your training context…':'Restoring local training data…'}/>}<Onboarding onDone={(p,g,plan,prefs)=>{const ws=initialWorkouts(p,plan,s.exercises);const linked={...plan,days:plan.days.map((d:any)=>d.rest?d:{...d,workoutId:ws.find((w:Workout)=>w.scheduledDate===todayPlus(d.dayIndex)&&w.name===d.label)?.id})};setS(x=>({...x,profile:p,goals:[g],plan:linked,workouts:ws,preferences:{...x.preferences,...prefs},onboardingComplete:true,activeRoute:'home'}));nav('home')}}/></div>;
+ const vt=typeof (document as any).startViewTransition==='function'&&!motionReduced(s.preferences.reducedMotion);
+ return <ExperienceProvider value={normalizeExperience(s.preferences.uiExperience)}><div className={`app ${accessibilityClass(s.preferences.fontScale,s.preferences.highContrast,s.preferences.reducedMotion)}${route==='workout'?' is-focus':''}`} style={{fontSize:`${fontScaleValue(s.preferences.fontScale)}em`}} data-theme={s.preferences.theme||'obsidian'} data-vt={vt?'1':undefined}>{splash&&<Splash/>}
+ <header className="topbar" data-apex-header><button className="brand apex-brand" aria-label="APEX Home" onClick={()=>nav('home')}><img src="/brand/apex-mark-gold.png" alt=""/><span>APEX</span></button><div className="top-actions"><button className="a3-iconbtn" title="Profile" aria-label="Profile" onClick={()=>nav('you')}><Icon name="user"/></button><button className="a3-iconbtn command-trigger" title="Command Center" aria-label="Command Center" onClick={()=>setSheet('command')}><Icon name="search"/></button></div></header>
+ {saveFailed&&<div className="apex-notice"><ErrorState title="NOT SAVED" happened="The latest change could not be written to storage." safe="Your previous data is safe on this device." todo="Try saving again." primary={{label:'Try again',onClick:()=>{void save({...stateRef.current,activeRoute:routeRef.current})}}}/></div>}
+ <main className={`main${sheet?' mo-recede':''}`}>
  <div className="page-transition screen-page" data-apex-route={route} data-nav-dir={navDir.current} key={route}>
- {route==='home'&&<Home s={s} onNav={nav} onStart={start} update={update}/>}
+ {route==='home'&&<Home s={s} onNav={nav} onStart={start} update={update} onAsk={ask}/>}
  {route==='train'&&<Train s={s} onStart={start} onNav={nav} update={update}/>}
  {route.startsWith('brief:')&&<PreWorkout s={s} id={route.slice(6)} update={update} onStart={(w)=>{update(x=>{const now=new Date().toISOString();const prepared=hydrateWorkoutRecommendations(ensureGuidedSession({...w,status:'in_progress',startedAt:w.startedAt||now,updatedAt:now}),x);return {...x,activeWorkoutId:w.id,activeRoute:'workout',workouts:x.workouts.map(q=>q.id===w.id?{...q,...prepared}:q)}});nav('workout')}} onBack={()=>nav('train')}/>}
- {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onJournal={()=>nav('journal')} onDone={w=>{if(!hasLoggedSets(w)){const at=new Date().toISOString();update(x=>({...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?abandonWorkout(w,at):q),activeWorkoutId:undefined,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_abandoned',timestamp:at,payload:{workoutId:w.id,reason:'no sets logged'}}]}));nav('home');return}const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,{...w,status:'completed' as const,completedAt:completed.completedAt}],s.profile):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
+ {route==='workout'&&active&&<WorkoutView s={s} w={active} update={update} onExit={()=>nav('home')} onExercise={id=>setSheet('exercise:'+id)} onJournal={()=>nav('journal')} onAsk={ask} onDone={w=>{if(!hasLoggedSets(w)){const at=new Date().toISOString();update(x=>({...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?abandonWorkout(w,at):q),activeWorkoutId:undefined,eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_abandoned',timestamp:at,payload:{workoutId:w.id,reason:'no sets logged'}}]}));nav('home');return}const previous=s.workouts.filter(q=>q.status==='completed'&&q.id!==w.id);const achievements=detectAchievements(w,s.exercises,previous);update(x=>{const completed={...w,status:'completed' as const,completedAt:new Date().toISOString(),updatedAt:new Date().toISOString()};const next=x.workouts.filter(q=>q.status==='planned'&&q.planId===w.planId&&q.scheduledDate>=today()).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate))[0];const adapted=next?applyWorkoutAdaptation(next,s.exercises,[...previous,{...w,status:'completed' as const,completedAt:completed.completedAt}],s.profile):undefined;return{...x,activeRoute:'home',workouts:x.workouts.map(q=>q.id===w.id?completed:q.id===adapted?.id?adapted:q),activeWorkoutId:undefined,achievements:[...x.achievements,...achievements.map(a=>({id:uid('ach'),workoutId:w.id,...a,timestamp:new Date().toISOString()}))],observations:buildObservations(x),eventLog:[...(x.eventLog||[]),{id:uid('evt'),type:'workout_completed',timestamp:new Date().toISOString(),payload:{workoutId:w.id,nextWorkoutId:adapted?.id}}]}});nav('session:'+w.id)}}/>}
  {route.startsWith('session:')&&<SessionReview s={s} id={route.slice(8)} onNav={nav} update={update}/>}
- {route==='progress'&&<Progress s={s} onNav={nav}/>}
+ {route==='progress'&&<Progress s={s} onNav={nav} onAsk={ask}/>}
  {route==='history'&&<History s={s} onNav={nav}/>}
  {route==='goals'&&<Goals s={s} update={update}/>}
  {route==='measurements'&&<Measurements s={s} update={update}/>}
@@ -491,15 +497,17 @@ export function App(){
  {route==='library'&&<Library s={s} query={query} setQuery={setQuery} onExercise={id=>setSheet('exercise:'+id)}/>}
  {route==='you'&&<You s={s} nav={nav} update={update}/>}
  {route==='journal'&&<Journal s={s} update={update}/>}
- {route==='coach'&&<Coach s={s} update={update} onNav={nav}/>}
+ {route==='coach'&&<Coach s={s} update={update} onNav={nav} onExercise={id=>setSheet('exercise:'+id)}/>}
  {route==='today'&&<Today s={s} onNav={nav} onStart={start}/>}
  {route==='nutrition'&&<Nutrition s={s} update={update}/>}
  {route==='learn'&&<Learn/>}
  {route==='templates'&&<Templates s={s} update={update} onStart={start}/>}
  </div>
  </main>
+ {active&&route!=='home'&&route!=='workout'&&!route.startsWith('brief:')&&!route.startsWith('session:')&&<SessionDock workout={active} onResume={()=>nav('workout')}/>}
  <nav className="bottom premium-bottom-nav"><NavItem active={route==='home'} icon="home" label="Home" click={()=>nav('home')}/><NavItem active={route==='train'||route==='workout'} icon="train" label="Train" click={()=>nav(active?'workout':'train')}/><NavItem active={['progress','history','goals'].includes(route)||route.startsWith('session:')} icon="chart" label="Progress" click={()=>nav('progress')}/><NavItem active={route==='you'} icon="user" label="You" click={()=>nav('you')}/></nav>
  {sheet==='command'&&<Command nav={nav} setQuery={setQuery} close={()=>setSheet(null)}/>}
+ {sheet?.startsWith('coach:')&&<CoachSheet s={s} question={decodeURIComponent(sheet.slice(6))} close={()=>setSheet(null)} onOpenCoach={()=>nav('coach')}/>}
  {sheet?.startsWith('exercise:')&&(()=>{const ex=s.exercises.find(e=>e.id===sheet.slice(9));return ex?<ExerciseSheet ex={ex} s={s} update={update} close={()=>setSheet(null)} onAlternative={id=>setSheet('exercise:'+id)} onPlan={()=>{setSheet(null);nav('plan')}}/>:<Modal title="Exercise unavailable" close={()=>setSheet(null)}><p className="modal-copy">This exercise is no longer available in the current local knowledge set.</p></Modal>})()}
- </div>
+ </div></ExperienceProvider>
 }

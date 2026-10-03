@@ -60,13 +60,14 @@ async function seed(page: Page, state: unknown) {
 
 async function driveWorkout(page: Page, maxSteps = 300) {
   const res = { setsSaved: 0 };
-  await page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first().click();
+  await page.locator('.main').getByRole('button', { name: /Begin session|Resume session/ }).first().click();
   for (let i = 0; i < 12; i++) {
     const c = page.getByRole('button', { name: 'Confirm available' }).first();
     if (!(await c.isVisible().catch(() => false))) break;
     await c.click();
   }
   const go = page.getByRole('button', { name: /^Start training/i });
+  await go.waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
   if (await go.isVisible().catch(() => false)) await go.click();
   for (let i = 0; i < maxSteps; i++) {
     if (await page.locator('[data-apex-route^="session:"]').isVisible().catch(() => false)) break;
@@ -110,7 +111,7 @@ test('incomplete workout survives reload and can be resumed', async ({ page }) =
   await resetApp(page);
   await completeOnboarding(page);
   await tab(page, 'Train');
-  await page.locator('.main').getByRole('button', { name: /Start Workout/ }).first().click();
+  await page.locator('.main').getByRole('button', { name: /Begin session/ }).first().click();
   for (let i = 0; i < 12; i++) { const c = page.getByRole('button', { name: 'Confirm available' }).first(); if (!(await c.isVisible().catch(() => false))) break; await c.click(); }
   await page.getByRole('button', { name: /^Start training/i }).click();
   await page.getByRole('button', { name: /START SET/i }).first().click();
@@ -133,7 +134,7 @@ test('unit switching: canonical kg untouched, labels follow the unit, Log Set sh
   await expect(page.locator('#settings-units').getByRole('button', { name: /Imperial/ })).toHaveAttribute('aria-pressed', 'true');
   expect(await canonical()).toBe(before);
   await tab(page, 'Train');
-  await page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first().click();
+  await page.locator('.main').getByRole('button', { name: /Begin session|Resume session/ }).first().click();
   for (let i = 0; i < 12; i++) { const c = page.getByRole('button', { name: 'Confirm available' }).first(); if (!(await c.isVisible().catch(() => false))) break; await c.click(); }
   await page.getByRole('button', { name: /^Start training/i }).click();
   await page.getByRole('button', { name: /START SET/i }).first().click();
@@ -152,6 +153,7 @@ test('unit switching: canonical kg untouched, labels follow the unit, Log Set sh
 test('8-week simulated history renders across Home, Progress, History, Nutrition, Coach and You without errors', async ({ page }) => {
   const errors = watchConsole(page);
   const { state, sim } = shiftedState(11, 8);
+  state.preferences.uiExperience = 'standard'; // the week view and the detail panels belong to Standard and up
   await seed(page, state);
   await page.goto('/');
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
@@ -163,15 +165,15 @@ test('8-week simulated history renders across Home, Progress, History, Nutrition
   await expect(page.locator('.apex-body-shortcut svg.a3-spark')).toBeVisible();
   await page.getByRole('tab', { name: 'Strength' }).click();
   await expect(page.locator('.a3-analytics')).toBeVisible();
-  await page.getByRole('tab', { name: 'PRs' }).click();
+  // personal records are events on the strength line, listed below it
+  await expect(page.getByRole('heading', { name: 'Personal records' })).toBeVisible();
   await expect(page.locator('.a3-home.a3-progress .a3-row').first()).toBeVisible();
   await page.getByRole('tab', { name: 'Overview' }).click();
   await noOverflow(page);
-  // the overall card ("Sessions ... done"); the weekly analytics card above it has a Sessions stat of its own
-  const sessions = await page.locator('.a3-progress .a3-stat').filter({ hasText: /Sessions/ }).filter({ hasText: /done/ }).first().innerText();
-  expect(sessions).toContain(String(sim.stats.workouts));
+  // the overview names how many sessions the record holds
+  await expect(page.locator('.a3-progress .a3-pagetitle .a3-eyebrow')).toContainText(`${sim.stats.workouts} session`);
 
-  await page.getByRole('tab', { name: 'PRs' }).click();
+  await page.getByRole('tab', { name: 'Strength' }).click();
   await page.getByRole('button', { name: /^History/ }).first().click();
   await expect(page.locator('.a3-cal, .a3-calendar, [class*="a3-cal"]').first()).toBeVisible();
   await noOverflow(page);
@@ -209,8 +211,8 @@ test('nutrition: logged meal persists after reload; settings/theme/units navigat
   const day = await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); const n = new Date(); const t = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; return s.nutrition?.log?.[t]; }, STATE_KEY);
   expect(day?.proteinG).toBeGreaterThanOrEqual(40);
   await tab(page, 'You');
-  for (const t of ['Crimson', 'Aurora', 'Apex']) { await page.locator('#settings-appearance').getByRole('radio', { name: new RegExp(t) }).click(); }
-  await expect(page.locator('.app')).toHaveAttribute('data-theme', 'apex');
+  for (const t of ['Graphite', 'Bone', 'Obsidian']) { await page.locator('#settings-appearance').getByRole('radio', { name: new RegExp(t) }).click(); }
+  await expect(page.locator('.app')).toHaveAttribute('data-theme', 'obsidian');
   await noOverflow(page);
   expect(errors, errors.join('\n')).toEqual([]);
 });
@@ -221,9 +223,10 @@ const REJECTED_KEY = 'apex-state-v4-rejected';
 const readState = (page: Page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), STATE_KEY);
 
 async function startTodaysWorkout(page: Page) {
-  await page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first().click();
+  await page.locator('.main').getByRole('button', { name: /Begin session|Resume session/ }).first().click();
   for (let i = 0; i < 12; i++) { const c = page.getByRole('button', { name: 'Confirm available' }).first(); if (!(await c.isVisible().catch(() => false))) break; await c.click(); }
   const go = page.getByRole('button', { name: /^Start training/i });
+  await go.waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
   if (await go.isVisible().catch(() => false)) await go.click();
 }
 
@@ -271,6 +274,7 @@ test('zero-set workout: skipping every set ends as "No sets logged", is abandone
 test('recovery check-in: stored through the validated boundary, given to the Coach as evidence, never changes the plan', async ({ page }) => {
   const errors = watchConsole(page);
   const { state } = shiftedState(11, 4);
+  state.preferences.uiExperience = 'advanced'; // the Coach's evidence list is part of the Advanced view
   await seed(page, state);
   await page.goto('/');
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
@@ -278,7 +282,7 @@ test('recovery check-in: stored through the validated boundary, given to the Coa
   const plannedBefore = JSON.stringify(before.workouts.filter((w: any) => w.status === 'planned'));
   const todayIso = localDay(0).iso;
   const earlier = (before.recoveryLog || []).filter((c: any) => c.date !== todayIso);
-  await page.getByRole('button', { name: /Ask Coach/i }).first().click();
+  await page.getByRole('button', { name: /Open Coach|Ask Coach/i }).first().click();
   await expect(page.getByRole('heading', { name: 'APEX Coach' })).toBeVisible();
   const card = page.getByRole('region', { name: 'Recovery check-in' });
   await expect(card).toBeVisible();
@@ -297,6 +301,7 @@ test('recovery check-in: stored through the validated boundary, given to the Coa
   expect(st.recoveryLog.filter((c: any) => c.date === today)).toEqual([entry]);
   expect(st.recoveryLog.filter((c: any) => c.date !== today)).toEqual(earlier); // every earlier check-in untouched
   expect(JSON.stringify(st.workouts.filter((w: any) => w.status === 'planned'))).toBe(plannedBefore);
+  await page.getByRole('button', { name: 'WHY', exact: true }).click();
   await expect(page.getByText(/evidence only and does not change your prescription/).first()).toBeVisible();
   await expect(page.getByText('Train lighter or shorter today (your choice)')).toBeVisible();
   await page.reload();
@@ -321,7 +326,7 @@ test('plateau evidence: the Coach explains it with options and does not touch th
   await seed(page, state);
   await page.goto('/');
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
-  await page.getByRole('button', { name: /Ask Coach/i }).first().click();
+  await page.getByRole('button', { name: /Open Coach|Ask Coach/i }).first().click();
   await expect(page.getByRole('heading', { name: 'APEX Coach' })).toBeVisible();
   const options = page.getByRole('region', { name: 'Coach options' });
   await expect(options).toBeVisible();
@@ -522,6 +527,7 @@ test.describe('IST midnight boundary', () => {
     const cmd = page.getByRole('dialog').locator('input').first();
     await cmd.fill('Open history');
     await cmd.press('Enter');
+    await expect(page.locator('.a3-cal-day.is-today')).toHaveCount(1);
     const today = await page.evaluate(() => Array.from(document.querySelectorAll('.a3-cal-day.is-today')).map((e) => e.getAttribute('aria-label') || e.textContent));
     expect(today.length).toBe(1);
     expect(String(today[0])).toContain('2026-03-15');
@@ -785,7 +791,7 @@ test('Phase 4 accessibility: every main screen has named controls, unique ids an
   await expect(page.locator('.bottom')).toBeVisible({ timeout: 20000 });
   const found: Record<string, string[]> = {};
   for (const name of ['Home', 'Train', 'Progress', 'You']) { await tab(page, name); found[name] = await a11yViolations(page); }
-  for (const title of [/^Goals/, /^Journal/, /^Exercise Library/, /^Plan Studio/, /^Templates/, /^Body measurements/, /^Nutrition/]) {
+  for (const title of [/^Goals/, /^Journal/, /^Exercise Library/, /^Plan Studio/, /^Templates/, /^Measurements/, /^Nutrition/]) {
     await openFromYou(page, title);
     found[String(title)] = await a11yViolations(page);
   }
@@ -824,6 +830,7 @@ test('Phase 5 exercise detail: variations are options, safety notes carry the bo
   const errors = watchConsole(page);
   const { state } = shiftedState(41, 3);
   state.profile.equipment = ['machine', 'cable', 'dumbbell', 'bench', 'barbell', 'bodyweight', 'kettlebell'];
+  state.preferences.uiExperience = 'standard'; // progression and alternatives are shown, not folded
   const plannedBefore = JSON.stringify(state.workouts.filter((w: any) => w.status === 'planned'));
   await seed(page, state);
   await page.goto('/');
@@ -831,7 +838,7 @@ test('Phase 5 exercise detail: variations are options, safety notes carry the bo
   await openFromYou(page, /^Exercise Library/);
   const open = async (name: string) => { await page.getByPlaceholder(/Chest press/).fill(name); await page.locator('.exercise-tile').first().click(); return page.getByRole('dialog'); };
   let dialog = await open('Machine Chest Press');
-  await expect(dialog.getByText('VARIATIONS')).toBeVisible();
+  await expect(dialog.getByText('PROGRESSION', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /Dumbbell Bench Press/ }).filter({ hasText: 'Harder variation' })).toBeVisible();
   await expect(dialog.getByText(/never swaps a programmed exercise/)).toBeVisible();
   await expect(dialog.getByText(/No exercise-specific considerations are recorded/)).toBeVisible();

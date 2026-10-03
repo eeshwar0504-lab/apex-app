@@ -60,10 +60,10 @@ const SCREENS: Screen[] = [
     name: 'brief',
     go: async (p) => {
       await tab(p, 'Train');
-      const start = p.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first();
+      const start = p.locator('.main').getByRole('button', { name: /Begin session|Resume session/ }).first();
       if (!(await start.isVisible().catch(() => false))) return false;
       await start.click();
-      return p.locator('[data-apex-route^="brief:"]').isVisible({ timeout: 3000 }).catch(() => false);
+      return p.locator('[data-apex-route^="brief:"]').waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
     },
   },
 ];
@@ -72,6 +72,7 @@ const SCREENS: Screen[] = [
 const WORKOUT_ADVANCE = [/Review equipment/i, /^Continue/i, /START SET/i, /Log set/i, /Save Set/i, /ABOUT RIGHT/i, /SKIP REST/i, /^CONTINUE/, /REVIEW SESSION/i, /FINISH SESSION/i];
 
 async function startWorkoutFromBrief(page: Page) {
+  await page.getByRole('button', { name: /^Start training/i }).waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
   for (let i = 0; i < 12; i++) {
     const confirm = page.getByRole('button', { name: 'Confirm available' }).first();
     if (!(await confirm.isVisible().catch(() => false))) break;
@@ -80,7 +81,7 @@ async function startWorkoutFromBrief(page: Page) {
   const go = page.getByRole('button', { name: /^Start training/i });
   if (!(await go.isEnabled().catch(() => false))) return false;
   await go.click();
-  return page.locator('[data-apex-route="workout"]').isVisible({ timeout: 4000 }).catch(() => false);
+  return page.locator('[data-apex-route="workout"]').waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
 }
 
 /* ---------------------------------------------------------------- checks */
@@ -260,9 +261,10 @@ for (const vp of VIEWPORTS) {
 
       /* workout phases (driven through the real UI) */
       await tab(page, 'Train');
-      const start = page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first();
+      const start = page.locator('.main').getByRole('button', { name: /Begin session|Resume session/ }).first();
       if (await start.isVisible().catch(() => false)) {
         await start.click();
+        await page.locator('[data-apex-route="workout"], [data-apex-route^="brief:"]').first().waitFor({ timeout: 8000 }).catch(() => {});
         const inWorkout = (await page.locator('[data-apex-route="workout"]').isVisible().catch(() => false)) || (await startWorkoutFromBrief(page));
         if (inWorkout) {
           const seen = new Set<string>();
@@ -433,9 +435,10 @@ for (const vp of VIEWPORTS) {
 
       /* enter the workout through the real UI */
       await tab(page, 'Train');
-      const start = page.locator('.main').getByRole('button', { name: /Start Workout|Resume Workout/ }).first();
+      const start = page.locator('.main').getByRole('button', { name: /Begin session|Resume session/ }).first();
       await expect(start).toBeVisible();
       await start.click();
+      await page.locator('[data-apex-route="workout"], [data-apex-route^="brief:"]').first().waitFor({ timeout: 8000 }).catch(() => {});
       const inWorkout = (await page.locator('[data-apex-route="workout"]').isVisible().catch(() => false)) || (await startWorkoutFromBrief(page));
       expect(inWorkout, 'workout must start').toBe(true);
       await settle(page);
@@ -447,6 +450,12 @@ for (const vp of VIEWPORTS) {
         await b.click();
         return page.locator('.a3-modal').isVisible({ timeout: 3000 }).catch(() => false);
       });
+
+      /* the session menu (View, Journal, Safety, Pause) is a surface of its own */
+      await page.locator('.main').getByRole('button', { name: 'More', exact: true }).click().catch(() => {});
+      await settle(page);
+      expect.soft(await auditLayout(page), '[state-session-menu] layout').toEqual([]);
+      await shot('state-session-menu');
 
       /* Safety modal */
       await modalState('state-safety-modal', async () => {
@@ -462,18 +471,19 @@ for (const vp of VIEWPORTS) {
         const j = page.locator('.main').getByRole('button', { name: 'Journal', exact: true }).first();
         if (await j.isVisible().catch(() => false)) {
           await j.click();
-          await page.waitForTimeout(450);
-          if (await page.locator('.a3-modal').count()) {
-            const issues = await auditModal(page);
-            expect.soft(issues, '[state-journal-modal] modal').toEqual([]);
-            await shot('state-journal-modal');
-            await closeModal(page);
-          } else notes.push('journal: button opens no modal (no-op); notes audited in overview');
+          await expect(page.locator('[data-apex-route="journal"]')).toBeVisible();
+          await settle(page);
+          expect.soft(await auditLayout(page), '[state-journal] layout').toEqual([]);
+          await shot('state-journal');
+          await tab(page, 'Train'); // the workout is still running: Train returns to it
+          await expect(page.locator('[data-apex-route="workout"]')).toBeVisible();
         } else notes.push('journal: button not visible');
       }
 
       /* Overview mode (exercise cards) + substitution modal */
-      const overviewBtn = page.locator('.main').getByRole('button', { name: /^Overview$/ }).first();
+      await page.locator('.main').getByRole('button', { name: 'More', exact: true }).click().catch(() => {});
+      await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'Advanced', exact: true }).click().catch(() => {});
+      const overviewBtn = page.locator('.main').getByRole('button', { name: 'Whole workout', exact: true }).first();
       if (await overviewBtn.isVisible().catch(() => false)) {
         await overviewBtn.click();
         await settle(page);
@@ -490,7 +500,7 @@ for (const vp of VIEWPORTS) {
           await b.click();
           return page.locator('.a3-modal').isVisible({ timeout: 3000 }).catch(() => false);
         });
-        const focusBtn = page.locator('.main').getByRole('button', { name: /^Focus$/ }).first();
+        const focusBtn = page.locator('.main').getByRole('button', { name: 'Back to focus', exact: true }).first();
         if (await focusBtn.isVisible().catch(() => false)) await focusBtn.click();
         await settle(page);
       } else notes.push('overview: toggle not visible');
@@ -505,7 +515,7 @@ for (const vp of VIEWPORTS) {
           expect.soft(await auditLayout(page), '[state-exercise-complete] layout').toEqual([]);
           await shot('state-exercise-complete');
         }
-        if (await page.getByText(/Every planned movement is accounted for/).isVisible().catch(() => false)) {
+        if (await page.locator('.a3-stage-done').getByText('SESSION COMPLETE', { exact: true }).isVisible().catch(() => false)) {
           workoutCompleteSeen = true;
           await settle(page);
           expect.soft(await auditLayout(page), '[state-workout-complete] layout').toEqual([]);

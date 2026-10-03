@@ -230,27 +230,7 @@ export async function completeOnboarding(page: Page) {
   await continueButton.click();
 
   /*
-   * Step 2 — Training experience
-   */
-  const beginner = page.getByRole('button', {
-    name: 'Beginner',
-  });
-
-  await expect(beginner).toBeVisible({
-    timeout: 10_000,
-  });
-
-  await expect(continueButton).toBeDisabled();
-
-  await beginner.click();
-
-  await expect(beginner).toHaveClass(/selected/);
-  await expect(continueButton).toBeEnabled();
-
-  await continueButton.click();
-
-  /*
-   * Step 3 — Training goal
+   * Step 2 — Training goal
    */
   const buildMuscle = page.getByRole('button', {
     name: /Build muscle/i,
@@ -265,6 +245,26 @@ export async function completeOnboarding(page: Page) {
   await buildMuscle.click();
 
   await expect(buildMuscle).toHaveClass(/selected/);
+  await expect(continueButton).toBeEnabled();
+
+  await continueButton.click();
+
+  /*
+   * Step 3 — Training experience
+   */
+  const beginner = page.getByRole('button', {
+    name: 'Beginner',
+  });
+
+  await expect(beginner).toBeVisible({
+    timeout: 10_000,
+  });
+
+  await expect(continueButton).toBeDisabled();
+
+  await beginner.click();
+
+  await expect(beginner).toHaveClass(/selected/);
   await expect(continueButton).toBeEnabled();
 
   await continueButton.click();
@@ -303,15 +303,11 @@ export async function completeOnboarding(page: Page) {
   /*
    * Step 5 — Equipment
    */
-  const build = page.getByRole('button', {
-    name: /Build my APEX plan/i,
-  });
-
-  await expect(build).toBeVisible({
+  await expect(continueButton).toBeVisible({
     timeout: 10_000,
   });
 
-  await expect(build).toBeDisabled();
+  await expect(continueButton).toBeDisabled();
 
   for (const equipment of [
     'Machine',
@@ -331,6 +327,39 @@ export async function completeOnboarding(page: Page) {
 
     await equipmentButton.click();
   }
+
+  await expect(continueButton).toBeEnabled();
+
+  await continueButton.click();
+
+  /*
+   * Step 6 — Preferences (units, haptics, motion) keep their defaults.
+   */
+  await expect(page.getByText('A few preferences.')).toBeVisible({
+    timeout: 10_000,
+  });
+
+  await continueButton.click();
+
+  /*
+   * Step 7 — UI Experience: Guided is the default.
+   */
+  await expect(page.getByRole('radio', { name: /Guided/ })).toHaveAttribute('aria-checked', 'true', {
+    timeout: 10_000,
+  });
+
+  await continueButton.click();
+
+  /*
+   * Step 8 — Your APEX profile, then build.
+   */
+  const build = page.getByRole('button', {
+    name: /Build my APEX plan/i,
+  });
+
+  await expect(build).toBeVisible({
+    timeout: 10_000,
+  });
 
   await expect(build).toBeEnabled();
 
